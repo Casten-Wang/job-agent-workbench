@@ -1162,6 +1162,56 @@ class ChannelNormalizationTests(DemoDataTestCase):
         self.assertNotIn("手动粘贴", backend.snapshot("demo")["channels"])
 
 
+class VariantQualityTests(DemoDataTestCase):
+    def test_add_variant_reports_missing_star_and_quant_hints(self):
+        response = backend.add_variant(
+            {
+                "mode": "demo",
+                "project": "质量检查-缺结构",
+                "text": "负责产品的需求分析与竞品研究，参与跨部门沟通协调推进项目落地。",
+            }
+        )
+        self.assertTrue(response["ok"])
+        quality = response["quality"]
+        self.assertFalse(quality["has_star_structure"])
+        self.assertFalse(quality["has_quantified_result"])
+        self.assertTrue(quality["hints"])
+
+    def test_add_variant_with_full_star_and_quant_has_no_hints(self):
+        text = (
+            "背景：学生跨院选课资源分散。"
+            "问题：发帖响应率偏低。"
+            "动作：完成500份问卷和10场访谈，输出原型。"
+            "结果：响应流程从5步精简至3步，80%用户认可。"
+        )
+        response = backend.add_variant(
+            {"mode": "demo", "project": "质量检查-完整结构", "text": text}
+        )
+        self.assertTrue(response["ok"])
+        quality = response["quality"]
+        self.assertTrue(quality["has_star_structure"])
+        self.assertTrue(quality["has_quantified_result"])
+        self.assertEqual(quality["hints"], [])
+
+    def test_duplicate_variant_still_returns_quality(self):
+        text = "背景：A。问题：B。动作：C。结果：提升30%。"
+        first = backend.add_variant({"mode": "demo", "project": "去重检查", "text": text})
+        self.assertTrue(first["ok"])
+        second = backend.add_variant({"mode": "demo", "project": "去重检查", "text": text})
+        self.assertFalse(second["ok"])
+        self.assertTrue(second["duplicate"])
+        self.assertIn("quality", second)
+
+    def test_add_variant_never_rewrites_input_text(self):
+        text = "背景：A。问题：B。动作：C。结果：无量化数据。"
+        response = backend.add_variant({"mode": "demo", "project": "原文不改写", "text": text})
+        store = backend.get_store("demo")
+        rows = store.variants()
+        saved = next(row for row in rows if row["project"] == "原文不改写")
+        self.assertEqual(saved["text"], text)
+        self.assertIn("建议补充一个量化结果", response["quality"]["hints"][0])
+
+
 class PdfCheckTests(DemoDataTestCase):
     @unittest.skipUnless(SMOKE_PDF.is_file(), f"缺少 {SMOKE_PDF}")
     def test_smoke_pdf_returns_a_conservative_result(self):

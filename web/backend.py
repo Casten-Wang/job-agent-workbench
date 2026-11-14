@@ -43,6 +43,7 @@ import ats_check  # noqa: E402
 import calendar_ics  # noqa: E402
 import feishu_adapter  # noqa: E402
 import filters  # noqa: E402
+import resume_quality  # noqa: E402
 import greeting  # noqa: E402
 import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
@@ -2342,12 +2343,13 @@ def add_variant(payload: dict[str, Any]) -> dict[str, Any]:
     store = get_store(mode)
     rows = store.variants()
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    quality = resume_quality.check_experience_text(text)
     if any(str(row.get("sha256")) == digest for row in rows):
-        return {"ok": False, "duplicate": True, "message": "相同经历变体已存在"}
+        return {"ok": False, "duplicate": True, "message": "相同经历变体已存在", "quality": quality}
     rows.append({"id": "variant-" + digest[:12], "project": project, "created_at": _now(), "text": text, "sha256": digest})
     store.set_variants(rows)
     store.log("保存经历变体", project[:80])
-    return {"ok": True, "message": "经历原文已保存；未修改 Master Resume"}
+    return {"ok": True, "message": "经历原文已保存；未修改 Master Resume", "quality": quality}
 
 
 def check_pdf(payload: dict[str, Any]) -> dict[str, Any]:
