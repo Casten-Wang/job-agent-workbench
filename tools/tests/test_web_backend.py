@@ -724,6 +724,185 @@ class ApprovalGateTests(DemoDataTestCase):
         self.assertEqual(rows["demo-job-002"]["status"], "pending")
 
 
+class GreetingGenerationTests(unittest.TestCase):
+    def test_greet_rejects_demo_mode_and_oversized_batches(self):
+        with self.assertRaises(backend.ApiError) as ctx:
+            backend.start_offerpilot_greet({"mode": "demo", "ids": ["demo-job-001"]})
+        self.assertEqual(ctx.exception.status, 403)
+        with self.assertRaises(backend.ApiError):
+            backend.start_offerpilot_greet({"mode": "user", "ids": [f"job-{i}" for i in range(11)]})
+
+    def test_greet_requires_approved_jobs_with_runtime_ids(self):
+        class _Store:
+            def queue(self):
+                return [
+                    {"id": "job-pending", "status": "pending"},
+                    {"id": "job-approved", "status": "approved"},
+                    {"id": "job-no-runtime", "status": "approved"},
+                ]
+
+            def jobs(self):
+                return [
+                    {"id": "job-pending", "offerpilot_id": "vp"},
+                    {"id": "job-approved", "offerpilot_id": "va"},
+                    {"id": "job-no-runtime"},
+                ]
+
+            def log(self, *args):
+                pass
+
+        store = _Store()
+        with patch.object(backend, "get_store", return_value=store), patch.object(
+            backend.offerpilot_runtime, "start_greet_task"
+        ) as start:
+            for ids in (["job-pending"], ["job-no-runtime"], ["missing"]):
+                with self.subTest(ids=ids):
+                    with self.assertRaises(backend.ApiError) as ctx:
+                        backend.start_offerpilot_greet({"mode": "user", "ids": ids})
+                    self.assertEqual(ctx.exception.status, 409)
+            start.assert_not_called()
+
+            start.return_value = {"task": {"id": "task-1"}, "requested": 1}
+            result = backend.start_offerpilot_greet({"mode": "user", "ids": ["job-approved"]})
+        self.assertTrue(result["ok"])
+        start.assert_called_once_with(["va"])
+        self.assertIn("只生成，不发送", result["message"])
+        self.assertEqual(result["task"], {"id": "task-1"})
+
+
+class GreetingPreviewTests(unittest.TestCase):
+    def test_get_greetings_returns_whitelisted_preview(self):
+        vendor_src = str(PROJECT_ROOT / "vendor" / "offerpilot" / "src")
+        if vendor_src not in sys.path:
+            sys.path.insert(0, vendor_src)
+        from offerpilot.db import get_db  # noqa: E402  (vendored module)
+
+        import tempfile  # local import keeps the module header small
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "offerpilot.db"
+            conn = get_db(db_path)
+            conn.execute(
+                "INSERT INTO jobs (id, title, company, status, greeting, greeting_selection, greeting_style_issues)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("job-a", "产品经理", "示例公司", "ready", "你好，我是示例。", "generated", '["太长了"]'),
+            )
+            conn.commit()
+            conn.close()
+
+            class _Server:
+                DATA_DIR = Path(tmp)
+
+                def get_db(self, path):
+                    return get_db(path)
+
+            with patch.object(backend.offerpilot_runtime, "load_backend", return_value=_Server()):
+                result = backend.offerpilot_runtime.get_greetings(["job-a", "missing"])
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["read_only"])
+        self.assertEqual(len(result["greetings"]), 1)
+        item = result["greetings"][0]
+        self.assertEqual(item["id"], "job-a")
+        self.assertEqual(item["greeting"], "你好，我是示例。")
+        self.assertEqual(item["selection"], "generated")
+        self.assertEqual(item["style_issues"], ["太长了"])
+        self.assertTrue(item["ready"])
+        self.assertEqual(
+            set(item),
+            {"id", "company", "title", "status", "greeting", "selection", "style_issues", "reviewed", "ready"},
+        )
+
+
+class GreetRuntimeTests(unittest.TestCase):
+    def test_start_greet_task_marks_ready_and_starts_greet_mode(self):
+        vendor_src = str(PROJECT_ROOT / "vendor" / "offerpilot" / "src")
+        if vendor_src not in sys.path:
+            sys.path.insert(0, vendor_src)
+        from offerpilot.db import get_db  # noqa: E402  (vendored module)
+
+        import tempfile
+        import types
+
+        # The greet path imports modules that need the optional runtime deps
+        # (rich, browser stack). This test only exercises the wrapper contract,
+        # so stand in for those two modules instead of installing packages.
+        fake_greeter = types.ModuleType("offerpilot.ai.greeter")
+        fake_greeter.greeting_config_error = lambda config: ""
+        fake_tasks = types.ModuleType("offerpilot.web.tasks")
+
+        class _TaskBusy(RuntimeError):
+            pass
+
+        fake_tasks.TaskAlreadyRunningError = _TaskBusy
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "offerpilot.db"
+            conn = get_db(db_path)
+            conn.execute(
+                "INSERT INTO jobs (id, title, company, status) VALUES (?, ?, ?, ?)",
+                ("job-a", "产品经理", "示例公司", "pending"),
+            )
+            conn.commit()
+            conn.close()
+
+            calls = {}
+
+            class _Runner:
+                def start(self, mode, config, *, before_start=None):
+                    calls["mode"] = mode
+                    calls["job_ids"] = list(config.get("_workbench_job_ids") or [])
+                    if before_start is not None:
+                        before_start()
+                    return {"id": "task-1", "mode": mode, "status": "running"}
+
+            class _Server:
+                DATA_DIR = Path(tmp)
+                CONFIG_PATH = Path(tmp) / "config.yaml"
+                BASE_DIR = Path(tmp)
+                job_mutation_lock = threading.Lock()
+                task_runner = _Runner()
+
+                def load_config(self, path):
+                    return {
+                        "profile": {
+                            "ai_greeting_enabled": False,
+                            "fixed_greeting": "固定招呼语",
+                        }
+                    }
+
+                def get_ai_api_key(self, config):
+                    return ""
+
+                def get_db(self, path):
+                    return get_db(path)
+
+            with patch.dict(
+                sys.modules,
+                {
+                    "offerpilot.ai.greeter": fake_greeter,
+                    "offerpilot.web.tasks": fake_tasks,
+                },
+            ), patch.object(backend.offerpilot_runtime, "load_backend", return_value=_Server()):
+                result = backend.offerpilot_runtime.start_greet_task(["job-a"])
+
+            self.assertEqual(result["requested"], 1)
+            self.assertEqual(result["task"]["id"], "task-1")
+            self.assertEqual(calls["mode"], "greet")
+            self.assertEqual(calls["job_ids"], ["job-a"])
+
+            conn = get_db(db_path)
+            try:
+                row = conn.execute("SELECT status FROM jobs WHERE id = 'job-a'").fetchone()
+                history = conn.execute(
+                    "SELECT action FROM history WHERE job_id = 'job-a'"
+                ).fetchall()
+            finally:
+                conn.close()
+        self.assertEqual(row["status"], "ready")
+        self.assertEqual([item["action"] for item in history], ["workbench_greet"])
+
+
 class StateMachineTests(DemoDataTestCase):
     def test_legal_transition_succeeds_and_appends_one_event(self):
         before = len(backend.get_store("demo").events())
@@ -1026,6 +1205,9 @@ class HttpServerTests(unittest.TestCase):
             'class="panel jobs-manual-entry"',
             'id="jobs-select-all"',
             'id="jobs-bulk-enqueue"',
+            'id="queue-approved-select-all"',
+            'id="queue-generate-greetings"',
+            'id="queue-greetings"',
             'id="view-push"',
             'id="view-resume"',
             "/api/doc/pipeline-api",
@@ -1066,6 +1248,11 @@ class HttpServerTests(unittest.TestCase):
             "uploadOfferPilotResume",
             "syncCollectResumeUI",
             "offerpilot-resume",
+            "offerpilot-greet",
+            "generateQueueGreetings",
+            "renderQueueGreetings",
+            "greetingStatusBadge",
+            "updateQueueApprovedSelectionUI",
             "offerpilot.importedTasks",
             "filterBar.hidden = name !== 'workbench'",
             "collectProfileForm",

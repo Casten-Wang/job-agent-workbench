@@ -1236,6 +1236,60 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "task": response, "message": message}
 
 
+def start_offerpilot_greet(payload: dict[str, Any]) -> dict[str, Any]:
+    """Generate greetings for approved jobs. Never sends anything."""
+    data_mode = str(payload.get("mode") or payload.get("data_mode") or "user")
+    if data_mode not in Store.VALID_MODES:
+        raise ApiError("数据模式只能是 demo 或 user")
+    if data_mode == "demo":
+        raise ApiError("演示模式不能生成招呼语；请切换到「我的 user」", 403)
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not ids:
+        raise ApiError("请先勾选至少一条已确认岗位")
+    if len(ids) > 10:
+        raise ApiError("一次最多为 10 条岗位生成招呼语")
+    store = get_store(data_mode)
+    queue = {str(row.get("id")): row for row in store.queue()}
+    jobs = {str(job.get("id")): job for job in store.jobs()}
+    vendor_ids: list[str] = []
+    invalid: list[str] = []
+    for item in ids:
+        job_id = str(item or "").strip()
+        row = queue.get(job_id)
+        if not row or row.get("status") != "approved":
+            invalid.append(job_id or "?")
+            continue
+        vendor_id = str((jobs.get(job_id) or {}).get("offerpilot_id") or "").strip()
+        if not vendor_id:
+            invalid.append(job_id)
+            continue
+        if vendor_id not in vendor_ids:
+            vendor_ids.append(vendor_id)
+    if invalid:
+        raise ApiError(
+            "只有已确认且来自采集结果的岗位可以生成招呼语；请检查："
+            + "、".join(invalid[:5]),
+            409,
+        )
+    try:
+        result = offerpilot_runtime.start_greet_task(vendor_ids)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        raise ApiError(str(exc), 400) from exc
+    except KeyError as exc:
+        raise ApiError("岗位自动化任务不存在", 404) from exc
+    except Exception as exc:
+        raise ApiError(f"生成招呼语失败：{type(exc).__name__}", 500) from exc
+    store.log("生成招呼语", f"{len(vendor_ids)} 条；只生成，不发送")
+    return {
+        "ok": True,
+        "task": result.get("task"),
+        "requested": result.get("requested", len(vendor_ids)),
+        "message": f"已开始为 {len(vendor_ids)} 条岗位生成招呼语；只生成，不发送",
+    }
+
+
 def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     """Check the same start conditions without launching a task."""
     task_mode = str(payload.get("mode") or "collect")
@@ -1613,6 +1667,34 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
     )
     channels = sorted({str(job.get("source_channel") or "unknown") for job in jobs})
     warnings = sum(len(job.get("warnings") or []) for job in filtered_jobs)
+    queue_view = [dict(row) for row in queue]
+    if boss_state.get("ok"):
+        job_by_id = {str(job.get("id")): job for job in jobs}
+        vendor_by_job: dict[str, str] = {}
+        for row in queue_view:
+            if row.get("status") != "approved":
+                continue
+            vendor_id = str((job_by_id.get(str(row.get("id"))) or {}).get("offerpilot_id") or "").strip()
+            if vendor_id:
+                vendor_by_job[str(row.get("id"))] = vendor_id
+        if vendor_by_job:
+            try:
+                preview = offerpilot_runtime.get_greetings(list(vendor_by_job.values())[:50])
+            except Exception:
+                preview = {"ok": False, "greetings": []}
+            by_vendor = {
+                str(item.get("id")): item
+                for item in (preview.get("greetings") or [])
+                if isinstance(item, dict)
+            }
+            for row in queue_view:
+                vendor_id = vendor_by_job.get(str(row.get("id")))
+                item = by_vendor.get(vendor_id) if vendor_id else None
+                if item:
+                    row["greeting"] = {
+                        key: item.get(key)
+                        for key in ("status", "greeting", "selection", "style_issues", "reviewed", "ready")
+                    }
     return {
         "mode": mode,
         "generated_at": _now(),
@@ -1632,7 +1714,7 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
             "posted_at", "hard_filter", "warnings", "score", "state", "approval",
             "fingerprint", "raw_text", "date", "created_at",
         )} for job in filtered_jobs],
-        "queue": queue,
+        "queue": queue_view,
         "mails": sliced["mails"],
         "debriefs": sliced["debriefs"],
         "events": sorted(
@@ -2165,6 +2247,7 @@ ACTIONS = {
     "save-profile": save_profile,
     "import-profile-cv": import_profile_cv,
     "offerpilot-start": start_offerpilot_task,
+    "offerpilot-greet": start_offerpilot_greet,
     "offerpilot-import": import_offerpilot_jobs,
     "offerpilot-resume": upload_offerpilot_resume,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(

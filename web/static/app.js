@@ -145,6 +145,7 @@ const state = {
   offerpilotResume: null,
   offerpilotAutoScoreTouched: false,
   jobsSelection: new Set(),
+  queueApprovedSelection: new Set(),
   profileDirty: false
 };
 
@@ -260,6 +261,10 @@ const dom = {
   queueConfirmButton: document.getElementById('queue-confirm-button'),
   queueApprovedCount: document.getElementById('queue-approved-count'),
   queueApprovedTable: document.getElementById('queue-approved-table'),
+  queueApprovedSelectAll: document.getElementById('queue-approved-select-all'),
+  queueApprovedSelectionCount: document.getElementById('queue-approved-selection-count'),
+  queueGenerateGreetings: document.getElementById('queue-generate-greetings'),
+  queueGreetings: document.getElementById('queue-greetings'),
   mailForm: document.getElementById('mail-form'),
   mailSubject: document.getElementById('mail-subject'),
   mailBody: document.getElementById('mail-body'),
@@ -2612,23 +2617,124 @@ function renderQueue(snapshot) {
     className: 'data-table-wide'
   });
 
-  const approvedRows = approved.map((row) => [
-    String(row.company || '—'),
-    String(row.title || '—'),
-    formatScore(row.score),
-    channelLabel(row.Source_Channel),
-    formatDateTime(row.created_at),
-    badge('approved · 可人工投递', 'good', '✓')
-  ]);
+  const approvedRows = approved.map((row) => {
+    const id = String(row.id);
+    const checkbox = el('input', {
+      className: 'queue-check',
+      props: { type: 'checkbox', checked: state.queueApprovedSelection.has(id) }
+    });
+    checkbox.dataset.queueId = id;
+    checkbox.setAttribute('aria-label', `选择已确认 ${row.company || ''} ${row.title || ''}`);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) state.queueApprovedSelection.add(id);
+      else state.queueApprovedSelection.delete(id);
+      updateQueueApprovedSelectionUI();
+    });
+    return [
+      checkbox,
+      String(row.company || '—'),
+      String(row.title || '—'),
+      formatScore(row.score),
+      channelLabel(row.Source_Channel),
+      greetingStatusBadge(row.greeting),
+      badge('approved · 可人工投递', 'good', '✓')
+    ];
+  });
   renderTable(dom.queueApprovedTable, {
     caption: '表：已确认可人工投递',
-    columns: ['公司', '岗位', '评分', '渠道', '创建时间', '状态'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '状态'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。approved 只表示可人工投递，不代表已投递。',
     className: 'data-table-wide'
   });
+  renderQueueGreetings(approved);
 
   updateQueueSelectionUI();
+  updateQueueApprovedSelectionUI();
+}
+
+function approvedQueueRows() {
+  const queue = state.snapshot && Array.isArray(state.snapshot.queue) ? state.snapshot.queue : [];
+  return queue.filter((row) => row.status === 'approved');
+}
+
+function greetingStatusBadge(greeting) {
+  if (!greeting || !String(greeting.greeting || '').trim()) return badge('未生成', 'neutral', '·');
+  if (greeting.ready) return badge('已生成', 'good', '✓');
+  return badge('待复核', 'warn', '!');
+}
+
+function renderQueueGreetings(approved) {
+  const container = dom.queueGreetings;
+  if (!container) return;
+  clear(container);
+  const rows = approved.filter((row) => row.greeting && String(row.greeting.greeting || '').trim());
+  if (!rows.length) {
+    container.append(el('p', {
+      className: 'muted',
+      text: '已确认岗位生成招呼语后，会在这里显示只读预览；不会发送。'
+    }));
+    return;
+  }
+  rows.forEach((row) => {
+    const greeting = row.greeting || {};
+    const card = el('article', { className: 'queue-greeting-card' });
+    const head = el('div', { className: 'queue-greeting-head' });
+    head.append(el('strong', { text: `${row.company || '—'}｜${row.title || '—'}` }));
+    head.append(greeting.ready ? badge('已生成', 'good', '✓') : badge('待复核', 'warn', '!'));
+    card.append(head);
+    card.append(el('p', {
+      className: 'queue-greeting-text',
+      text: String(greeting.greeting || '')
+    }));
+    const meta = [];
+    if (greeting.selection) meta.push(`来源：${greeting.selection}`);
+    if (Array.isArray(greeting.style_issues) && greeting.style_issues.length) {
+      meta.push(`风格提示：${greeting.style_issues.join('；')}`);
+    }
+    if (meta.length) card.append(el('p', { className: 'queue-greeting-meta', text: meta.join(' · ') }));
+    container.append(card);
+  });
+}
+
+function updateQueueApprovedSelectionUI() {
+  const approved = approvedQueueRows();
+  const approvedIds = new Set(approved.map((row) => String(row.id)));
+  Array.from(state.queueApprovedSelection).forEach((id) => {
+    if (!approvedIds.has(id)) state.queueApprovedSelection.delete(id);
+  });
+  const selected = state.queueApprovedSelection.size;
+  if (dom.queueApprovedSelectionCount) {
+    dom.queueApprovedSelectionCount.textContent = `已选 ${selected} 条`;
+  }
+  if (dom.queueApprovedSelectAll) {
+    const allSelected = approved.length > 0 && selected === approved.length;
+    dom.queueApprovedSelectAll.checked = allSelected;
+    dom.queueApprovedSelectAll.indeterminate = selected > 0 && !allSelected;
+  }
+  if (dom.queueGenerateGreetings) {
+    dom.queueGenerateGreetings.disabled = selected === 0
+      || selected > 10
+      || Boolean(state.offerpilotTaskActive);
+    dom.queueGenerateGreetings.title = state.offerpilotTaskActive
+      ? '已有岗位自动化任务正在运行；请先停止或等待结束'
+      : selected > 10
+        ? '一次最多 10 条'
+        : '只生成招呼语，不发送';
+  }
+}
+
+async function generateQueueGreetings(button) {
+  const ids = Array.from(state.queueApprovedSelection);
+  if (!ids.length) {
+    setStatus('请先勾选已确认岗位。', 'warn');
+    return;
+  }
+  const data = await runAction(button, () => postAction('offerpilot-greet', { ids }));
+  if (!data) return;
+  state.queueApprovedSelection.clear();
+  setStatus(data.message || '已开始生成招呼语；只生成，不发送。', 'ok');
+  await refreshOfferPilot();
 }
 
 /* Render: mail */
@@ -3245,6 +3351,26 @@ function bindEvents() {
     updateQueueSelectionUI();
   });
   dom.queueConfirm.addEventListener('input', updateQueueSelectionUI);
+
+  if (dom.queueApprovedSelectAll) {
+    dom.queueApprovedSelectAll.addEventListener('change', () => {
+      const approved = approvedQueueRows();
+      if (dom.queueApprovedSelectAll.checked) {
+        approved.forEach((row) => state.queueApprovedSelection.add(String(row.id)));
+      } else {
+        state.queueApprovedSelection.clear();
+      }
+      dom.queueApprovedTable.querySelectorAll('input.queue-check').forEach((box) => {
+        box.checked = state.queueApprovedSelection.has(box.dataset.queueId);
+      });
+      updateQueueApprovedSelectionUI();
+    });
+  }
+  if (dom.queueGenerateGreetings) {
+    dom.queueGenerateGreetings.addEventListener('click', () => {
+      generateQueueGreetings(dom.queueGenerateGreetings);
+    });
+  }
 
   dom.confirmForm.addEventListener('submit', async (event) => {
     event.preventDefault();

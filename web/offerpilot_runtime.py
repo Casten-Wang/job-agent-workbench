@@ -12,6 +12,7 @@ a clear, local error instead of taking the whole server down.
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import threading
@@ -122,6 +123,130 @@ def _safe_preferences(value: Any) -> dict[str, Any]:
         "score_threshold", "platform_order", "max_pages",
     )
     return {key: value[key] for key in fields if key in value}
+
+
+def _clean_job_ids(ids: Any, limit: int) -> list[str]:
+    """Validate workbench-supplied runtime job ids without touching any path."""
+    if not isinstance(ids, list) or not ids:
+        raise ValueError("请先选择至少一条岗位")
+    cleaned: list[str] = []
+    for item in ids:
+        text = str(item or "").strip()
+        if not text or len(text) > 200 or any(ord(char) < 32 for char in text):
+            raise ValueError("岗位 id 无效")
+        if text not in cleaned:
+            cleaned.append(text)
+    if len(cleaned) > limit:
+        raise ValueError(f"一次最多处理 {limit} 条岗位")
+    return cleaned
+
+
+def _style_issues(raw: Any) -> list[str]:
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item)[:120] for item in parsed[:5] if str(item).strip()]
+
+
+def get_greetings(ids: Any) -> dict[str, Any]:
+    """Read greeting previews for runtime jobs (read-only, whitelisted fields)."""
+    safe_ids = _clean_job_ids(ids, 50)
+    try:
+        server = load_backend()
+        from offerpilot.db import query_jobs  # type: ignore
+
+        db = server.get_db(server.DATA_DIR / "offerpilot.db")
+        try:
+            rows, _total = query_jobs(db, deleted="active", job_ids=safe_ids)
+        finally:
+            db.close()
+    except OfferPilotUnavailable as exc:
+        return {"ok": False, "embedded": True, "error": str(exc), "greetings": []}
+    except Exception as exc:
+        return {"ok": False, "embedded": True, "error": f"招呼语读取失败：{type(exc).__name__}", "greetings": []}
+    by_id = {str(row.get("id")): row for row in rows}
+    greetings = []
+    for job_id in safe_ids:
+        row = by_id.get(job_id)
+        if row is None:
+            continue
+        greeting = str(row.get("greeting") or "")[:600]
+        selection = str(row.get("greeting_selection") or "")
+        greetings.append({
+            "id": job_id,
+            "company": str(row.get("company") or "")[:200],
+            "title": str(row.get("title") or "")[:200],
+            "status": str(row.get("status") or "")[:40],
+            "greeting": greeting,
+            "selection": selection[:40],
+            "style_issues": _style_issues(row.get("greeting_style_issues")),
+            "reviewed": bool(row.get("greeting_reviewed_at")),
+            "ready": bool(greeting.strip()) and selection != "pending",
+        })
+    return {"ok": True, "embedded": True, "read_only": True, "greetings": greetings}
+
+
+def start_greet_task(ids: Any) -> dict[str, Any]:
+    """Start a greet-only runtime task. It generates text and never sends."""
+    safe_ids = _clean_job_ids(ids, 10)
+    server = load_backend()
+    from offerpilot.ai.greeter import greeting_config_error  # type: ignore
+    from offerpilot.db import add_history, query_jobs, update_job_status  # type: ignore
+    from offerpilot.web.tasks import TaskAlreadyRunningError  # type: ignore
+
+    config = server.load_config(server.CONFIG_PATH)
+    error = greeting_config_error(config)
+    if error:
+        raise ValueError(error)
+    profile = config.get("profile") or {}
+    if profile.get("ai_greeting_enabled", True) is not False:
+        if not server.get_ai_api_key(config):
+            raise ValueError("请先在配置页填写 AI 服务密钥，再生成招呼语")
+        if not _resume_info(server, config).get("available"):
+            raise ValueError("请先在采集页上传评分简历，再生成招呼语")
+
+    db = server.get_db(server.DATA_DIR / "offerpilot.db")
+    try:
+        rows, _total = query_jobs(db, deleted="active", job_ids=safe_ids)
+    finally:
+        db.close()
+    found = {str(row.get("id")): str(row.get("status") or "") for row in rows}
+    missing = [job_id for job_id in safe_ids if job_id not in found]
+    if missing:
+        raise ValueError("部分岗位不在本机采集结果中：" + "、".join(missing[:3]))
+    terminal = {"sent", "replied", "resume_sent", "needs_resume", "follow_up_sent"}
+    finished = [job_id for job_id in safe_ids if found[job_id] in terminal]
+    if finished:
+        raise ValueError("部分岗位已投递，不能重新生成招呼语：" + "、".join(finished[:3]))
+    promotable = {"pending", "scored", "new", "filtered", "ready", "approved", "error"}
+    blocked = [job_id for job_id in safe_ids if found[job_id] not in promotable]
+    if blocked:
+        raise ValueError("部分岗位当前状态不支持生成招呼语：" + "、".join(blocked[:3]))
+
+    def _mark_ready() -> None:
+        conn = server.get_db(server.DATA_DIR / "offerpilot.db")
+        try:
+            for job_id in safe_ids:
+                update_job_status(conn, job_id, "ready")
+                add_history(conn, job_id, "workbench_greet", "工作台请求生成招呼语")
+        finally:
+            conn.close()
+
+    with server.job_mutation_lock:
+        try:
+            task = server.task_runner.start(
+                "greet",
+                {**config, "_workbench_job_ids": safe_ids, "_agent_workflow": True},
+                before_start=_mark_ready,
+            )
+        except TaskAlreadyRunningError as exc:
+            raise ValueError(str(exc)) from exc
+    return {"task": _safe_task(task), "requested": len(safe_ids)}
 
 
 def _resume_info(server: Any, config: dict[str, Any]) -> dict[str, Any]:

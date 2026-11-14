@@ -414,7 +414,7 @@
         <section class="view" id="view-queue" data-view-panel="queue" aria-labelledby="queue-title" hidden>
           <h2 class="view-title" id="queue-title">审批队列</h2>
           <p class="view-lede">岗位先进入 pending；只有输入完整确认语后才标记 approved。approved 仍不等于已投递。</p>
-          <p class="notice notice-accent" id="queue-policy">approved 仅表示可人工投递，不会自动提交。队列不发送消息，也不调用平台接口。</p>
+          <p class="notice notice-accent" id="queue-policy">approved 仅表示可人工投递，不会自动提交。已确认岗位可以生成招呼语预览；生成只调用本机 AI，不打开平台页面、不发送消息。</p>
 
           <section class="panel" aria-labelledby="pending-title">
             <div class="panel-head">
@@ -447,7 +447,14 @@
               </div>
               <p class="panel-count" id="queue-approved-count">0 条已确认</p>
             </div>
+            <div class="queue-toolbar">
+              <label class="checkbox-label"><input type="checkbox" id="queue-approved-select-all" aria-label="全选已确认"> 全选已确认</label>
+              <span class="panel-count" id="queue-approved-selection-count">已选 0 条</span>
+              <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
+            </div>
             <div id="queue-approved-table"></div>
+            <div class="queue-greetings" id="queue-greetings"></div>
+            <p class="hint">生成只调用本机 AI，不打开平台页面、不发送消息；复核与发送尚未开放。</p>
           </section>
         </section>
 
