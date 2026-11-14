@@ -33,16 +33,14 @@
       <nav class="nav" aria-label="主导航">
         <p class="nav-group-label">核心流程</p>
         <button class="nav-item is-active" type="button" data-hub="workbench" data-view="workbench" aria-current="page"><span class="nav-index" aria-hidden="true">01</span><span class="nav-text"><span>工作台</span><small>今天做什么</small></span></button>
-        <button class="nav-item" type="button" data-hub="find" data-view="collect"><span class="nav-index" aria-hidden="true">02</span><span class="nav-text"><span>找岗位</span><small>采集 · 岗位池</small></span></button>
-        <button class="nav-item" type="button" data-hub="queue" data-view="queue"><span class="nav-index" aria-hidden="true">03</span><span class="nav-text"><span>审批队列</span><small>人工确认可投递</small></span></button>
-        <button class="nav-item" type="button" data-hub="mail" data-view="mail"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>HR 回复</span><small>识别面试与笔试</small></span></button>
+        <button class="nav-item" type="button" data-hub="find" data-view="collect"><span class="nav-index" aria-hidden="true">02</span><span class="nav-text"><span>求职主线</span><small>采集 · 审批 · 回复</small></span></button>
         <p class="nav-group-label">成长工具</p>
-        <button class="nav-item" type="button" data-hub="profile" data-view="profile"><span class="nav-index" aria-hidden="true">05</span><span class="nav-text"><span>个人资料</span><small>事实源</small></span></button>
-        <button class="nav-item" type="button" data-hub="interview" data-view="interview"><span class="nav-index" aria-hidden="true">06</span><span class="nav-text"><span>模拟面试</span><small>题单与复盘</small></span></button>
-        <button class="nav-item" type="button" data-hub="push" data-view="push"><span class="nav-index" aria-hidden="true">07</span><span class="nav-text"><span>信息推送</span><small>通知预览</small></span></button>
-        <button class="nav-item" type="button" data-hub="resume" data-view="resume"><span class="nav-index" aria-hidden="true">08</span><span class="nav-text"><span>定制简历</span><small>ATS 检查</small></span></button>
+        <button class="nav-item" type="button" data-hub="profile" data-view="profile"><span class="nav-index" aria-hidden="true">03</span><span class="nav-text"><span>个人资料</span><small>事实源</small></span></button>
+        <button class="nav-item" type="button" data-hub="interview" data-view="interview"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>模拟面试</span><small>题单与复盘</small></span></button>
+        <button class="nav-item" type="button" data-hub="push" data-view="push"><span class="nav-index" aria-hidden="true">05</span><span class="nav-text"><span>信息推送</span><small>通知预览</small></span></button>
+        <button class="nav-item" type="button" data-hub="resume" data-view="resume"><span class="nav-index" aria-hidden="true">06</span><span class="nav-text"><span>定制简历</span><small>ATS 检查</small></span></button>
         <p class="nav-group-label">系统</p>
-        <button class="nav-item" type="button" data-hub="data" data-view="data"><span class="nav-index" aria-hidden="true">09</span><span class="nav-text"><span>数据与设置</span><small>导出 · 边界</small></span></button>
+        <button class="nav-item" type="button" data-hub="data" data-view="data"><span class="nav-index" aria-hidden="true">07</span><span class="nav-text"><span>数据与设置</span><small>导出 · 边界</small></span></button>
       </nav>
 
       <div class="sidebar-footer">
@@ -209,9 +207,11 @@
 
         <section class="view" id="view-collect" data-view-panel="collect" aria-labelledby="collect-title" hidden>
           <h2 class="view-title" id="collect-title">采集岗位</h2>
-          <nav class="ui-hub-tabs" aria-label="找岗位">
+          <nav class="ui-hub-tabs" aria-label="求职主线">
             <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">采集岗位</button>
             <button class="ui-hub-tab" type="button" data-view="jobs">岗位池</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
           </nav>
           <p class="view-lede">按关键词和城市采集 BOSS 岗位。任务完成后会自动把新岗位导入岗位池；再到「岗位池」挑选，加入审批队列。不会自动投递或发送消息。</p>
 
@@ -331,11 +331,13 @@
 
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
           <h2 class="view-title" id="jobs-title">岗位池</h2>
-          <nav class="ui-hub-tabs" aria-label="找岗位">
+          <nav class="ui-hub-tabs" aria-label="求职主线">
             <button class="ui-hub-tab" type="button" data-view="collect">采集岗位</button>
             <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">岗位池</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
           </nav>
-          <p class="view-lede">采集结果会自动进入这里。挑选适合的岗位，点「加入审批队列」；再到 03 审批队列确认哪些可以人工投递。未评分或低于 4.0 的岗位可两步确认后手动入队；上传简历并勾选自动评分后，岗位会按匹配度排序。所有动作只写本机文件，不访问平台。</p>
+          <p class="view-lede">采集结果会自动进入这里。挑选适合的岗位，点「加入审批队列」；再到上方「审批队列」页签确认哪些可以人工投递。未评分或低于 4.0 的岗位可两步确认后手动入队；上传简历并勾选自动评分后，岗位会按匹配度排序。所有动作只写本机文件，不访问平台。</p>
           <p class="notice notice-accent" id="jobs-empty-hint">还没有岗位？先到 <button class="ui-link-button" type="button" data-view-link="collect">采集岗位</button> 按关键词采集，或在下方手动录入 JD。</p>
 
           <section class="panel" aria-labelledby="jobs-table-title">
@@ -413,6 +415,12 @@
 
         <section class="view" id="view-queue" data-view-panel="queue" aria-labelledby="queue-title" hidden>
           <h2 class="view-title" id="queue-title">审批队列</h2>
+          <nav class="ui-hub-tabs" aria-label="求职主线">
+            <button class="ui-hub-tab" type="button" data-view="collect">采集岗位</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">岗位池</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">审批队列</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
+          </nav>
           <p class="view-lede">岗位先进入 pending；只有输入完整确认语后才标记 approved。approved 仍不等于已投递。</p>
           <p class="notice notice-accent" id="queue-policy">approved 仅表示可人工投递，不会自动提交。已确认岗位可以生成招呼语预览；生成只调用本机 AI，不打开平台页面、不发送消息。</p>
 
@@ -478,6 +486,12 @@
 
         <section class="view" id="view-mail" data-view-panel="mail" aria-labelledby="mail-title" hidden>
           <h2 class="view-title" id="mail-title">HR 回复</h2>
+          <nav class="ui-hub-tabs" aria-label="求职主线">
+            <button class="ui-hub-tab" type="button" data-view="collect">采集岗位</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">岗位池</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="mail" aria-current="page">HR 回复</button>
+          </nav>
           <p class="view-lede">粘贴邮件内容，用离线规则识别意图、公司与岗位；不连接真实邮箱。识别出明确时间时可生成 .ics。</p>
 
           <section class="panel" aria-labelledby="mail-parse-title">
