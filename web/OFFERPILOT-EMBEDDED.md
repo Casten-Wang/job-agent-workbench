@@ -35,7 +35,7 @@ python3 -m venv .venv
 | --- | --- |
 | `GET /api/offerpilot/state` | 能力、偏好快照、当前/最近任务；不返回日志、密钥或凭据 |
 | `GET /api/offerpilot/jobs` | 只读岗位白名单字段，最多 100 条 |
-| `POST /api/offerpilot/preflight` | 只检查不启动：按 `mode` + `options` 返回搜索参数、浏览器运行时、Chrome 调试端口与 BOSS 标签页检查结果 |
+| `POST /api/offerpilot/preflight` | 只检查不启动：按 `mode` + `options` 返回搜索参数、浏览器运行时、Chrome 调试端口与 BOSS 标签页检查结果；若已有任务占用浏览器，返回 `browser_busy` 并提示先停止或等待 |
 | `POST /api/offerpilot/tasks` | 仅 `collect` / `monitor` / `full`，必须同时带 `confirm: true` 与 `risk_acknowledged: true`；`demo` 模式拒绝；`collect` / `full` 可带 `options` |
 | `POST /api/offerpilot/tasks/<id>/stop` | 请求停止内嵌运行时的既有任务 |
 | `POST /api/action` `offerpilot-import` | 把只读结果中选中的岗位复制进工作台岗位池（仅 `user` 模式，最多 100 条） |

@@ -258,13 +258,48 @@ def preflight(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str,
             "messages": [str(exc)],
             "summary": _options_summary(mode, None),
         }
+    summary = _options_summary(mode, options)
+    # A running task owns the browser lock.  The upstream check reports that as
+    # a generic "browser connection failed", so answer with the real reason
+    # before running any browser diagnostics.
+    active = _active_task(server)
+    if active:
+        return _busy_preflight(summary, active)
     checks = collect_preflight_checks(mode, config, options)
     messages = [*server._preflight_messages(mode, config, options), *error_messages(checks)]
     return {
         "ok": not messages,
         "checks": checks,
         "messages": messages,
-        "summary": _options_summary(mode, options),
+        "summary": summary,
+    }
+
+
+def _active_task(server: Any) -> dict[str, Any] | None:
+    try:
+        status = server.task_runner.status() or {}
+    except Exception:
+        return None
+    active = status.get("active")
+    return active if isinstance(active, dict) else None
+
+
+def _busy_preflight(summary: dict[str, Any], active: dict[str, Any]) -> dict[str, Any]:
+    label = str(active.get("label") or active.get("mode") or "当前任务")
+    message = f"任务「{label}」正在使用浏览器"
+    detail = "请等待它结束，或先在下方停止任务，再重新检查环境。"
+    return {
+        "ok": False,
+        "checks": [{
+            "id": "browser_busy",
+            "title": "浏览器占用",
+            "status": "error",
+            "message": message,
+            "detail": detail,
+            "action": "browser",
+        }],
+        "messages": [f"{message}；{detail}"],
+        "summary": summary,
     }
 
 

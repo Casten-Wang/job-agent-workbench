@@ -132,6 +132,7 @@ const state = {
   offerpilotSelection: new Set(),
   offerpilotPreflight: null,
   offerpilotPreflightKey: '',
+  offerpilotTaskActive: false,
   offerpilotPrefsMode: null,
   profileDirty: false
 };
@@ -2008,6 +2009,7 @@ function renderOfferPilot(boss) {
     if (!aiReady) dom.collectAutoScore.checked = false;
   }
   applyOfferPilotPrefs(data);
+  state.offerpilotTaskActive = Boolean(data.task);
   syncCollectModeUI();
   renderOfferPilotTask(data.task, data.last_task);
   syncOfferPilotStartState();
@@ -2031,10 +2033,13 @@ function syncOfferPilotStartState() {
   if (!dom.offerpilotStart) return;
   const preflightReady = Boolean(state.offerpilotPreflight && state.offerpilotPreflight.ok === true);
   dom.offerpilotStart.disabled = !state.offerpilotCanStart
+    || state.offerpilotTaskActive
     || !dom.offerpilotRisk.checked
     || !dom.offerpilotConfirm.checked
     || !preflightReady;
-  dom.offerpilotStart.title = preflightReady ? '' : '先点击「检查环境」并处理阻塞项';
+  dom.offerpilotStart.title = state.offerpilotTaskActive
+    ? '已有任务正在运行；请先停止或等待结束'
+    : preflightReady ? '' : '先点击「检查环境」并处理阻塞项';
 }
 
 function renderOfferPilotJobs() {
@@ -2168,6 +2173,8 @@ async function runOfferPilotPreflight(button) {
 
 function maybeRunOfferPilotPreflight() {
   if (!state.offerpilotCanStart) return;
+  // 任务运行时会独占浏览器；此时自动检查只会得到误导性的「连接失败」。
+  if (state.offerpilotTaskActive) return;
   const key = collectFormKey();
   if (state.offerpilotPreflight && state.offerpilotPreflightKey === key) return;
   if (collectNeedsSearch(collectMode()) && !buildOfferPilotOptions(true)) {

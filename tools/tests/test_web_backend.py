@@ -346,6 +346,34 @@ class DemoSeedTests(DemoDataTestCase):
             "auto_score": False,
         })
 
+    def test_offerpilot_preflight_reports_a_running_task_as_browser_busy(self):
+        runtime = backend.offerpilot_runtime
+        busy = runtime._busy_preflight(
+            {"mode": "collect"},
+            {"id": "task-1", "mode": "collect", "label": "单独采集"},
+        )
+        self.assertFalse(busy["ok"])
+        self.assertEqual(busy["checks"][0]["id"], "browser_busy")
+        self.assertIn("单独采集", busy["checks"][0]["message"])
+        self.assertIn("停止任务", busy["checks"][0]["detail"])
+
+        class Runner:
+            def __init__(self, value):
+                self.value = value
+
+            def status(self):
+                if isinstance(self.value, Exception):
+                    raise self.value
+                return self.value
+
+        class Server:
+            def __init__(self, value):
+                self.task_runner = Runner(value)
+
+        self.assertEqual(runtime._active_task(Server({"active": {"id": "task-1"}}))["id"], "task-1")
+        self.assertIsNone(runtime._active_task(Server({"active": None})))
+        self.assertIsNone(runtime._active_task(Server(RuntimeError("boom"))))
+
     def test_offerpilot_import_copies_scores_and_skips_duplicates(self):
         store = backend.get_store("demo")
         result = backend._import_offerpilot_records(store, [
