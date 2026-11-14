@@ -102,7 +102,7 @@ sh run_web.sh
 
 **采集岗位**的固定流程：在 `02 找岗位 → 采集岗位` 填关键词、城市、页数、采集节奏（不写 `config.yaml`）→ 点「检查环境」→ 勾选确认后启动任务 → 任务完成后自动导入岗位池并跳到岗位表 → 挑选岗位「加入审批队列」→ 到 `03 审批队列` 输入确认语。采集节奏可选稳健（每次随机等待 6–15 秒，默认）、标准（3–7.5 秒）或快速（2–5 秒）；等待由运行时在每次翻页/读详情前随机生成。采集只读取公开职位列表，不打招呼、不投递；导入只复制岗位信息，审批仍需人工确认。评分需要先在采集页上传简历（`.md` / `.docx` / `.pdf`，最大 5 MB，只保存在本机运行时目录）：有简历时「采集后自动评分」默认勾选，没有简历时采集仍可进行，但岗位以「未评分」导入。低于 4.0 评分门或未评分的岗位需要两步确认后手动入队（`manual_override`），不会改变共享的评分门。个人资料保存在本机 `web/data/<mode>/profile.json`；生成内容可读取相关专业事实，联系方式不进入生成草稿。接口见 [web/PROFILE-API.md](web/PROFILE-API.md)。
 
-工作台同时提供 JD 录入、筛选与评分、审批队列、沟通草稿、HR 回复跟进、日历文件、模拟面试题单与复盘、经历变体、ATS 检查、信息推送、测试、验收报告、JSON 导出和下载管理。核心接口契约见 [web/PIPELINE-API.md](web/PIPELINE-API.md)；岗位自动化接口见 [web/OFFERPILOT-EMBEDDED.md](web/OFFERPILOT-EMBEDDED.md)。
+工作台同时提供 JD 录入、筛选与评分、审批队列、沟通草稿、HR 回复跟进、日历文件、模拟面试题单与复盘、经历变体、ATS 检查、信息推送、测试、验收报告、JSON 导出和下载管理。核心接口契约见 [web/PIPELINE-API.md](web/PIPELINE-API.md)；岗位自动化接口见 [web/OFFERPILOT-EMBEDDED.md](web/OFFERPILOT-EMBEDDED.md)。审批通过后的受控投递只有设计提案，尚未实现：[web/AUTO-DELIVERY-DESIGN.md](web/AUTO-DELIVERY-DESIGN.md)。
 
 界面视觉语言参考项目 [offer_coming](https://github.com/lwt20000321-cmd/offer_coming)。
 
