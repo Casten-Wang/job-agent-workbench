@@ -34,6 +34,8 @@ STATIC_FILES = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/offer-theme.css": ("offer-theme.css", "text/css; charset=utf-8"),
+    "/ui-signals.css": ("ui-signals.css", "text/css; charset=utf-8"),
+    "/ui-signals.js": ("ui-signals.js", "text/javascript; charset=utf-8"),
 }
 CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -285,6 +287,9 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                     self._error(f"未知操作：{action}", 404)
                     return
                 self._json(handler(payload))
+                return
+            if path == "/api/offerpilot/preflight":
+                self._json(backend.preflight_offerpilot_task(payload))
                 return
             if path == "/api/offerpilot/tasks":
                 self._json(backend.start_offerpilot_task(payload), 202)

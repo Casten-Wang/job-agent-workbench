@@ -1,0 +1,646 @@
+/*
+ * 信号 · 设计语言复用层（UI 组件化 / 动效体系 / 磨砂质感）
+ *
+ * 复用来源：用户自有原型「信号」（设计原型 2026-11-12）。
+ * 借用：统一的时长 / 弹簧 / soft 缓动 token、卡片错峰入场、悬停抬升、
+ *       按压回弹、磨砂表面、胶囊控件、导航高亮滑块、轻提示反馈。
+ * 不借用：原型荧光绿主色 #D2F53C；主色继续用工作台粉色 --offer-pink。
+ * 不引入任何图片 / 字体 / CDN / 构建工具；纯 CSS + 极少量原生 JS。
+ *
+ * 本文件是「信号」设计语言在工作台原生界面上的复用层，只做加法：
+ * 追加带 ui- 前缀的 class 与变量，不修改 offer-theme.css / styles.css
+ * 已有的 id、class、data-* 与现有面板结构。
+ */
+
+:root {
+  /* —— 动效 token（来自「信号」：160 / 320 / 560ms，spring + soft）—— */
+  --ui-spring: linear(
+    0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 19.4%,
+    1.067, 1.089 26.9%, 1.079, 1.054 33.7%, 1.003 43.3%, .993 49.9%,
+    1.001 63.8%, 1
+  );
+  --ui-soft: cubic-bezier(.22, 1, .36, 1);
+  --ui-t-fast: 160ms;
+  --ui-t-mid: 320ms;
+  --ui-t-slow: 560ms;
+
+  /* —— 磨砂表面 token：半透明 + backdrop-filter，并给不支持的环境留实色—— */
+  --ui-glass: var(--panel-bg);
+  --ui-glass-fallback: var(--surface);
+  --ui-blur: blur(20px) saturate(160%);
+  --ui-shadow-float: 0 1px 2px rgba(10, 10, 10, 0.04),
+    0 18px 46px -14px rgba(10, 10, 10, 0.20);
+
+  /* —— 信号主色：沿用工作台粉色，不照搬原型荧光绿—— */
+  --ui-signal: var(--offer-pink);
+  --ui-signal-ink: #ffffff;
+}
+
+/* 深色下的磨砂实色回退（panel-bg 已是半透明，var 自动跟随主题） */
+:root[data-theme="dark"] {
+  --ui-shadow-float: 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 22px 52px -16px rgba(0, 0, 0, 0.6);
+}
+
+/* ====================================================================== */
+/* 1. 磨砂质感：把面板 / 侧栏做成更明确的玻璃表面                          */
+/*    实色底色先铺，再叠 backdrop-filter，不支持的环境仍可读               */
+/* ====================================================================== */
+
+.sidebar,
+.filter-bar,
+.panel,
+.status,
+.segmented {
+  background-color: var(--ui-glass-fallback);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0)
+  );
+}
+
+.panel,
+.filter-bar,
+.sidebar {
+  -webkit-backdrop-filter: var(--ui-blur);
+  backdrop-filter: var(--ui-blur);
+}
+
+/* 面板抬升一档更柔和的层叠阴影（不覆盖原有 border / radius） */
+.panel {
+  box-shadow: var(--shadow-card), 0 0 0 1px rgba(10, 10, 10, 0.02);
+}
+
+/* ====================================================================== */
+/* 2. 圆角与层级：让卡片/控件/输入框的层级更一致                          */
+/* ====================================================================== */
+
+.panel {
+  border-radius: clamp(20px, 2vw, 28px);
+}
+
+.card,
+.action-result,
+.offerpilot-card,
+.profile-item {
+  border-radius: 20px;
+  box-shadow: var(--shadow-soft);
+}
+
+/* 胶囊控件：统一 999px 圆角，呼应「信号」的药丸语言 */
+.segmented,
+.segmented button,
+.button,
+.button-quiet,
+.badge,
+.tag,
+.filter,
+.nav-item {
+  border-radius: 999px;
+}
+
+/* 输入框 / 选择 / 文本域跟随胶囊语言 */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="file"],
+select,
+textarea {
+  border-radius: clamp(12px, 1.4vw, 16px);
+  transition: border-color var(--ui-t-fast) var(--ui-soft),
+    box-shadow var(--ui-t-fast) var(--ui-soft),
+    background-color var(--ui-t-fast) var(--ui-soft);
+}
+
+/* ====================================================================== */
+/* 3. 动效：悬停抬升 + 按压回弹（尊重 prefers-reduced-motion）             */
+/* ====================================================================== */
+
+/* 悬停抬升：面板与卡片轻微上浮、阴影加深 */
+@media (hover: hover) {
+  .panel:hover,
+  .card:hover,
+  .offerpilot-card:hover,
+  .profile-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ui-shadow-float);
+  }
+
+  /* 管线节点沿用自身的抬升，这里只增强图表/表格容器 */
+  .kpi:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ui-shadow-float);
+  }
+}
+
+.panel,
+.card,
+.action-result,
+.offerpilot-card,
+.profile-item,
+.kpi {
+  transition: transform var(--ui-t-mid) var(--ui-spring),
+    box-shadow var(--ui-t-mid) var(--ui-soft),
+    border-color var(--ui-t-mid) var(--ui-soft);
+}
+
+/* 按压回弹：所有可点的东西共享同一种手感 */
+.button,
+.button-quiet,
+.nav-item,
+.segmented button,
+.belt-node,
+.kpi,
+[data-profile-add],
+.offerpilot-head-actions button {
+  transition: transform var(--ui-t-mid) var(--ui-spring),
+    background-color var(--ui-t-fast) var(--ui-soft),
+    color var(--ui-t-fast) var(--ui-soft),
+    box-shadow var(--ui-t-fast) var(--ui-soft),
+    filter var(--ui-t-fast) var(--ui-soft);
+}
+
+.button:active:not(:disabled),
+.button-quiet:active:not(:disabled),
+[data-profile-add]:active,
+.offerpilot-head-actions button:active {
+  transform: scale(0.965);
+  transition-duration: 90ms;
+  transition-timing-function: ease-out;
+}
+
+/* ====================================================================== */
+/* 4. 卡片错峰入场：视图切换时，面板按顺序轻微滑入                        */
+/* ====================================================================== */
+
+@keyframes ui-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+}
+
+.view:not([hidden]) > .panel,
+.view:not([hidden]) > .two-col,
+.view:not([hidden]) > .kpi-section,
+.view:not([hidden]) > .chart-grid,
+.view:not([hidden]) > .filter-bar {
+  animation: ui-card-in var(--ui-t-slow) var(--ui-spring) both;
+}
+
+.view:not([hidden]) > .panel:nth-child(1) { animation-delay: 0ms; }
+.view:not([hidden]) > .panel:nth-child(2) { animation-delay: 60ms; }
+.view:not([hidden]) > .panel:nth-child(3) { animation-delay: 120ms; }
+.view:not([hidden]) > .panel:nth-child(4) { animation-delay: 180ms; }
+.view:not([hidden]) > .panel:nth-child(5) { animation-delay: 240ms; }
+.view:not([hidden]) > .panel:nth-child(6) { animation-delay: 300ms; }
+.view:not([hidden]) > .panel:nth-child(7) { animation-delay: 360ms; }
+.view:not([hidden]) > .panel:nth-child(8) { animation-delay: 420ms; }
+
+/* 首屏视图在初次载入时也播放一次入场（避免初始无动画） */
+.view[hidden] {
+  display: none;
+}
+
+/* ====================================================================== */
+/* 5. 导航高亮滑块：选中态的滑动药丸（不改动 nav-item 既有语义）           */
+/*    滑块作为侧栏最后追加的绝对定位元素，跟随 .is-active 项               */
+/* ====================================================================== */
+
+.nav {
+  position: relative;
+}
+
+.nav__hl {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--ink);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(0);
+  transition: transform var(--ui-t-slow) var(--ui-spring),
+    opacity var(--ui-t-mid) var(--ui-soft);
+  z-index: 0;
+}
+
+.nav__hl.is-on {
+  opacity: 1;
+}
+
+.nav-item {
+  position: relative;
+  z-index: 1;
+}
+
+/* 当前选中项在滑块之上用浅色字（滑块是深色，故需要反色字） */
+.nav-item.is-active {
+  color: var(--on-ink);
+}
+
+/* ====================================================================== */
+/* 6. 轻提示 / 灵动反馈：统一 toast，粉底 + 自动消失                       */
+/* ====================================================================== */
+
+.ui-toast-wrap {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.ui-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: var(--ui-shadow-float);
+  -webkit-backdrop-filter: var(--ui-blur);
+  backdrop-filter: var(--ui-blur);
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition: opacity var(--ui-t-mid) var(--ui-soft),
+    transform var(--ui-t-slow) var(--ui-spring);
+}
+
+.ui-toast.is-on {
+  opacity: 1;
+  transform: none;
+}
+
+.ui-toast::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ui-signal);
+  flex: 0 0 auto;
+}
+
+.ui-toast[data-kind="ok"]::before { background: var(--good); }
+.ui-toast[data-kind="warn"]::before { background: var(--warn); }
+.ui-toast[data-kind="error"]::before { background: var(--bad); }
+
+/* ====================================================================== */
+/* 7. 空状态 / 提示组件的轻量统一：保持现状可读性，仅增强留白            */
+/* ====================================================================== */
+
+.empty-state,
+.chart-empty {
+  border-style: dashed;
+  border-radius: 18px;
+  background: var(--pill);
+}
+
+/* 状态条左侧信号竖条：已有 border-left 语义，这里只把信息点做成右侧指示 */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: auto;
+  background: var(--accent);
+}
+
+.status.status-ok::after { background: var(--good); }
+.status.status-warn::after { background: var(--warn); }
+.status.status-error::after { background: var(--bad); }
+.status.status-info::after { background: var(--offer-pink); }
+
+/* ====================================================================== */
+/* 8. 减少动效偏好：关闭过渡与入场，保持可读                              */
+/* ====================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .nav__hl,
+  .view:not([hidden]) > .panel,
+  .view:not([hidden]) > .two-col,
+  .view:not([hidden]) > .kpi-section,
+  .view:not([hidden]) > .chart-grid,
+  .view:not([hidden]) > .filter-bar,
+  .ui-toast {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .nav__hl.is-on { opacity: 1; }
+}
+
+/* 桌面 / 平板：上述玻璃与层级规则已通用；手机宽度下不横向溢出 */
+@media (max-width: 900px) {
+  .nav__hl { display: none; }
+
+  .nav-item {
+    border-radius: 999px;
+  }
+
+  .nav-item.is-active {
+    color: var(--on-ink);
+  }
+}
+
+@media (max-width: 620px) {
+  .panel {
+    border-radius: 22px;
+  }
+
+  .card,
+  .action-result,
+  .offerpilot-card,
+  .profile-item {
+    border-radius: 18px;
+  }
+}
+
+/* ====================================================================== */
+/* 6. 五个主线入口：两行导航标签 + 子页签                                  */
+/* ====================================================================== */
+
+.nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.nav-text small {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-2);
+  opacity: 0.72;
+}
+
+.nav-item.is-active .nav-text small {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.ui-hub-tabs {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 14px;
+  padding: 4px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.ui-hub-tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--ui-t-fast) var(--ui-soft),
+    color var(--ui-t-fast) var(--ui-soft),
+    transform var(--ui-t-fast) var(--ui-soft);
+}
+
+.ui-hub-tab:hover {
+  color: var(--ink);
+  background: rgba(127, 127, 127, 0.1);
+}
+
+.ui-hub-tab.is-active {
+  color: #fff;
+  background: var(--offer-pink);
+  box-shadow: 0 6px 18px -8px rgba(228, 136, 156, 0.75);
+}
+
+.ui-hub-tab:active {
+  transform: scale(0.97);
+}
+
+.ui-link-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--offer-pink);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* ====================================================================== */
+/* 7. 工作台快捷入口                                                       */
+/* ====================================================================== */
+
+.workbench-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 18px;
+}
+
+/* ====================================================================== */
+/* 8. 采集岗位三步向导                                                     */
+/* ====================================================================== */
+
+.offerpilot-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr) minmax(0, 0.85fr);
+  gap: 12px;
+  margin: 14px 0 16px;
+}
+
+.offerpilot-step {
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.offerpilot-step h4 {
+  margin: 0 0 6px;
+  padding-right: 28px;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.offerpilot-step-index {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--offer-pink);
+  opacity: 0.35;
+}
+
+.offerpilot-step .offerpilot-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.offerpilot-step .offerpilot-form .form-field {
+  min-width: 0;
+}
+
+.collect-summary {
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: rgba(127, 127, 127, 0.05);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.collect-checks {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.collect-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.collect-check > .badge {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.collect-check-body {
+  min-width: 0;
+}
+
+.collect-check-body strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.collect-check-body p {
+  margin: 3px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.collect-explain {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.collect-explain strong {
+  color: var(--ink);
+}
+
+.offerpilot-jobs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.offerpilot-details {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.offerpilot-details summary,
+.advanced-panel summary {
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.offerpilot-details summary::-webkit-details-marker,
+.advanced-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.offerpilot-details summary::before,
+.advanced-panel summary::before {
+  content: "＋";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--offer-pink);
+}
+
+.offerpilot-details[open] summary::before,
+.advanced-panel[open] summary::before {
+  content: "－";
+}
+
+.offerpilot-details .integration-meta {
+  margin-top: 12px;
+}
+
+.advanced-panel {
+  align-self: start;
+}
+
+.advanced-panel .panel-head {
+  margin-top: 12px;
+}
+
+@media (max-width: 1080px) {
+  .offerpilot-steps {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .offerpilot-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-hub-tabs {
+    width: 100%;
+  }
+}

@@ -1096,11 +1096,74 @@ def get_offerpilot_jobs(mode: str = "user") -> dict[str, Any]:
     return offerpilot_runtime.get_jobs()
 
 
+OFFERPILOT_OPTION_KEYS = {"platform", "keywords", "cities", "max_pages", "auto_score"}
+
+
+def _offerpilot_text_list(value: Any, label: str, limit: int) -> list[str]:
+    if isinstance(value, str):
+        items = value.replace("，", ",").split(",")
+    elif isinstance(value, list):
+        items = value
+    else:
+        raise ApiError(f"{label}必须是逗号分隔的文本或字符串数组")
+    cleaned: list[str] = []
+    for item in items:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if len(text) > 80:
+            raise ApiError(f"{label}单项不能超过 80 个字符")
+        if text not in cleaned:
+            cleaned.append(text)
+    if not cleaned:
+        raise ApiError(f"至少填写一个{label}")
+    if len(cleaned) > limit:
+        raise ApiError(f"{label}最多 {limit} 个")
+    return cleaned
+
+
+def _offerpilot_options(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate the optional search override sent by the collection form."""
+    raw = payload.get("options")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ApiError("采集设置必须是对象")
+    unexpected = sorted(set(raw) - OFFERPILOT_OPTION_KEYS)
+    if unexpected:
+        raise ApiError("采集设置包含不支持的字段：" + "、".join(unexpected))
+    platform = str(raw.get("platform") or "boss").strip().lower()
+    if platform != "boss":
+        raise ApiError("当前采集窗口只开放 BOSS 直聘；其他平台请使用静态 JSON 导入")
+    keywords = _offerpilot_text_list(raw.get("keywords"), "搜索关键词", 10)
+    cities = _offerpilot_text_list(raw.get("cities"), "城市", 5)
+    try:
+        max_pages = int(raw.get("max_pages", 1))
+    except (TypeError, ValueError) as exc:
+        raise ApiError("每个关键词的页数必须是整数") from exc
+    if not 1 <= max_pages <= 10:
+        raise ApiError("每个关键词的页数必须在 1–10 之间")
+    auto_score = raw.get("auto_score", False)
+    if not isinstance(auto_score, bool):
+        raise ApiError("auto_score 必须是布尔值")
+    return {
+        "platform_order": [platform],
+        "platforms": {
+            platform: {
+                "keywords": keywords,
+                "cities": cities,
+                "max_pages": max_pages,
+            }
+        },
+        "auto_score": auto_score,
+    }
+
+
 def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     task_mode = str(payload.get("mode") or "")
     data_mode = str(payload.get("data_mode") or "user")
-    if set(payload) - {"mode", "data_mode", "confirm", "risk_acknowledged", "action"}:
-        raise ApiError("岗位自动化任务只接受 mode、data_mode、confirm 和 risk_acknowledged")
+    if set(payload) - {"mode", "data_mode", "confirm", "risk_acknowledged", "options", "action"}:
+        raise ApiError("岗位自动化任务只接受 mode、data_mode、confirm、risk_acknowledged 和 options")
     if payload.get("action") not in (None, "offerpilot-start"):
         raise ApiError("动作与 OfferPilot 启动请求不匹配")
     if data_mode not in Store.VALID_MODES:
@@ -1113,8 +1176,15 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("启动 岗位自动化任务前必须明确传 confirm: true", 400)
     if payload.get("risk_acknowledged") is not True:
         raise ApiError("招聘平台自动化存在账号封禁风险；确认风险后传 risk_acknowledged: true", 400)
+    options = _offerpilot_options(payload)
+    if task_mode == "monitor" and options is not None:
+        raise ApiError("监控任务不接受搜索条件；请选择 collect 或 full")
     try:
-        response = offerpilot_runtime.start_task(task_mode)
+        response = (
+            offerpilot_runtime.start_task(task_mode)
+            if options is None
+            else offerpilot_runtime.start_task(task_mode, options)
+        )
     except offerpilot_runtime.OfferPilotUnavailable as exc:
         raise ApiError(str(exc), 503) from exc
     except ValueError as exc:
@@ -1123,7 +1193,110 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("岗位自动化任务不存在", 404) from exc
     except Exception as exc:
         raise ApiError(f"岗位自动化 启动失败：{type(exc).__name__}", 500) from exc
-    return {"ok": True, "task": response, "message": "岗位自动化任务已受控提交；发送仍须经过人工确认门和配置时间窗口"}
+    message = "岗位自动化任务已受控提交；发送仍须经过人工确认门和配置时间窗口"
+    if task_mode == "collect":
+        message = "采集任务已受控提交；采集结果会先进入只读快照，确认后再导入岗位池"
+    return {"ok": True, "task": response, "message": message}
+
+
+def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check the same start conditions without launching a task."""
+    task_mode = str(payload.get("mode") or "collect")
+    data_mode = str(payload.get("data_mode") or "user")
+    if set(payload) - {"mode", "data_mode", "options", "action"}:
+        raise ApiError("启动前检查只接受 mode、data_mode 和 options")
+    if payload.get("action") not in (None, "offerpilot-preflight"):
+        raise ApiError("动作与 OfferPilot 启动前检查不匹配")
+    if data_mode not in Store.VALID_MODES:
+        raise ApiError("数据模式只能是 demo 或 user")
+    if data_mode == "demo":
+        raise ApiError("演示模式只读；切换到用户数据后再检查真实采集环境", 403)
+    if task_mode not in OFFERPILOT_TASK_MODES:
+        raise ApiError("仅允许 collect、monitor 或 full；发送任务不开放直接调用", 403)
+    options = _offerpilot_options(payload)
+    if task_mode == "monitor" and options is not None:
+        raise ApiError("监控任务不接受搜索条件；请选择 collect 或 full")
+    try:
+        result = offerpilot_runtime.preflight(task_mode, options)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        raise ApiError(str(exc), 400) from exc
+    except Exception as exc:
+        raise ApiError(f"岗位自动化 启动前检查失败：{type(exc).__name__}", 500) from exc
+    return {"ok": bool(result.get("ok")), **result}
+
+
+def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]], ids: list[str]) -> dict[str, Any]:
+    """Copy selected read-only OfferPilot jobs into the workbench job pool."""
+    rows = store.jobs()
+    existing = {_job_fingerprint(row) for row in rows}
+    by_id = {str(job.get("id")): job for job in runtime_jobs if isinstance(job, dict)}
+    added: list[str] = []
+    duplicates = 0
+    unscored = 0
+    for index, job_id in enumerate(ids, start=1):
+        source = by_id.get(job_id)
+        if source is None:
+            continue
+        raw_score = source.get("score")
+        score: float | None = None
+        if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool) and raw_score > 0:
+            # OfferPilot stores 0–100; the workbench uses 0–5.
+            score = round(float(raw_score) / 20, 1) if float(raw_score) > 5 else round(float(raw_score), 1)
+        if score is None:
+            unscored += 1
+        record = {
+            "company": source.get("company"),
+            "title": source.get("title"),
+            "city": source.get("city"),
+            "salary_text": source.get("salary"),
+            "posted_at": source.get("created_at"),
+            "source_channel": "boss",
+            "raw_text": "",
+            "score": score,
+            "offerpilot_id": job_id,
+            "score_raw": raw_score if score is not None else None,
+            "score_scale": "0-100→0-5" if score is not None else None,
+        }
+        job = _normalize_job(record, index, "boss")
+        fingerprint = _job_fingerprint(job)
+        if fingerprint in existing:
+            duplicates += 1
+            continue
+        existing.add(fingerprint)
+        rows.append(job)
+        added.append(str(job["id"]))
+    store.set_jobs(rows)
+    store.log("导入采集岗位", f"新增 {len(added)} 条，重复 {duplicates} 条，未评分 {unscored} 条")
+    message = f"已导入 {len(added)} 条到岗位池"
+    if duplicates:
+        message += f"，跳过 {duplicates} 条重复记录"
+    if unscored:
+        message += f"；其中 {unscored} 条没有评分，不会进入审批队列"
+    return {"ok": True, "added": added, "duplicates": duplicates, "unscored": unscored, "message": message}
+
+
+def import_offerpilot_jobs(payload: dict[str, Any]) -> dict[str, Any]:
+    data_mode = str(payload.get("data_mode") or payload.get("mode") or "user")
+    if data_mode != "user":
+        raise ApiError("采集结果只能导入 user 岗位池；demo 数据不会写入真实岗位")
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not ids:
+        raise ApiError("请先勾选至少一条采集结果")
+    if len(ids) > 100:
+        raise ApiError("一次最多导入 100 条")
+    safe_ids: list[str] = []
+    for item in ids:
+        text = str(item or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", text):
+            raise ApiError("采集结果 id 无效")
+        if text not in safe_ids:
+            safe_ids.append(text)
+    response = offerpilot_runtime.get_jobs(limit=500)
+    if not response.get("ok"):
+        raise ApiError(str(response.get("error") or "无法读取采集结果"), 503)
+    return _import_offerpilot_records(get_store("user"), response.get("jobs") or [], safe_ids)
 
 
 def stop_offerpilot_task(task_id: str, data_mode: str = "user") -> dict[str, Any]:
@@ -1857,6 +2030,7 @@ ACTIONS = {
     "save-profile": save_profile,
     "import-profile-cv": import_profile_cv,
     "offerpilot-start": start_offerpilot_task,
+    "offerpilot-import": import_offerpilot_jobs,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(
         str(payload.get("task_id") or ""),
         str(payload.get("data_mode") or payload.get("mode") or "user"),

@@ -65,6 +65,35 @@ const OFFERPILOT_CAPABILITY_LABELS = {
   start_full_flow: '完整流程',
   human_confirmation_before_delivery: '投递前人工确认'
 };
+const HUB_FOR_VIEW = {
+  workbench: 'workbench',
+  collect: 'find',
+  jobs: 'find',
+  queue: 'queue',
+  mail: 'mail',
+  profile: 'profile',
+  resume: 'resume',
+  interview: 'interview',
+  data: 'data',
+  push: 'push'
+};
+const OFFERPILOT_MODE_HINTS = {
+  collect: '只采集岗位，不评分、不生成招呼语、不投递。',
+  monitor: '只检查已有会话中的 HR 回复，不采集新岗位、不发送消息。',
+  full: '采集后调用 AI 评分并生成招呼语；发送仍会停在人工确认门。'
+};
+const OFFERPILOT_JOB_STATUS_LABELS = {
+  pending: '待评分',
+  scored: '已评分',
+  filtered: '已过滤',
+  greeted: '已生成招呼语',
+  sent: '已发送',
+  replied: '已回复',
+  rejected: '已拒绝',
+  interview: '面试中',
+  offer: 'Offer',
+  deleted: '已删除'
+};
 
 function safeLocalGet(key) {
   try {
@@ -99,6 +128,11 @@ const state = {
   offerpilotJobsMode: null,
   offerpilotConnected: false,
   offerpilotCanStart: false,
+  offerpilotJobs: [],
+  offerpilotSelection: new Set(),
+  offerpilotPreflight: null,
+  offerpilotPreflightKey: '',
+  offerpilotPrefsMode: null,
   profileDirty: false
 };
 
@@ -110,6 +144,7 @@ const dom = {
   generatedAt: document.getElementById('generated-at'),
   loadingNote: document.getElementById('loading-note'),
   refreshButton: document.getElementById('refresh-button'),
+  filterBar: document.querySelector('.filter-bar'),
   filterPeriod: document.getElementById('filter-period'),
   filterChannel: document.getElementById('filter-channel'),
   filterState: document.getElementById('filter-state'),
@@ -155,6 +190,16 @@ const dom = {
   offerpilotResult: document.getElementById('offerpilot-result'),
   offerpilotJobsCount: document.getElementById('offerpilot-jobs-count'),
   offerpilotJobsTable: document.getElementById('offerpilot-jobs-table'),
+  offerpilotSelectAll: document.getElementById('offerpilot-select-all'),
+  offerpilotImport: document.getElementById('offerpilot-import'),
+  offerpilotOpenJobs: document.getElementById('offerpilot-open-jobs'),
+  collectKeywords: document.getElementById('collect-keywords'),
+  collectCities: document.getElementById('collect-cities'),
+  collectPages: document.getElementById('collect-pages'),
+  collectAutoScore: document.getElementById('collect-auto-score'),
+  collectSummary: document.getElementById('collect-summary'),
+  collectChecks: document.getElementById('collect-checks'),
+  collectPreflight: document.getElementById('collect-preflight'),
   profileForm: document.getElementById('profile-form'),
   profileName: document.getElementById('profile-name'),
   profileCity: document.getElementById('profile-city'),
@@ -607,7 +652,14 @@ function syncModeButtons() {
 }
 
 function showView(name) {
+  const hub = HUB_FOR_VIEW[name] || name;
   dom.navItems.forEach((button) => {
+    const active = button.dataset.hub === hub;
+    button.classList.toggle('is-active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('.ui-hub-tab').forEach((button) => {
     const active = button.dataset.view === name;
     button.classList.toggle('is-active', active);
     if (active) button.setAttribute('aria-current', 'page');
@@ -616,9 +668,12 @@ function showView(name) {
   dom.viewPanels.forEach((panel) => {
     panel.hidden = panel.dataset.viewPanel !== name;
   });
+  // 时间/渠道/状态筛选只作用于工作台快照，其他入口显示会变成无关噪音。
+  if (dom.filterBar) dom.filterBar.hidden = name !== 'workbench';
   window.scrollTo({ top: 0, behavior: 'auto' });
-  if (name === 'jobs' && state.offerpilotConnected && !state.offerpilotJobsLoaded) {
-    loadOfferPilotJobs();
+  if (name === 'collect') {
+    if (state.offerpilotConnected && !state.offerpilotJobsLoaded) loadOfferPilotJobs();
+    if (state.offerpilotConnected) maybeRunOfferPilotPreflight();
   }
 }
 
@@ -1739,6 +1794,155 @@ function renderOfferPilotTask(task, lastTask) {
   }
 }
 
+function splitTextList(value) {
+  return String(value || '')
+    .replace(/，/g, ',')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function collectMode() {
+  return dom.offerpilotMode ? dom.offerpilotMode.value : 'collect';
+}
+
+function collectNeedsSearch(mode) {
+  return mode === 'collect' || mode === 'full';
+}
+
+function collectFormKey() {
+  const mode = collectMode();
+  if (!collectNeedsSearch(mode)) return mode;
+  return [
+    mode,
+    dom.collectKeywords ? dom.collectKeywords.value.trim() : '',
+    dom.collectCities ? dom.collectCities.value.trim() : '',
+    dom.collectPages ? dom.collectPages.value.trim() : '',
+    dom.collectAutoScore && dom.collectAutoScore.checked ? '1' : '0'
+  ].join('|');
+}
+
+function buildOfferPilotOptions(silent = false) {
+  const keywords = splitTextList(dom.collectKeywords && dom.collectKeywords.value);
+  const cities = splitTextList(dom.collectCities && dom.collectCities.value);
+  const pages = Number(dom.collectPages && dom.collectPages.value);
+  if (!keywords.length) {
+    if (!silent) setStatus('请至少填写一个搜索关键词。', 'error');
+    return null;
+  }
+  if (!cities.length) {
+    if (!silent) setStatus('请至少填写一个城市。', 'error');
+    return null;
+  }
+  if (!Number.isInteger(pages) || pages < 1 || pages > 10) {
+    if (!silent) setStatus('每个关键词的页数必须是 1–10 的整数。', 'error');
+    return null;
+  }
+  return {
+    platform: 'boss',
+    keywords,
+    cities,
+    max_pages: pages,
+    auto_score: Boolean(dom.collectAutoScore && dom.collectAutoScore.checked)
+  };
+}
+
+function renderCollectSummary() {
+  if (!dom.collectSummary) return;
+  const mode = collectMode();
+  const options = collectNeedsSearch(mode) ? buildOfferPilotOptions(true) : null;
+  let text = OFFERPILOT_MODE_HINTS[mode] || '';
+  if (collectNeedsSearch(mode)) {
+    if (!options) {
+      text += ' 填写关键词和城市后，这里会显示本次采集范围。';
+    } else {
+      text += ` 将在 BOSS 直聘搜索「${options.keywords.join('、')}」，城市「${options.cities.join('、')}」，每个关键词最多 ${options.max_pages} 页。`;
+      text += options.auto_score ? ' 采集后会调用 AI 评分。' : ' 采集后不评分。';
+    }
+  }
+  dom.collectSummary.textContent = text;
+}
+
+function renderCollectChecks(preflight) {
+  if (!dom.collectChecks) return;
+  clear(dom.collectChecks);
+  if (!preflight) {
+    dom.collectChecks.append(el('p', {
+      className: 'hint',
+      text: state.mode === 'demo'
+        ? '演示模式只读，不会启动真实采集；切换到「我的 user」后可检查本机环境。'
+        : '修改条件后需要重新检查。'
+    }));
+    return;
+  }
+  const checks = Array.isArray(preflight.checks) ? preflight.checks : [];
+  const mode = collectMode();
+  const summary = el('p', {
+    className: `notice ${preflight.ok ? '' : 'notice-accent'}`.trim(),
+    text: preflight.ok ? '检查通过，可以启动。' : '检查未通过；请先处理下面的阻塞项。'
+  });
+  dom.collectChecks.append(summary);
+  if (!checks.length) {
+    dom.collectChecks.append(el('p', { className: 'hint', text: '没有可显示的检查项。' }));
+  }
+  checks.forEach((check) => {
+    const display = mode === 'monitor' && check.id === 'ai_connection'
+      ? { ...check, message: '监控任务不调用 AI', detail: '只读取已有会话中的 HR 回复，不进行评分。' }
+      : check;
+    const status = String(display.status || '');
+    const kind = status === 'pass' ? 'badge-good' : status === 'warning' ? 'badge-warn' : 'badge-bad';
+    const label = status === 'pass' ? '通过' : status === 'warning' ? '注意' : '阻塞';
+    const symbol = status === 'pass' ? '✓' : status === 'warning' ? '!' : '×';
+    const row = el('div', { className: 'collect-check' });
+    row.append(el('span', { className: `badge ${kind}`, text: `${symbol} ${label}` }));
+    const body = el('div', { className: 'collect-check-body' });
+    body.append(el('strong', { text: String(display.title || display.id || '检查项') }));
+    body.append(el('p', { text: String(display.message || '') }));
+    if (display.detail) body.append(el('p', { className: 'hint', text: String(display.detail) }));
+    row.append(body);
+    dom.collectChecks.append(row);
+  });
+  const messages = Array.isArray(preflight.messages) ? preflight.messages.filter(Boolean) : [];
+  if (messages.length) {
+    dom.collectChecks.append(el('p', { className: 'notice notice-accent', text: messages.join('；') }));
+  }
+}
+
+function syncCollectModeUI() {
+  const mode = collectMode();
+  const needsSearch = collectNeedsSearch(mode);
+  document.querySelectorAll('[data-collect-search]').forEach((node) => {
+    node.hidden = !needsSearch;
+  });
+  if (dom.offerpilotStart) {
+    dom.offerpilotStart.textContent = mode === 'monitor' ? '开始监控' : mode === 'full' ? '开始完整流程' : '开始采集';
+  }
+  renderCollectSummary();
+  const key = collectFormKey();
+  if (state.offerpilotPreflight && state.offerpilotPreflightKey !== key) {
+    state.offerpilotPreflight = null;
+    renderCollectChecks(null);
+  }
+  syncOfferPilotStartState();
+}
+
+function applyOfferPilotPrefs(data) {
+  if (state.mode !== 'user' || !data.preferences || typeof data.preferences !== 'object') return;
+  if (state.offerpilotPrefsMode === state.mode) return;
+  state.offerpilotPrefsMode = state.mode;
+  const prefs = data.preferences;
+  if (dom.collectKeywords && !dom.collectKeywords.value && Array.isArray(prefs.keywords)) {
+    dom.collectKeywords.value = prefs.keywords.slice(0, 10).join(', ');
+  }
+  if (dom.collectCities && !dom.collectCities.value && Array.isArray(prefs.cities)) {
+    dom.collectCities.value = prefs.cities.slice(0, 5).join(', ');
+  }
+  if (dom.collectPages && !dom.collectPages.value && prefs.max_pages && prefs.max_pages.boss) {
+    dom.collectPages.value = String(prefs.max_pages.boss);
+  }
+  syncCollectModeUI();
+}
+
 function renderOfferPilot(boss) {
   const data = boss && typeof boss === 'object' ? boss : {};
   // /api/offerpilot/state uses `ok`; pipeline.offerpilot uses `connected`.
@@ -1750,10 +1954,16 @@ function renderOfferPilot(boss) {
     // Never carry a job snapshot across data modes: demo must not show user jobs.
     state.offerpilotJobsMode = state.mode;
     state.offerpilotJobsLoaded = false;
+    state.offerpilotPrefsMode = null;
+    state.offerpilotJobs = [];
+    state.offerpilotSelection.clear();
+    state.offerpilotPreflight = null;
+    state.offerpilotPreflightKey = '';
+    renderCollectChecks(null);
     if (dom.offerpilotJobsCount) dom.offerpilotJobsCount.textContent = '尚未读取';
     if (dom.offerpilotJobsTable) {
       clear(dom.offerpilotJobsTable);
-      dom.offerpilotJobsTable.append(el('p', { className: 'hint', text: '正在读取只读岗位快照…' }));
+      dom.offerpilotJobsTable.append(el('p', { className: 'hint', text: '正在读取采集结果…' }));
     }
   }
   if (dom.offerpilotConnection) {
@@ -1792,6 +2002,13 @@ function renderOfferPilot(boss) {
     dom.offerpilotError.textContent = error;
     dom.offerpilotError.className = `notice ${connected ? '' : 'notice-accent'}`.trim();
   }
+  if (dom.collectAutoScore) {
+    const aiReady = Boolean(connected && data.ai && data.ai.configured);
+    dom.collectAutoScore.disabled = !aiReady;
+    if (!aiReady) dom.collectAutoScore.checked = false;
+  }
+  applyOfferPilotPrefs(data);
+  syncCollectModeUI();
   renderOfferPilotTask(data.task, data.last_task);
   syncOfferPilotStartState();
   if (!connected) {
@@ -1799,25 +2016,78 @@ function renderOfferPilot(boss) {
     if (dom.offerpilotJobsCount) dom.offerpilotJobsCount.textContent = '未连接';
     if (dom.offerpilotJobsTable) {
       clear(dom.offerpilotJobsTable);
-      dom.offerpilotJobsTable.append(el('p', { className: 'hint', text: '岗位自动化就绪后，可在此读取只读岗位快照。' }));
+      dom.offerpilotJobsTable.append(el('p', { className: 'hint', text: '岗位自动化就绪后，可在此读取采集结果。' }));
     }
   } else if (!state.offerpilotJobsLoaded) {
     loadOfferPilotJobs();
+  }
+  const collectView = document.getElementById('view-collect');
+  if (state.offerpilotCanStart && collectView && !collectView.hidden) {
+    maybeRunOfferPilotPreflight();
   }
 }
 
 function syncOfferPilotStartState() {
   if (!dom.offerpilotStart) return;
+  const preflightReady = Boolean(state.offerpilotPreflight && state.offerpilotPreflight.ok === true);
   dom.offerpilotStart.disabled = !state.offerpilotCanStart
     || !dom.offerpilotRisk.checked
-    || !dom.offerpilotConfirm.checked;
+    || !dom.offerpilotConfirm.checked
+    || !preflightReady;
+  dom.offerpilotStart.title = preflightReady ? '' : '先点击「检查环境」并处理阻塞项';
+}
+
+function renderOfferPilotJobs() {
+  if (!dom.offerpilotJobsTable) return;
+  const jobs = state.offerpilotJobs;
+  renderTable(dom.offerpilotJobsTable, {
+    caption: '表：采集结果（只读；勾选后导入岗位池）',
+    columns: ['选择', '岗位', '公司', '城市', '薪资', '评分', '状态'],
+    rows: jobs.map((job) => {
+      const id = String(job.id || '');
+      const checkbox = el('input', {
+        attrs: { type: 'checkbox', 'aria-label': `选择 ${String(job.title || id || '岗位')}` }
+      });
+      checkbox.checked = state.offerpilotSelection.has(id);
+      checkbox.disabled = !id || !state.offerpilotCanStart;
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) state.offerpilotSelection.add(id);
+        else state.offerpilotSelection.delete(id);
+        syncOfferPilotSelection();
+      });
+      return [
+        checkbox,
+        String(job.title || '—'),
+        String(job.company || '—'),
+        String(job.city || '—'),
+        String(job.salary || '—'),
+        job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score),
+        OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
+      ];
+    }),
+    emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '岗位自动化未就绪。'
+  });
+  syncOfferPilotSelection();
+}
+
+function syncOfferPilotSelection() {
+  const total = state.offerpilotJobs.length;
+  const selected = state.offerpilotSelection.size;
+  if (dom.offerpilotSelectAll) {
+    dom.offerpilotSelectAll.checked = total > 0 && selected === total;
+    dom.offerpilotSelectAll.indeterminate = selected > 0 && selected < total;
+    dom.offerpilotSelectAll.disabled = total === 0 || !state.offerpilotCanStart;
+  }
+  if (dom.offerpilotImport) {
+    dom.offerpilotImport.disabled = selected === 0 || !state.offerpilotCanStart;
+  }
 }
 
 async function loadOfferPilotJobs(options = {}) {
   if (!state.offerpilotConnected || state.offerpilotJobsLoading) return;
   const requestedMode = state.mode;
   state.offerpilotJobsLoading = true;
-  if (options.announce) setStatus('正在读取岗位自动化只读岗位快照…', 'info');
+  if (options.announce) setStatus('正在读取采集结果…', 'info');
   try {
     const response = await fetch(`/api/offerpilot/jobs?mode=${encodeURIComponent(requestedMode)}`, {
       method: 'GET',
@@ -1827,36 +2097,84 @@ async function loadOfferPilotJobs(options = {}) {
     const data = await parseResponse(response);
     if (state.mode !== requestedMode) return;
     const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    state.offerpilotJobs = jobs;
     state.offerpilotJobsLoaded = true;
+    const validIds = new Set(jobs.map((job) => String(job.id || '')).filter(Boolean));
+    state.offerpilotSelection.forEach((id) => {
+      if (!validIds.has(id)) state.offerpilotSelection.delete(id);
+    });
     if (dom.offerpilotJobsCount) {
       dom.offerpilotJobsCount.textContent = `只读 ${jobs.length} 条`;
     }
-    renderTable(dom.offerpilotJobsTable, {
-      caption: '表：岗位活动快照（只读，不导入工作台）',
-      columns: ['岗位', '公司', '城市', '薪资', '评分', '状态'],
-      rows: jobs.map((job) => [
-        String(job.title || '—'),
-        String(job.company || '—'),
-        String(job.city || '—'),
-        String(job.salary || '—'),
-        job.score === undefined || job.score === null ? '—' : String(job.score),
-        String(job.status || '—')
-      ]),
-      emptyText: '当前没有活动岗位。',
-      className: 'data-table-wide'
-    });
-    if (options.announce) setStatus(`已读取 ${jobs.length} 条岗位自动化只读岗位；未写入工作台。`, 'ok');
+    renderOfferPilotJobs();
+    if (options.announce) setStatus(`已读取 ${jobs.length} 条采集结果；导入前不会写入岗位池。`, 'ok');
   } catch (error) {
     state.offerpilotJobsLoaded = false;
+    state.offerpilotJobs = [];
+    state.offerpilotSelection.clear();
     if (dom.offerpilotJobsCount) dom.offerpilotJobsCount.textContent = '读取失败';
     if (dom.offerpilotJobsTable) {
       clear(dom.offerpilotJobsTable);
       dom.offerpilotJobsTable.append(el('p', { className: 'notice', text: friendlyError(error) }));
     }
-    if (options.announce) setStatus(`读取岗位自动化岗位失败：${friendlyError(error)}`, 'error');
+    syncOfferPilotSelection();
+    if (options.announce) setStatus(`读取采集结果失败：${friendlyError(error)}`, 'error');
   } finally {
     state.offerpilotJobsLoading = false;
   }
+}
+
+async function runOfferPilotPreflight(button) {
+  if (!state.offerpilotCanStart) {
+    setStatus('当前是演示模式或内嵌后端未就绪；切换到用户数据后再检查真实采集环境。', 'error');
+    return;
+  }
+  const mode = collectMode();
+  const needsSearch = collectNeedsSearch(mode);
+  const options = needsSearch ? buildOfferPilotOptions() : null;
+  if (needsSearch && !options) return;
+  const key = collectFormKey();
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+  }
+  if (dom.collectChecks) {
+    clear(dom.collectChecks);
+    dom.collectChecks.append(el('p', { className: 'hint', text: '正在检查浏览器、配置与 AI…' }));
+  }
+  try {
+    const payload = { mode, data_mode: state.mode };
+    if (options) payload.options = options;
+    const data = await postJson('/api/offerpilot/preflight', payload);
+    state.offerpilotPreflight = data;
+    state.offerpilotPreflightKey = key;
+    renderCollectChecks(data);
+    if (data.ok) setStatus('环境检查通过，可以启动。', 'ok');
+    else setStatus(`环境检查未通过：${(data.messages && data.messages[0]) || '请查看检查项'}`, 'warn');
+  } catch (error) {
+    const failure = { ok: false, checks: [], messages: [friendlyError(error)] };
+    state.offerpilotPreflight = failure;
+    state.offerpilotPreflightKey = key;
+    renderCollectChecks(failure);
+    setStatus(`环境检查失败：${friendlyError(error)}`, 'error');
+  } finally {
+    if (button) {
+      button.removeAttribute('aria-busy');
+      button.disabled = false;
+    }
+    syncOfferPilotStartState();
+  }
+}
+
+function maybeRunOfferPilotPreflight() {
+  if (!state.offerpilotCanStart) return;
+  const key = collectFormKey();
+  if (state.offerpilotPreflight && state.offerpilotPreflightKey === key) return;
+  if (collectNeedsSearch(collectMode()) && !buildOfferPilotOptions(true)) {
+    renderCollectChecks(null);
+    return;
+  }
+  runOfferPilotPreflight();
 }
 
 async function refreshOfferPilot(options = {}) {
@@ -1879,6 +2197,7 @@ async function refreshOfferPilot(options = {}) {
     }
     if (state.offerpilotConnected) await loadOfferPilotJobs(options);
     if (state.snapshot) await loadState();
+    maybeRunOfferPilotPreflight();
   } catch (error) {
     renderOfferPilot({ connected: false, error: friendlyError(error) });
     if (options.announce) setStatus(`检测岗位自动化失败：${friendlyError(error)}`, 'error');
@@ -1888,7 +2207,7 @@ async function refreshOfferPilot(options = {}) {
 }
 
 async function startOfferPilotTask(button) {
-  const mode = dom.offerpilotMode.value;
+  const mode = collectMode();
   if (!['collect', 'monitor', 'full'].includes(mode)) {
     setStatus('岗位自动化任务模式无效。', 'error');
     return;
@@ -1897,23 +2216,53 @@ async function startOfferPilotTask(button) {
     setStatus('当前是演示模式或内嵌后端未就绪；切换到用户数据后再启动真实任务。', 'error');
     return;
   }
+  const needsSearch = collectNeedsSearch(mode);
+  const options = needsSearch ? buildOfferPilotOptions() : null;
+  if (needsSearch && !options) return;
+  if (!state.offerpilotPreflight || state.offerpilotPreflight.ok !== true || state.offerpilotPreflightKey !== collectFormKey()) {
+    setStatus('请先点击「检查环境」，通过后再启动。', 'error');
+    return;
+  }
   if (!dom.offerpilotRisk.checked || !dom.offerpilotConfirm.checked) {
     setStatus('启动前必须同时勾选风险确认与启动确认。', 'error');
     return;
   }
-  const data = await runAction(button, () => postJson('/api/offerpilot/tasks', {
+  const payload = {
     mode,
     data_mode: state.mode,
     confirm: true,
     risk_acknowledged: true
-  }));
+  };
+  if (options) payload.options = options;
+  const data = await runAction(button, () => postJson('/api/offerpilot/tasks', payload));
   if (!data) return;
   setStatus(data.message || '岗位自动化任务已受控提交。', 'ok');
   showInline(dom.offerpilotResult, data.message || '岗位自动化任务已受控提交。', 'ok');
   dom.offerpilotRisk.checked = false;
   dom.offerpilotConfirm.checked = false;
+  state.offerpilotPreflight = null;
+  state.offerpilotPreflightKey = '';
   syncOfferPilotStartState();
   await refreshOfferPilot();
+}
+
+async function importOfferPilotJobs(button) {
+  const ids = Array.from(state.offerpilotSelection);
+  if (!ids.length) {
+    setStatus('请先勾选至少一条采集结果。', 'error');
+    return;
+  }
+  const data = await runAction(button, () => postAction('offerpilot-import', {
+    ids,
+    data_mode: state.mode
+  }));
+  if (!data) return;
+  setStatus(data.message || '已导入岗位池。', 'ok');
+  showInline(dom.offerpilotResult, data.message || '已导入岗位池。', 'ok');
+  state.offerpilotSelection.clear();
+  await loadState();
+  renderOfferPilotJobs();
+  syncOfferPilotSelection();
 }
 
 async function stopOfferPilotTask(taskId, button) {
@@ -2589,6 +2938,14 @@ function bindEvents() {
     button.addEventListener('click', () => showView(button.dataset.view));
   });
 
+  document.querySelectorAll('.ui-hub-tab').forEach((button) => {
+    button.addEventListener('click', () => showView(button.dataset.view));
+  });
+
+  document.querySelectorAll('[data-view-link]').forEach((button) => {
+    button.addEventListener('click', () => showView(button.dataset.viewLink));
+  });
+
   dom.modeButtons.forEach((button) => {
     button.addEventListener('click', () => switchMode(button.dataset.mode));
   });
@@ -2625,6 +2982,38 @@ function bindEvents() {
   [dom.offerpilotRisk, dom.offerpilotConfirm].forEach((checkbox) => {
     if (checkbox) checkbox.addEventListener('change', syncOfferPilotStartState);
   });
+  if (dom.offerpilotMode) {
+    dom.offerpilotMode.addEventListener('change', () => {
+      syncCollectModeUI();
+      maybeRunOfferPilotPreflight();
+    });
+  }
+  [dom.collectKeywords, dom.collectCities, dom.collectPages, dom.collectAutoScore].forEach((input) => {
+    if (!input) return;
+    input.addEventListener('input', syncCollectModeUI);
+    input.addEventListener('change', syncCollectModeUI);
+  });
+  if (dom.collectPreflight) {
+    dom.collectPreflight.addEventListener('click', () => runOfferPilotPreflight(dom.collectPreflight));
+  }
+  if (dom.offerpilotSelectAll) {
+    dom.offerpilotSelectAll.addEventListener('change', () => {
+      state.offerpilotSelection.clear();
+      if (dom.offerpilotSelectAll.checked) {
+        state.offerpilotJobs.forEach((job) => {
+          const id = String(job.id || '');
+          if (id) state.offerpilotSelection.add(id);
+        });
+      }
+      renderOfferPilotJobs();
+    });
+  }
+  if (dom.offerpilotImport) {
+    dom.offerpilotImport.addEventListener('click', () => importOfferPilotJobs(dom.offerpilotImport));
+  }
+  if (dom.offerpilotOpenJobs) {
+    dom.offerpilotOpenJobs.addEventListener('click', () => showView('jobs'));
+  }
   if (dom.offerpilotForm) {
     dom.offerpilotForm.addEventListener('submit', async (event) => {
       event.preventDefault();

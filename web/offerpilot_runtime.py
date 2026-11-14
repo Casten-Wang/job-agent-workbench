@@ -190,29 +190,93 @@ def get_jobs(limit: int = 100) -> dict[str, Any]:
     return {"ok": True, "embedded": True, "source": "offerpilot", "read_only": True, "jobs": jobs, "count": len(jobs), "limit": limit}
 
 
-def start_task(mode: str) -> dict[str, Any]:
+def _task_options(mode: str, config: dict[str, Any], raw_options: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Build the collection request without mutating the saved config.
+
+    ``raw_options`` comes from the workbench form and is already shape-checked
+    by ``web/backend.py``.  Keeping it as an in-memory override means the UI
+    can offer a real search form without writing config.yaml behind the user's
+    back.
+    """
+    if mode not in {"collect", "full"}:
+        return None
+    from offerpilot.collection.capabilities import platform_supports  # type: ignore
+    from offerpilot.collection.orchestrator import normalize_collection_options  # type: ignore
+
+    options = normalize_collection_options(config, raw_options)
+    if mode == "full":
+        collection_only = [
+            platform for platform in options["platform_order"]
+            if not platform_supports(platform, "deliver")
+        ]
+        if collection_only:
+            raise ValueError("智联、前程无忧和猎聘只能单独采集，不能进入投递全流程")
+        options["auto_score"] = True
+    return options
+
+
+def _options_summary(mode: str, options: dict[str, Any] | None) -> dict[str, Any]:
+    if not options:
+        return {"mode": mode, "platform_order": [], "keywords": [], "cities": [], "max_pages": {}, "auto_score": False}
+    platforms = options.get("platforms") if isinstance(options.get("platforms"), dict) else {}
+    keywords: list[str] = []
+    cities: list[str] = []
+    max_pages: dict[str, int] = {}
+    for platform in options.get("platform_order", []):
+        value = platforms.get(platform) if isinstance(platforms.get(platform), dict) else {}
+        keywords.extend(str(item) for item in value.get("keywords", []) if str(item).strip())
+        cities.extend(str(item) for item in value.get("cities", []) if str(item).strip())
+        try:
+            max_pages[platform] = int(value.get("max_pages", 1))
+        except (TypeError, ValueError):
+            max_pages[platform] = 1
+    return {
+        "mode": mode,
+        "platform_order": list(options.get("platform_order", [])),
+        "keywords": list(dict.fromkeys(keywords)),
+        "cities": list(dict.fromkeys(cities)),
+        "max_pages": max_pages,
+        "auto_score": bool(options.get("auto_score")),
+    }
+
+
+def preflight(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Run the same pre-start checks as ``start_task`` without starting anything."""
     if mode not in TASK_MODES:
         raise ValueError("仅允许 collect、monitor 或 full；发送任务不开放直接调用")
     server = load_backend()
-    from offerpilot.collection.capabilities import platform_supports  # type: ignore
-    from offerpilot.collection.orchestrator import normalize_collection_options  # type: ignore
     from offerpilot.config import load_config  # type: ignore
     from offerpilot.web.preflight import collect_preflight_checks, error_messages  # type: ignore
 
     config = load_config(server.CONFIG_PATH)
-    options = None
-    if mode in {"collect", "full"}:
-        options = normalize_collection_options(config, None)
-        if mode == "collect":
-            options["auto_score"] = False
-        else:
-            collection_only = [
-                platform for platform in options["platform_order"]
-                if not platform_supports(platform, "deliver")
-            ]
-            if collection_only:
-                raise ValueError("智联、前程无忧和猎聘只能单独采集，不能进入投递全流程")
-            options["auto_score"] = True
+    try:
+        options = _task_options(mode, config, raw_options)
+    except ValueError as exc:
+        return {
+            "ok": False,
+            "checks": [],
+            "messages": [str(exc)],
+            "summary": _options_summary(mode, None),
+        }
+    checks = collect_preflight_checks(mode, config, options)
+    messages = [*server._preflight_messages(mode, config, options), *error_messages(checks)]
+    return {
+        "ok": not messages,
+        "checks": checks,
+        "messages": messages,
+        "summary": _options_summary(mode, options),
+    }
+
+
+def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str, Any]:
+    if mode not in TASK_MODES:
+        raise ValueError("仅允许 collect、monitor 或 full；发送任务不开放直接调用")
+    server = load_backend()
+    from offerpilot.config import load_config  # type: ignore
+    from offerpilot.web.preflight import collect_preflight_checks, error_messages  # type: ignore
+
+    config = load_config(server.CONFIG_PATH)
+    options = _task_options(mode, config, raw_options)
     checks = collect_preflight_checks(mode, config, options)
     messages = [*server._preflight_messages(mode, config, options), *error_messages(checks)]
     if messages:
@@ -223,8 +287,9 @@ def start_task(mode: str) -> dict[str, Any]:
     return {
         "task": _safe_task(task),
         "checks": checks,
+        "summary": _options_summary(mode, options),
         "policy": {
-            "auto_score": False if mode == "collect" else True if mode == "full" else None,
+            "auto_score": bool(options.get("auto_score")) if options is not None else None,
             "delivery": "full 工作流会在发送前暂停，必须经现有人工确认流程继续",
         },
     }

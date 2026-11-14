@@ -279,6 +279,116 @@ class DemoSeedTests(DemoDataTestCase):
         start.assert_called_once_with("collect")
         stop.assert_called_once_with("task-1")
 
+    def test_offerpilot_task_passes_validated_search_options(self):
+        with patch.object(
+            backend.offerpilot_runtime,
+            "start_task",
+            return_value={"task": {"id": "task-1", "mode": "collect", "status": "running"}, "checks": [], "policy": {}},
+        ) as start:
+            started = backend.start_offerpilot_task({
+                "mode": "collect",
+                "data_mode": "user",
+                "confirm": True,
+                "risk_acknowledged": True,
+                "options": {
+                    "platform": "boss",
+                    "keywords": ["产品经理", "AI产品经理"],
+                    "cities": ["北京"],
+                    "max_pages": 2,
+                    "auto_score": False,
+                },
+            })
+        self.assertTrue(started["ok"])
+        start.assert_called_once_with("collect", {
+            "platform_order": ["boss"],
+            "platforms": {"boss": {"keywords": ["产品经理", "AI产品经理"], "cities": ["北京"], "max_pages": 2}},
+            "auto_score": False,
+        })
+
+    def test_offerpilot_task_rejects_invalid_search_options(self):
+        base = {"mode": "collect", "data_mode": "user", "confirm": True, "risk_acknowledged": True}
+        for options in (
+            {"platform": "zhilian", "keywords": ["产品经理"], "cities": ["北京"]},
+            {"platform": "boss", "keywords": [], "cities": ["北京"]},
+            {"platform": "boss", "keywords": ["产品经理"], "cities": []},
+            {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "max_pages": 0},
+            {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "max_pages": 11},
+            {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "unexpected": True},
+            {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "auto_score": "yes"},
+        ):
+            with self.subTest(options=options):
+                with self.assertRaises(backend.ApiError):
+                    backend.start_offerpilot_task({**base, "options": options})
+        with self.assertRaises(backend.ApiError):
+            backend.start_offerpilot_task({
+                "mode": "monitor",
+                "data_mode": "user",
+                "confirm": True,
+                "risk_acknowledged": True,
+                "options": {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"]},
+            })
+
+    def test_offerpilot_preflight_checks_without_starting(self):
+        with patch.object(
+            backend.offerpilot_runtime,
+            "preflight",
+            return_value={"ok": True, "checks": [{"id": "browser_runtime", "status": "pass"}], "messages": [], "summary": {"mode": "collect"}},
+        ) as preflight:
+            result = backend.preflight_offerpilot_task({
+                "mode": "collect",
+                "data_mode": "user",
+                "options": {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "max_pages": 1},
+            })
+        self.assertTrue(result["ok"])
+        preflight.assert_called_once_with("collect", {
+            "platform_order": ["boss"],
+            "platforms": {"boss": {"keywords": ["产品经理"], "cities": ["北京"], "max_pages": 1}},
+            "auto_score": False,
+        })
+
+    def test_offerpilot_import_copies_scores_and_skips_duplicates(self):
+        store = backend.get_store("demo")
+        result = backend._import_offerpilot_records(store, [
+            {
+                "id": "op-test-1",
+                "title": "AI 产品经理",
+                "company": "虚构采集公司",
+                "city": "北京",
+                "salary": "20-30k",
+                "score": 80,
+                "created_at": "2026-11-14T10:00:00+08:00",
+            },
+            {
+                "id": "op-test-2",
+                "title": "产品助理",
+                "company": "虚构未评分公司",
+                "city": "北京",
+                "salary": "10-15k",
+                "score": 0,
+            },
+        ], ["op-test-1", "op-test-2"])
+        self.assertEqual(len(result["added"]), 2)
+        self.assertEqual(result["unscored"], 1)
+        jobs = {job.get("offerpilot_id"): job for job in store.jobs()}
+        self.assertEqual(jobs["op-test-1"]["score"], 4.0)
+        self.assertEqual(jobs["op-test-1"]["score_raw"], 80)
+        self.assertEqual(jobs["op-test-1"]["source_channel"], "boss")
+        self.assertIsNone(jobs["op-test-2"]["score"])
+
+        duplicate = backend._import_offerpilot_records(store, [
+            {"id": "op-test-1", "title": "AI 产品经理", "company": "虚构采集公司", "city": "北京", "score": 80},
+        ], ["op-test-1"])
+        self.assertEqual(duplicate["added"], [])
+        self.assertEqual(duplicate["duplicates"], 1)
+
+    def test_offerpilot_import_rejects_demo_and_unknown_ids(self):
+        with self.assertRaises(backend.ApiError):
+            backend.import_offerpilot_jobs({"data_mode": "demo", "ids": ["op-test-1"]})
+        with self.assertRaises(backend.ApiError):
+            backend.import_offerpilot_jobs({"data_mode": "user", "ids": []})
+        with self.assertRaises(backend.ApiError):
+            backend.import_offerpilot_jobs({"data_mode": "user", "ids": ["../bad id"]})
+
     def test_embedded_runtime_dependency_error_is_reported_not_raised(self):
         with patch.object(
             backend.offerpilot_runtime,
@@ -716,6 +826,20 @@ class HttpServerTests(unittest.TestCase):
             self.assertTrue(json.loads(raw)["ok"])
             start.assert_called_once()
 
+        with patch.object(
+            backend,
+            "preflight_offerpilot_task",
+            return_value={"ok": True, "checks": [{"id": "browser_runtime", "status": "pass"}], "messages": []},
+        ) as preflight:
+            status, _, raw = self.request("POST", "/api/offerpilot/preflight", {
+                "mode": "collect",
+                "data_mode": "user",
+                "options": {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "max_pages": 1},
+            })
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(raw)["ok"])
+            preflight.assert_called_once()
+
         status, _, raw = self.request("POST", "/api/offerpilot/tasks", {"mode": "full", "confirm": True})
         self.assertEqual(status, 400)
         self.assertIn("risk_acknowledged", json.loads(raw)["error"])
@@ -777,6 +901,10 @@ class HttpServerTests(unittest.TestCase):
                 self.assertIn(label, html)
         for marker in (
             'id="pipeline"',
+            'id="view-collect"',
+            'id="collect-keywords"',
+            'id="collect-cities"',
+            'id="collect-checks"',
             'id="view-push"',
             'id="view-resume"',
             "/api/doc/pipeline-api",
@@ -785,6 +913,7 @@ class HttpServerTests(unittest.TestCase):
             'id="offerpilot-confirm"',
             'id="offerpilot-start"',
             'id="offerpilot-jobs-table"',
+            'id="offerpilot-import"',
             'id="view-profile"',
             'id="profile-form"',
             'id="profile-import"',
@@ -801,11 +930,16 @@ class HttpServerTests(unittest.TestCase):
         for marker in (
             "/api/offerpilot/state",
             "/api/offerpilot/jobs",
+            "/api/offerpilot/preflight",
             "/api/offerpilot/tasks",
             "risk_acknowledged: true",
             "confirm: true",
             "syncOfferPilotStartState",
             "renderOfferPilot",
+            "buildOfferPilotOptions",
+            "runOfferPilotPreflight",
+            "offerpilot-import",
+            "filterBar.hidden = name !== 'workbench'",
             "collectProfileForm",
             "save-profile",
             "import-profile-cv",
