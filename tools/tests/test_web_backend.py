@@ -989,6 +989,43 @@ class GreetingPreviewTests(unittest.TestCase):
         )
 
 
+class GreetingEvidenceCheckTests(DemoDataTestCase):
+    def test_snapshot_flags_numbers_missing_from_profile_facts(self):
+        store = backend.get_store("demo")
+        jobs = store.jobs()
+        jobs[0]["offerpilot_id"] = "v-evidence"
+        store.set_jobs(jobs)
+        queue = store.queue()
+        queue[0]["status"] = "approved"
+        store.set_queue(queue)
+        job_id = str(queue[0]["id"])
+        for job in jobs:
+            if str(job.get("id")) == job_id:
+                job["offerpilot_id"] = "v-evidence"
+        store.set_jobs(jobs)
+        profile = store.profile()
+        profile["summary"] = "访谈了6名用户。"
+        store.set_profile(profile)
+        greeting = {
+            "id": "v-evidence",
+            "status": "approved",
+            "greeting": "我访谈过6名用户，并把转化率提升了80%。",
+            "selection": "",
+            "style_issues": [],
+            "reviewed": False,
+            "ready": True,
+        }
+        with patch.object(backend, "get_offerpilot_state", return_value={"ok": True, "task": None, "last_task": None}), \
+                patch.object(backend.offerpilot_runtime, "get_greetings", return_value={"ok": True, "greetings": [greeting]}):
+            snap = backend.snapshot("demo")
+        row = next(item for item in snap["queue"] if str(item.get("id")) == job_id)
+        check = row["greeting"]["evidence_check"]
+        self.assertFalse(check["ok"])
+        self.assertEqual([c["value"] for c in check["unsupported_claims"]], ["80"])
+        # Read-only: the greeting text itself is untouched.
+        self.assertEqual(row["greeting"]["greeting"], greeting["greeting"])
+
+
 class GreetRuntimeTests(unittest.TestCase):
     def test_start_greet_task_marks_ready_and_starts_greet_mode(self):
         vendor_src = str(PROJECT_ROOT / "vendor" / "offerpilot" / "src")

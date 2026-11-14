@@ -44,6 +44,7 @@ import calendar_ics  # noqa: E402
 import feishu_adapter  # noqa: E402
 import filters  # noqa: E402
 import resume_quality  # noqa: E402
+import evidence_checker  # noqa: E402
 import greeting  # noqa: E402
 import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
@@ -1951,6 +1952,12 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
                         key: item.get(key)
                         for key in ("status", "greeting", "selection", "style_issues", "reviewed", "ready")
                     }
+                    greeting_text = str(row["greeting"].get("greeting") or "")
+                    if greeting_text:
+                        # Read-only: flags numbers with no match in the user's own facts.
+                        row["greeting"]["evidence_check"] = evidence_checker.check_text_against_facts(
+                            greeting_text, profile_context_text(profile) + "\n" + cv_text
+                        )
     for row in queue_view:
         delivery = latest_by_job.get(str(row.get("id")))
         if delivery:

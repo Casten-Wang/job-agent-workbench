@@ -664,6 +664,18 @@ function resetContainer(container) {
   container.className = 'action-result';
 }
 
+function appendVariantQualityHints(container, quality) {
+  if (!container || !quality) return;
+  const hints = Array.isArray(quality.hints) ? quality.hints : [];
+  if (hints.length) {
+    const list = el('ul', { className: 'variant-quality-hints' });
+    hints.forEach((hint) => list.append(el('li', { text: hint })));
+    container.append(list);
+  } else {
+    container.append(el('p', { className: 'variant-quality-ok', text: '结构（背景-问题-动作-结果）与量化结果均已覆盖，未发现缺失项。' }));
+  }
+}
+
 /* Theme, mode, navigation */
 
 function applyTheme(choice) {
@@ -2705,6 +2717,15 @@ function renderQueueGreetings(approved) {
       meta.push(`风格提示：${greeting.style_issues.join('；')}`);
     }
     if (meta.length) card.append(el('p', { className: 'queue-greeting-meta', text: meta.join(' · ') }));
+    const evidence = greeting.evidence_check;
+    if (evidence && Array.isArray(evidence.unsupported_claims) && evidence.unsupported_claims.length) {
+      const list = el('ul', { className: 'queue-greeting-evidence' });
+      evidence.unsupported_claims.forEach((claim) => {
+        list.append(el('li', { text: `「${claim.context}」中的数字 ${claim.value} 在个人资料中找不到依据，请核对后再发送` }));
+      });
+      card.append(el('p', { className: 'queue-greeting-meta', text: '无证据数字（仅提示，不会自动改写）：' }));
+      card.append(list);
+    }
     container.append(card);
   });
 }
@@ -3800,10 +3821,12 @@ function bindEvents() {
     if (data.ok === false) {
       setStatus(data.message || '经历变体未保存。', data.duplicate ? 'warn' : 'error');
       showInline(dom.variantResult, data.message || '经历变体未保存。', data.duplicate ? 'warn' : 'error');
+      appendVariantQualityHints(dom.variantResult, data.quality);
       return;
     }
     setStatus(data.message || '经历原文已保存；未修改 Master Resume。', 'ok');
     showInline(dom.variantResult, data.message || '经历原文已保存。', 'ok');
+    appendVariantQualityHints(dom.variantResult, data.quality);
     dom.variantProject.value = '';
     dom.variantText.value = '';
     await loadState();
