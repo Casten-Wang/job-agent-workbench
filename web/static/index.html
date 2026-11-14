@@ -451,10 +451,28 @@
               <label class="checkbox-label"><input type="checkbox" id="queue-approved-select-all" aria-label="全选已确认"> 全选已确认</label>
               <span class="panel-count" id="queue-approved-selection-count">已选 0 条</span>
               <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
+              <button class="button button-small" type="button" id="queue-send-greetings" disabled>复核并发送</button>
             </div>
             <div id="queue-approved-table"></div>
             <div class="queue-greetings" id="queue-greetings"></div>
-            <p class="hint">生成只调用本机 AI，不打开平台页面、不发送消息；复核与发送尚未开放。</p>
+            <div class="queue-delivery-panel" id="queue-delivery-panel" hidden>
+              <div class="queue-delivery-head">
+                <strong>复核并发送</strong>
+                <button class="button button-quiet button-small" type="button" id="queue-delivery-cancel">取消</button>
+              </div>
+              <p class="queue-delivery-summary" id="queue-delivery-summary"></p>
+              <ul class="queue-delivery-list" id="queue-delivery-list"></ul>
+              <div class="form-field">
+                <label for="queue-delivery-confirm">输入确认语</label>
+                <input id="queue-delivery-confirm" type="text" autocomplete="off" spellcheck="false">
+              </div>
+              <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk"> 我已了解平台自动化可能导致账号封禁</label>
+              <div class="queue-delivery-actions">
+                <button class="button" type="button" id="queue-delivery-start" disabled>开始发送</button>
+              </div>
+              <p class="hint">发送受时间窗口 09:00–16:00、每日上限、随机间隔与平台风控锁约束；验证码、限流或连续错误会立即停止。</p>
+            </div>
+            <div class="queue-delivery-results" id="queue-delivery-results"></div>
           </section>
         </section>
 

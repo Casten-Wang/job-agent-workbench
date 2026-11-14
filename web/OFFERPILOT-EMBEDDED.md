@@ -41,6 +41,7 @@ python3 -m venv .venv
 | `POST /api/action` `offerpilot-import` | 把只读结果中选中的岗位复制进工作台岗位池（仅 `user` 模式，最多 100 条） |
 | `POST /api/action` `offerpilot-resume` | 上传评分简历（仅 `user` 模式；`.md` / `.docx` / `.pdf`，最大 5 MB），写入本机运行时 `data/resumes/` 并把 `profile.resume_path` 指向它 |
 | `POST /api/action` `offerpilot-greet` | 为审批队列中 `approved` 且带 `offerpilot_id` 的岗位启动 `greet` 任务（仅 `user` 模式，最多 10 条）；只生成招呼语，不发送 |
+| `POST /api/action` `offerpilot-deliver` | 发送已复核的招呼语（仅 `user` 模式，最多 10 条）：要求确认语「确认发送本批 N 条」与 `risk_acknowledged: true`；批次写入 `deliveries.json` |
 
 `options` 只作用于本次任务，不写回 `config.yaml`：
 
@@ -76,6 +77,8 @@ python3 -m venv .venv
 - `save_resume()` 复用内嵌运行时的 `prepare_resume_content`、`write_resume_artifacts`、`resolve_active_resume_path` 与 `select_resume_markdown_filename`，与上游上传行为一致；简历只写入 `web/data/user/offerpilot/data/resumes/`，不进入仓库。
 - `start_greet_task()` 只启动 `greet` 任务：要求 AI 已配置且本机有评分简历；在 `task_runner.start` 的 `before_start` 回调里把本批运行时岗位标记为 `ready`（否则状态为 `pending` 的岗位会被生成器过滤），并写一条 `workbench_greet` 历史。任务只生成文本，不访问平台、不发送。
 - `get_greetings()` 只读返回白名单字段（公司、岗位、招呼语、来源、风格提示、是否可复核），最多 50 条；`snapshot` 只把它附加到 `approved` 队列行，供审批队列做只读预览。
+- `start_deliver_task()` 只启动 `deliver` 任务：启动前检查发送窗口、平台风控锁、岗位状态、招呼语是否齐全且不在 `pending` 复核态；`before_start` 把本批岗位标记为 `approved` 并写 `workbench_deliver` 历史；配置固定带 `_workbench_skip_greeting=True`，发送的就是复核过的文本。运行时不传 `force`，窗口、日限、间隔、退避与风控锁全部沿用内嵌运行时。
+- 批次结果写在 `web/data/<mode>/deliveries.json`：只存岗位、状态与原因码，不存招呼语正文。任务结束后 `_sync_deliveries()` 读取运行时岗位状态，把每条标记为 `sent` / `failed` / `deferred` / `blocked`，并为每条写一条 `send` 阶段的 pipeline 事件（`actor: embedded_runtime`）。`GET /api/state` 的 `pipeline.delivery` 返回最近批次，队列行附带 `delivery` 摘要。
 - `import_offerpilot_jobs()` 只读 `get_jobs()` 的白名单字段，按岗位指纹去重后写入工作台 `jobs.json`；不写回内嵌运行时，也不改变审批状态。
 - 依赖缺失或初始化失败时返回 `ok: false` 与本地安装提示，面板显示「未就绪」，服务本身继续运行。
 

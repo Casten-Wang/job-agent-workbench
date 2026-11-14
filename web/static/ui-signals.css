@@ -667,6 +667,105 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* 审批队列：复核并发送 */
+.queue-delivery-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.queue-delivery-panel[hidden] {
+  display: none;
+}
+
+.queue-delivery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.queue-delivery-summary {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.queue-delivery-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.queue-delivery-item {
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+.queue-delivery-item strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.queue-delivery-item p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.queue-delivery-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.queue-delivery-card {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.queue-delivery-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-delivery-card > .button {
+  margin-top: 10px;
+}
+
+.queue-delivery-result-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queue-delivery-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
 .collect-checks-panel {
   margin: 16px 0;
   padding-top: 14px;

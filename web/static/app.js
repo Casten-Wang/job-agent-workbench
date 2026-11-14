@@ -146,6 +146,7 @@ const state = {
   offerpilotAutoScoreTouched: false,
   jobsSelection: new Set(),
   queueApprovedSelection: new Set(),
+  queueDeliveryIds: [],
   profileDirty: false
 };
 
@@ -264,7 +265,16 @@ const dom = {
   queueApprovedSelectAll: document.getElementById('queue-approved-select-all'),
   queueApprovedSelectionCount: document.getElementById('queue-approved-selection-count'),
   queueGenerateGreetings: document.getElementById('queue-generate-greetings'),
+  queueSendGreetings: document.getElementById('queue-send-greetings'),
   queueGreetings: document.getElementById('queue-greetings'),
+  queueDeliveryPanel: document.getElementById('queue-delivery-panel'),
+  queueDeliverySummary: document.getElementById('queue-delivery-summary'),
+  queueDeliveryList: document.getElementById('queue-delivery-list'),
+  queueDeliveryConfirm: document.getElementById('queue-delivery-confirm'),
+  queueDeliveryRisk: document.getElementById('queue-delivery-risk'),
+  queueDeliveryStart: document.getElementById('queue-delivery-start'),
+  queueDeliveryCancel: document.getElementById('queue-delivery-cancel'),
+  queueDeliveryResults: document.getElementById('queue-delivery-results'),
   mailForm: document.getElementById('mail-form'),
   mailSubject: document.getElementById('mail-subject'),
   mailBody: document.getElementById('mail-body'),
@@ -2637,17 +2647,19 @@ function renderQueue(snapshot) {
       formatScore(row.score),
       channelLabel(row.Source_Channel),
       greetingStatusBadge(row.greeting),
+      deliveryStatusBadge(row.delivery),
       badge('approved · 可人工投递', 'good', '✓')
     ];
   });
   renderTable(dom.queueApprovedTable, {
     caption: '表：已确认可人工投递',
-    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '状态'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '状态'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。approved 只表示可人工投递，不代表已投递。',
     className: 'data-table-wide'
   });
   renderQueueGreetings(approved);
+  renderDeliveryResults(snapshot);
 
   updateQueueSelectionUI();
   updateQueueApprovedSelectionUI();
@@ -2722,6 +2734,19 @@ function updateQueueApprovedSelectionUI() {
         ? '一次最多 10 条'
         : '只生成招呼语，不发送';
   }
+  if (dom.queueSendGreetings) {
+    const selectedRows = approved.filter((row) => state.queueApprovedSelection.has(String(row.id)));
+    const greetingReady = selectedRows.length > 0
+      && selectedRows.every((row) => row.greeting && row.greeting.ready);
+    dom.queueSendGreetings.disabled = !greetingReady
+      || selected > 10
+      || Boolean(state.offerpilotTaskActive);
+    dom.queueSendGreetings.title = state.offerpilotTaskActive
+      ? '已有岗位自动化任务正在运行；请先停止或等待结束'
+      : !greetingReady
+        ? '请先为所选岗位生成招呼语'
+        : '核对招呼语后发送';
+  }
 }
 
 async function generateQueueGreetings(button) {
@@ -2735,6 +2760,143 @@ async function generateQueueGreetings(button) {
   state.queueApprovedSelection.clear();
   setStatus(data.message || '已开始生成招呼语；只生成，不发送。', 'ok');
   await refreshOfferPilot();
+}
+
+const DELIVERY_STATUS_META = {
+  starting: ['准备中', 'warn', '…'],
+  sending: ['发送中', 'warn', '…'],
+  sent: ['已发送', 'good', '✓'],
+  failed: ['失败', 'bad', '!'],
+  deferred: ['延后', 'warn', '…'],
+  blocked: ['已阻止', 'bad', '!']
+};
+
+function deliveryStatusBadge(delivery) {
+  if (!delivery || !delivery.status) return el('span', { className: 'muted', text: '—' });
+  const meta = DELIVERY_STATUS_META[String(delivery.status)] || [String(delivery.status), 'neutral', '·'];
+  return badge(meta[0], meta[1], meta[2]);
+}
+
+function selectedApprovedRows() {
+  return approvedQueueRows().filter((row) => state.queueApprovedSelection.has(String(row.id)));
+}
+
+function deliveryConfirmPhrase(count) {
+  return `确认发送本批 ${count} 条`;
+}
+
+function openDeliveryPanel() {
+  const rows = selectedApprovedRows();
+  if (!rows.length) {
+    setStatus('请先勾选已确认岗位。', 'warn');
+    return;
+  }
+  if (!rows.every((row) => row.greeting && row.greeting.ready)) {
+    setStatus('所选岗位需要先生成招呼语。', 'warn');
+    return;
+  }
+  state.queueDeliveryIds = rows.map((row) => String(row.id));
+  const count = rows.length;
+  dom.queueDeliverySummary.textContent = count > 1
+    ? `本批 ${count} 条；预计 ${count - 1} 次间隔，约 ${count - 1}–${(count - 1) * 3} 分钟。发送前请核对下方文本。`
+    : '本批 1 条；确认后立即开始。发送前请核对下方文本。';
+  clear(dom.queueDeliveryList);
+  rows.forEach((row) => {
+    const item = el('li', { className: 'queue-delivery-item' });
+    item.append(el('strong', { text: `${row.company || '—'}｜${row.title || '—'}` }));
+    item.append(el('p', { text: String((row.greeting || {}).greeting || '') }));
+    dom.queueDeliveryList.append(item);
+  });
+  dom.queueDeliveryConfirm.value = '';
+  dom.queueDeliveryConfirm.placeholder = deliveryConfirmPhrase(count);
+  dom.queueDeliveryRisk.checked = false;
+  dom.queueDeliveryPanel.hidden = false;
+  updateDeliveryStartState();
+  dom.queueDeliveryConfirm.focus();
+}
+
+function updateDeliveryStartState() {
+  if (!dom.queueDeliveryStart) return;
+  const count = state.queueDeliveryIds.length;
+  const phraseOk = dom.queueDeliveryConfirm.value === deliveryConfirmPhrase(count);
+  dom.queueDeliveryStart.disabled = !(
+    count > 0
+    && phraseOk
+    && dom.queueDeliveryRisk.checked
+    && !state.offerpilotTaskActive
+  );
+}
+
+async function startQueueDelivery(button) {
+  const ids = [...state.queueDeliveryIds];
+  if (!ids.length) return;
+  const data = await runAction(button, () => postAction('offerpilot-deliver', {
+    ids,
+    confirm: deliveryConfirmPhrase(ids.length),
+    risk_acknowledged: true
+  }));
+  if (!data) return;
+  dom.queueDeliveryPanel.hidden = true;
+  state.queueDeliveryIds = [];
+  state.queueApprovedSelection.clear();
+  setStatus(data.message || '已提交发送；受窗口与日限约束。', 'ok');
+  await refreshOfferPilot();
+}
+
+async function stopQueueDelivery(button, taskId) {
+  if (!taskId) return;
+  const data = await runAction(button, () => postAction('offerpilot-stop', { task_id: taskId }));
+  if (!data) return;
+  setStatus('已请求停止；当前条完成后停止，剩余岗位会标记为延后。', 'ok');
+  await refreshOfferPilot();
+}
+
+function renderDeliveryResults(snapshot) {
+  const container = dom.queueDeliveryResults;
+  if (!container) return;
+  clear(container);
+  const delivery = snapshot && snapshot.pipeline && snapshot.pipeline.delivery;
+  const batch = delivery && delivery.latest_batch;
+  if (!batch) return;
+  const card = el('article', { className: 'queue-delivery-card' });
+  const head = el('div', { className: 'queue-delivery-card-head' });
+  const status = String(batch.status || '');
+  const titles = {
+    starting: '准备发送',
+    sending: '发送中',
+    completed: '发送完成',
+    partial: '部分完成',
+    failed: '发送未完成'
+  };
+  head.append(el('strong', { text: `${titles[status] || status} · 批次 ${batch.batch_id || ''}` }));
+  head.append(badge(`${batch.sent || 0} 成功`, 'good', '✓'));
+  if (batch.failed) head.append(badge(`${batch.failed} 失败`, 'bad', '!'));
+  if (batch.deferred) head.append(badge(`${batch.deferred} 延后`, 'warn', '…'));
+  if (batch.blocked) head.append(badge(`${batch.blocked} 已阻止`, 'bad', '!'));
+  card.append(head);
+  if (status === 'sending' || status === 'starting') {
+    const active = snapshot.pipeline.offerpilot && snapshot.pipeline.offerpilot.task;
+    if (active && active.mode === 'deliver') {
+      const stop = el('button', {
+        className: 'button button-quiet button-small',
+        text: '停止发送',
+        attrs: { type: 'button' }
+      });
+      stop.addEventListener('click', () => stopQueueDelivery(stop, active.id));
+      card.append(stop);
+    }
+  }
+  const list = el('ul', { className: 'queue-delivery-result-list' });
+  (batch.items || []).forEach((item) => {
+    const row = el('li', { className: 'queue-delivery-result' });
+    row.append(el('span', { text: `${item.company || '—'}｜${item.title || '—'}` }));
+    const meta = DELIVERY_STATUS_META[String(item.status)] || [String(item.status || '—'), 'neutral', '·'];
+    row.append(badge(meta[0], meta[1], meta[2]));
+    if (item.error_code) row.append(el('span', { className: 'muted', text: String(item.error_code) }));
+    list.append(row);
+  });
+  card.append(list);
+  container.append(card);
 }
 
 /* Render: mail */
@@ -3369,6 +3531,26 @@ function bindEvents() {
   if (dom.queueGenerateGreetings) {
     dom.queueGenerateGreetings.addEventListener('click', () => {
       generateQueueGreetings(dom.queueGenerateGreetings);
+    });
+  }
+  if (dom.queueSendGreetings) {
+    dom.queueSendGreetings.addEventListener('click', openDeliveryPanel);
+  }
+  if (dom.queueDeliveryCancel) {
+    dom.queueDeliveryCancel.addEventListener('click', () => {
+      dom.queueDeliveryPanel.hidden = true;
+      state.queueDeliveryIds = [];
+    });
+  }
+  if (dom.queueDeliveryConfirm) {
+    dom.queueDeliveryConfirm.addEventListener('input', updateDeliveryStartState);
+  }
+  if (dom.queueDeliveryRisk) {
+    dom.queueDeliveryRisk.addEventListener('change', updateDeliveryStartState);
+  }
+  if (dom.queueDeliveryStart) {
+    dom.queueDeliveryStart.addEventListener('click', () => {
+      startQueueDelivery(dom.queueDeliveryStart);
     });
   }
 

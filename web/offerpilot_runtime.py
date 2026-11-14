@@ -249,6 +249,100 @@ def start_greet_task(ids: Any) -> dict[str, Any]:
     return {"task": _safe_task(task), "requested": len(safe_ids)}
 
 
+DELIVERY_SENT_STATUSES = frozenset(
+    {"sent", "replied", "resume_sent", "needs_resume", "follow_up_sent"}
+)
+
+
+def start_deliver_task(ids: Any) -> dict[str, Any]:
+    """Send reviewed greetings for the selected jobs.
+
+    The runtime keeps its own send window, daily quota, random interval,
+    backoff and risk lock; this wrapper only adds the workbench's approval
+    gate and never forces any of those guards.
+    """
+    safe_ids = _clean_job_ids(ids, 10)
+    server = load_backend()
+    from offerpilot.db import (  # type: ignore
+        add_history,
+        get_active_platform_safety_lock,
+        query_jobs,
+        update_job_status,
+    )
+    from offerpilot.throttle import SendWindowChecker  # type: ignore
+    from offerpilot.web.tasks import TaskAlreadyRunningError  # type: ignore
+
+    config = server.load_config(server.CONFIG_PATH)
+    throttle = config.get("throttle") or {}
+    window = SendWindowChecker(throttle.get("send_windows", ["09:00-16:00"]))
+    if not window.is_active():
+        raise ValueError("当前不在发送时间窗口内；" + window.next_window_info())
+
+    db = server.get_db(server.DATA_DIR / "offerpilot.db")
+    try:
+        rows, _total = query_jobs(db, deleted="active", job_ids=safe_ids)
+        lock = get_active_platform_safety_lock(db)
+    finally:
+        db.close()
+    if lock:
+        raise ValueError("平台风险冷却尚未结束，暂不能发送")
+    by_id = {str(row.get("id")): row for row in rows}
+    missing = [job_id for job_id in safe_ids if job_id not in by_id]
+    if missing:
+        raise ValueError("部分岗位不在本机采集结果中：" + "、".join(missing[:3]))
+    finished = [
+        job_id
+        for job_id in safe_ids
+        if str(by_id[job_id].get("status") or "") in DELIVERY_SENT_STATUSES
+    ]
+    if finished:
+        raise ValueError("部分岗位已经投递，不能重复发送：" + "、".join(finished[:3]))
+    not_ready = [
+        job_id
+        for job_id in safe_ids
+        if str(by_id[job_id].get("status") or "") not in {"ready", "approved"}
+    ]
+    if not_ready:
+        raise ValueError("部分岗位尚未准备好发送：" + "、".join(not_ready[:3]))
+    no_greeting = [
+        job_id for job_id in safe_ids if not str(by_id[job_id].get("greeting") or "").strip()
+    ]
+    if no_greeting:
+        raise ValueError("部分岗位还没有招呼语：" + "、".join(no_greeting[:3]))
+    pending_review = [
+        job_id
+        for job_id in safe_ids
+        if str(by_id[job_id].get("greeting_selection") or "") == "pending"
+    ]
+    if pending_review:
+        raise ValueError("部分岗位的招呼语仍在复核中：" + "、".join(pending_review[:3]))
+
+    def _mark_approved() -> None:
+        conn = server.get_db(server.DATA_DIR / "offerpilot.db")
+        try:
+            for job_id in safe_ids:
+                update_job_status(conn, job_id, "approved")
+                add_history(conn, job_id, "workbench_deliver", "工作台确认发送")
+        finally:
+            conn.close()
+
+    with server.job_mutation_lock:
+        try:
+            task = server.task_runner.start(
+                "deliver",
+                {
+                    **config,
+                    "_workbench_job_ids": safe_ids,
+                    "_workbench_skip_greeting": True,
+                    "_agent_workflow": True,
+                },
+                before_start=_mark_approved,
+            )
+        except TaskAlreadyRunningError as exc:
+            raise ValueError(str(exc)) from exc
+    return {"task": _safe_task(task), "requested": len(safe_ids)}
+
+
 def _resume_info(server: Any, config: dict[str, Any]) -> dict[str, Any]:
     """Return the active resume metadata without exposing its text."""
     from offerpilot.web.resume_info import (  # type: ignore

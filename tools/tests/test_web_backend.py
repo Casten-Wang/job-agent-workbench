@@ -770,6 +770,181 @@ class GreetingGenerationTests(unittest.TestCase):
         self.assertEqual(result["task"], {"id": "task-1"})
 
 
+class DeliveryActionTests(unittest.TestCase):
+    def _store(self):
+        class _Store:
+            def __init__(self):
+                self._deliveries = []
+                self.logs = []
+
+            def queue(self):
+                return [{"id": "job-approved", "status": "approved"}]
+
+            def jobs(self):
+                return [{
+                    "id": "job-approved",
+                    "offerpilot_id": "vendor-1",
+                    "company": "示例公司",
+                    "title": "示例岗位",
+                }]
+
+            def deliveries(self):
+                return self._deliveries
+
+            def set_deliveries(self, rows):
+                self._deliveries = rows
+
+            def log(self, *args):
+                self.logs.append(args)
+
+        return _Store()
+
+    def test_deliver_rejects_demo_bad_phrase_and_missing_risk(self):
+        with self.assertRaises(backend.ApiError) as ctx:
+            backend.start_offerpilot_deliver({
+                "mode": "demo", "ids": ["job-approved"], "confirm": "确认发送本批 1 条",
+                "risk_acknowledged": True,
+            })
+        self.assertEqual(ctx.exception.status, 403)
+
+        store = self._store()
+        with patch.object(backend, "get_store", return_value=store), patch.object(
+            backend.offerpilot_runtime, "start_deliver_task"
+        ) as start:
+            with self.assertRaises(backend.ApiError):
+                backend.start_offerpilot_deliver({
+                    "mode": "user", "ids": ["job-approved"], "confirm": "确认发送",
+                    "risk_acknowledged": True,
+                })
+            with self.assertRaises(backend.ApiError):
+                backend.start_offerpilot_deliver({
+                    "mode": "user", "ids": ["job-approved"], "confirm": "确认发送本批 1 条",
+                })
+            start.assert_not_called()
+        self.assertEqual(store.deliveries(), [])
+
+    def test_deliver_starts_task_and_records_batch(self):
+        store = self._store()
+        with patch.object(backend, "get_store", return_value=store), patch.object(
+            backend.offerpilot_runtime,
+            "start_deliver_task",
+            return_value={"task": {"id": "task-9", "mode": "deliver"}, "requested": 1},
+        ) as start:
+            result = backend.start_offerpilot_deliver({
+                "mode": "user",
+                "ids": ["job-approved"],
+                "confirm": "确认发送本批 1 条",
+                "risk_acknowledged": True,
+            })
+        start.assert_called_once_with(["vendor-1"])
+        self.assertTrue(result["ok"])
+        batch = result["batch"]
+        self.assertEqual(batch["status"], "sending")
+        self.assertEqual(batch["task_id"], "task-9")
+        self.assertEqual(batch["requested"], 1)
+        self.assertEqual(batch["items"][0]["job_id"], "job-approved")
+        self.assertEqual(batch["items"][0]["offerpilot_id"], "vendor-1")
+        self.assertEqual(store.deliveries()[0]["batch_id"], batch["batch_id"])
+
+    def test_deliver_start_failure_is_recorded(self):
+        store = self._store()
+        with patch.object(backend, "get_store", return_value=store), patch.object(
+            backend.offerpilot_runtime,
+            "start_deliver_task",
+            side_effect=ValueError("当前不在发送时间窗口内"),
+        ):
+            with self.assertRaises(backend.ApiError):
+                backend.start_offerpilot_deliver({
+                    "mode": "user",
+                    "ids": ["job-approved"],
+                    "confirm": "确认发送本批 1 条",
+                    "risk_acknowledged": True,
+                })
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["status"], "failed")
+        self.assertEqual(batch["stop_reason"], "start_failed")
+        self.assertEqual(batch["items"][0]["status"], "failed")
+
+    def test_sync_finalizes_batch_and_writes_pipeline_events(self):
+        class _Store:
+            def __init__(self):
+                self._deliveries = [{
+                    "batch_id": "dlv-1",
+                    "task_id": "task-1",
+                    "status": "sending",
+                    "requested": 2,
+                    "items": [
+                        {"job_id": "job-1", "offerpilot_id": "v1", "company": "A", "title": "甲", "status": "sending"},
+                        {"job_id": "job-2", "offerpilot_id": "v2", "company": "B", "title": "乙", "status": "sending"},
+                    ],
+                }]
+                self.events = []
+
+            def deliveries(self):
+                return self._deliveries
+
+            def set_deliveries(self, rows):
+                self._deliveries = rows
+
+            def append_pipeline_event(self, event):
+                self.events.append(event)
+
+        store = _Store()
+        boss_state = {"task": None, "last_task": {"id": "task-1", "stop_reason": "daily_limit"}}
+        with patch.object(
+            backend.offerpilot_runtime,
+            "get_greetings",
+            return_value={"ok": True, "greetings": [
+                {"id": "v1", "status": "sent"},
+                {"id": "v2", "status": "approved"},
+            ]},
+        ):
+            backend._sync_deliveries(store, boss_state)
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["status"], "completed")
+        self.assertEqual((batch["sent"], batch["deferred"]), (1, 1))
+        self.assertEqual(batch["items"][0]["status"], "sent")
+        self.assertEqual(batch["items"][1]["status"], "deferred")
+        self.assertEqual(batch["items"][1]["error_code"], "daily_limit")
+        self.assertEqual([event["status"] for event in store.events], ["succeeded", "skipped"])
+        self.assertEqual({event["actor"] for event in store.events}, {"embedded_runtime"})
+        self.assertEqual({event["stage"] for event in store.events}, {"send"})
+
+    def test_sync_marks_risk_stop_as_blocked(self):
+        class _Store:
+            def __init__(self):
+                self._deliveries = [{
+                    "batch_id": "dlv-2",
+                    "task_id": "task-2",
+                    "status": "sending",
+                    "requested": 1,
+                    "items": [{"job_id": "job-1", "offerpilot_id": "v1", "status": "sending"}],
+                }]
+                self.events = []
+
+            def deliveries(self):
+                return self._deliveries
+
+            def set_deliveries(self, rows):
+                self._deliveries = rows
+
+            def append_pipeline_event(self, event):
+                self.events.append(event)
+
+        store = _Store()
+        with patch.object(
+            backend.offerpilot_runtime,
+            "get_greetings",
+            return_value={"ok": True, "greetings": [{"id": "v1", "status": "approved"}]},
+        ):
+            backend._sync_deliveries(store, {"task": None, "last_task": {"id": "task-2", "stop_reason": "captcha"}})
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["items"][0]["status"], "blocked")
+        self.assertEqual(batch["items"][0]["error_code"], "captcha")
+        self.assertEqual(batch["status"], "failed")
+        self.assertEqual(store.events[0]["status"], "failed")
+
+
 class GreetingPreviewTests(unittest.TestCase):
     def test_get_greetings_returns_whitelisted_preview(self):
         vendor_src = str(PROJECT_ROOT / "vendor" / "offerpilot" / "src")
@@ -1207,7 +1382,13 @@ class HttpServerTests(unittest.TestCase):
             'id="jobs-bulk-enqueue"',
             'id="queue-approved-select-all"',
             'id="queue-generate-greetings"',
+            'id="queue-send-greetings"',
             'id="queue-greetings"',
+            'id="queue-delivery-panel"',
+            'id="queue-delivery-confirm"',
+            'id="queue-delivery-risk"',
+            'id="queue-delivery-start"',
+            'id="queue-delivery-results"',
             'id="view-push"',
             'id="view-resume"',
             "/api/doc/pipeline-api",
@@ -1253,6 +1434,12 @@ class HttpServerTests(unittest.TestCase):
             "renderQueueGreetings",
             "greetingStatusBadge",
             "updateQueueApprovedSelectionUI",
+            "offerpilot-deliver",
+            "openDeliveryPanel",
+            "startQueueDelivery",
+            "renderDeliveryResults",
+            "deliveryStatusBadge",
+            "offerpilot-stop",
             "offerpilot.importedTasks",
             "filterBar.hidden = name !== 'workbench'",
             "collectProfileForm",

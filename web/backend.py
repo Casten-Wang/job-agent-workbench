@@ -17,6 +17,7 @@ import json
 import re
 import sys
 import unittest
+import uuid
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -137,7 +138,7 @@ PIPELINE_STAGES = (
         "entry": "queue",
         "actions": [],
         "event_stage": "send",
-        "description": "复用岗位自动化既有流程；启动前明确确认，发送前仍保留人工确认和时间窗口。",
+        "description": "由内嵌岗位自动化执行；工作台要求逐批确认语与风险确认，发送仍受时间窗口、日限、间隔与平台风控锁约束，结果按岗位回报。",
     },
     {
         "key": "monitor",
@@ -215,6 +216,7 @@ class Store:
             "bank": self.root / "question-bank.json",
             "profile": self.root / "profile.json",
             "config": self.root / "config.json",
+            "deliveries": self.root / "deliveries.json",
             "downloads": self.root / "downloads",
         }
         self.files["downloads"].mkdir(parents=True, exist_ok=True)
@@ -314,6 +316,13 @@ class Store:
 
     def set_profile(self, value: dict[str, Any]) -> None:
         self._write_json("profile", value)
+
+    def deliveries(self) -> list[dict[str, Any]]:
+        value = self._read_json("deliveries", [])
+        return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+    def set_deliveries(self, rows: list[dict[str, Any]]) -> None:
+        self._write_json("deliveries", rows)
 
     def config(self) -> dict[str, Any]:
         default = {
@@ -1290,6 +1299,231 @@ def start_offerpilot_greet(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+DELIVERY_CONFIRM_TEMPLATE = "确认发送本批 {count} 条"
+DELIVERY_BLOCKED_REASONS = frozenset(
+    {
+        "captcha",
+        "rate_limit",
+        "blocked",
+        "consecutive_errors",
+        "persistent_risk_lock",
+        "daily_platform_page_limit",
+    }
+)
+
+
+def _delivery_item(job: dict[str, Any], job_id: str) -> dict[str, Any]:
+    return {
+        "job_id": job_id,
+        "offerpilot_id": str(job.get("offerpilot_id") or ""),
+        "company": str(job.get("company") or ""),
+        "title": str(job.get("title") or ""),
+        "status": "starting",
+        "error_code": None,
+        "started_at": _now(),
+        "finished_at": None,
+    }
+
+
+def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
+    """Send reviewed greetings for approved jobs through the runtime guards."""
+    data_mode = str(payload.get("mode") or payload.get("data_mode") or "user")
+    if data_mode not in Store.VALID_MODES:
+        raise ApiError("数据模式只能是 demo 或 user")
+    if data_mode == "demo":
+        raise ApiError("演示模式不能发送；请切换到「我的 user」", 403)
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not ids:
+        raise ApiError("请先勾选至少一条已确认岗位")
+    if len(ids) > 10:
+        raise ApiError("一次最多发送 10 条")
+    job_ids: list[str] = []
+    for item in ids:
+        job_id = str(item or "").strip()
+        if job_id and job_id not in job_ids:
+            job_ids.append(job_id)
+    expected = DELIVERY_CONFIRM_TEMPLATE.format(count=len(job_ids))
+    if str(payload.get("confirm") or "") != expected:
+        raise ApiError(f"请输入确认语「{expected}」")
+    if payload.get("risk_acknowledged") is not True:
+        raise ApiError("发送前必须确认平台自动化风险")
+
+    store = get_store(data_mode)
+    queue = {str(row.get("id")): row for row in store.queue()}
+    jobs = {str(job.get("id")): job for job in store.jobs()}
+    vendor_ids: list[str] = []
+    invalid: list[str] = []
+    for job_id in job_ids:
+        row = queue.get(job_id)
+        if not row or row.get("status") != "approved":
+            invalid.append(job_id)
+            continue
+        vendor_id = str((jobs.get(job_id) or {}).get("offerpilot_id") or "").strip()
+        if not vendor_id:
+            invalid.append(job_id)
+            continue
+        vendor_ids.append(vendor_id)
+    if invalid:
+        raise ApiError(
+            "只有已确认且来自采集结果的岗位可以发送；请检查：" + "、".join(invalid[:5]),
+            409,
+        )
+
+    batch_id = "dlv-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
+    batch = {
+        "batch_id": batch_id,
+        "task_id": None,
+        "created_at": _now(),
+        "finished_at": None,
+        "status": "starting",
+        "requested": len(job_ids),
+        "sent": 0,
+        "failed": 0,
+        "deferred": 0,
+        "blocked": 0,
+        "stop_reason": None,
+        "items": [_delivery_item(jobs[job_id], job_id) for job_id in job_ids],
+    }
+    deliveries = store.deliveries()
+    deliveries.append(batch)
+    store.set_deliveries(deliveries)
+
+    try:
+        result = offerpilot_runtime.start_deliver_task(vendor_ids)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        error = ApiError(str(exc), 503)
+    except ValueError as exc:
+        error = ApiError(str(exc), 400)
+    except KeyError as exc:
+        error = ApiError("岗位自动化任务不存在", 404)
+    except Exception as exc:
+        error = ApiError(f"发送任务启动失败：{type(exc).__name__}", 500)
+    else:
+        error = None
+    if error is not None:
+        batch["status"] = "failed"
+        batch["stop_reason"] = "start_failed"
+        batch["finished_at"] = _now()
+        for item in batch["items"]:
+            item["status"] = "failed"
+            item["error_code"] = "start_failed"
+            item["finished_at"] = batch["finished_at"]
+        store.set_deliveries(deliveries)
+        store.log("发送未启动", f"批次 {batch_id}；{error.message}", False)
+        raise error
+
+    task = result.get("task") or {}
+    batch["task_id"] = task.get("id")
+    batch["status"] = "sending"
+    for item in batch["items"]:
+        item["status"] = "sending"
+    store.set_deliveries(deliveries)
+    store.log("确认发送", f"批次 {batch_id}；{len(vendor_ids)} 条；受窗口与日限约束")
+    return {
+        "ok": True,
+        "batch": batch,
+        "task": task,
+        "message": f"已提交本批 {len(vendor_ids)} 条发送；受时间窗口、每日上限与随机间隔约束",
+    }
+
+
+def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Finalize finished batches and record one pipeline event per job."""
+    deliveries = store.deliveries()
+    active = boss_state.get("task") if isinstance(boss_state.get("task"), dict) else {}
+    active_id = str(active.get("id") or "")
+    active_status = str(active.get("status") or "")
+    last = boss_state.get("last_task") if isinstance(boss_state.get("last_task"), dict) else {}
+    changed = False
+    for batch in deliveries:
+        if batch.get("status") not in {"starting", "sending"}:
+            continue
+        task_id = str(batch.get("task_id") or "")
+        if active_id and task_id and active_id == task_id and active_status in {"running", "stopping"}:
+            continue
+        items = [item for item in batch.get("items") or [] if isinstance(item, dict)]
+        vendor_ids = [str(item.get("offerpilot_id") or "") for item in items if item.get("offerpilot_id")]
+        preview: dict[str, Any] = {}
+        if vendor_ids:
+            try:
+                preview = offerpilot_runtime.get_greetings(vendor_ids)
+            except Exception:
+                preview = {}
+        by_vendor = {
+            str(item.get("id")): item
+            for item in preview.get("greetings") or []
+            if isinstance(item, dict)
+        }
+        stop_reason = ""
+        if task_id and str(last.get("id") or "") == task_id:
+            stop_reason = str(last.get("stop_reason") or "")
+        if not task_id:
+            stop_reason = stop_reason or "task_not_started"
+        counts = {"sent": 0, "failed": 0, "deferred": 0, "blocked": 0}
+        for item in items:
+            greeting = by_vendor.get(str(item.get("offerpilot_id") or ""))
+            vendor_status = str((greeting or {}).get("status") or "")
+            if vendor_status in offerpilot_runtime.DELIVERY_SENT_STATUSES:
+                item["status"] = "sent"
+                item["error_code"] = None
+            elif vendor_status == "error":
+                item["status"] = "failed"
+                item["error_code"] = "send_error"
+            elif stop_reason in DELIVERY_BLOCKED_REASONS:
+                item["status"] = "blocked"
+                item["error_code"] = stop_reason
+            else:
+                item["status"] = "deferred"
+                item["error_code"] = stop_reason or "not_sent"
+            item["finished_at"] = _now()
+            counts[item["status"]] += 1
+            event_status = (
+                "succeeded"
+                if item["status"] == "sent"
+                else "failed"
+                if item["status"] in {"failed", "blocked"}
+                else "skipped"
+            )
+            label = f"{item.get('company') or ''}｜{item.get('title') or ''}".strip("｜")
+            store.append_pipeline_event({
+                "received_at": _now(),
+                "stage": "send",
+                "status": event_status,
+                "job_id": str(item.get("job_id") or ""),
+                "message": f"{label} {item['status']}".strip(),
+                "occurred_at": "",
+                "actor": "embedded_runtime",
+                "auto_submit": False,
+            })
+        batch.update({
+            "sent": counts["sent"],
+            "failed": counts["failed"],
+            "deferred": counts["deferred"],
+            "blocked": counts["blocked"],
+            "stop_reason": stop_reason or None,
+            "finished_at": _now(),
+        })
+        if counts["failed"] == 0 and counts["blocked"] == 0:
+            batch["status"] = "completed"
+        elif counts["sent"] == 0:
+            batch["status"] = "failed"
+        else:
+            batch["status"] = "partial"
+        changed = True
+    if changed:
+        store.set_deliveries(deliveries)
+    return deliveries
+
+
+def _delivery_summary(deliveries: list[dict[str, Any]]) -> dict[str, Any]:
+    latest = deliveries[-1] if deliveries else None
+    return {
+        "latest_batch": latest,
+        "active": bool(latest and latest.get("status") in {"starting", "sending"}),
+        "batches": deliveries[-5:],
+    }
+
+
 def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     """Check the same start conditions without launching a task."""
     task_mode = str(payload.get("mode") or "collect")
@@ -1667,6 +1901,20 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
     )
     channels = sorted({str(job.get("source_channel") or "unknown") for job in jobs})
     warnings = sum(len(job.get("warnings") or []) for job in filtered_jobs)
+    deliveries = _sync_deliveries(store, boss_state)
+    latest_by_job: dict[str, dict[str, Any]] = {}
+    for batch in deliveries:
+        for item in batch.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            job_id = str(item.get("job_id") or "")
+            if job_id:
+                latest_by_job[job_id] = {
+                    "batch_id": batch.get("batch_id"),
+                    "status": item.get("status"),
+                    "error_code": item.get("error_code"),
+                    "finished_at": item.get("finished_at"),
+                }
     queue_view = [dict(row) for row in queue]
     if boss_state.get("ok"):
         job_by_id = {str(job.get("id")): job for job in jobs}
@@ -1695,6 +1943,12 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
                         key: item.get(key)
                         for key in ("status", "greeting", "selection", "style_issues", "reviewed", "ready")
                     }
+    for row in queue_view:
+        delivery = latest_by_job.get(str(row.get("id")))
+        if delivery:
+            row["delivery"] = delivery
+    pipeline_payload = pipeline_status(store, jobs, queue, store.mails(), boss_state)
+    pipeline_payload["delivery"] = _delivery_summary(deliveries)
     return {
         "mode": mode,
         "generated_at": _now(),
@@ -1726,7 +1980,7 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
         "question_bank": store.question_bank(),
         "activity": [{"title": _activity_title(row), **row} for row in store.activity()],
         "downloads": store.list_downloads(),
-        "pipeline": pipeline_status(store, jobs, queue, store.mails(), boss_state),
+        "pipeline": pipeline_payload,
         "profile": profile_public(profile),
         "config": {
             "target_cities": target_cities,
@@ -2248,6 +2502,7 @@ ACTIONS = {
     "import-profile-cv": import_profile_cv,
     "offerpilot-start": start_offerpilot_task,
     "offerpilot-greet": start_offerpilot_greet,
+    "offerpilot-deliver": start_offerpilot_deliver,
     "offerpilot-import": import_offerpilot_jobs,
     "offerpilot-resume": upload_offerpilot_resume,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(
