@@ -454,6 +454,42 @@ class DemoSeedTests(DemoDataTestCase):
         selected = import_records.call_args.args[2]
         self.assertEqual(selected, ["abc:def/中文?x=1"])
 
+    def test_offerpilot_resume_upload_validates_and_saves(self):
+        with self.assertRaises(backend.ApiError):
+            backend.upload_offerpilot_resume({
+                "mode": "demo", "filename": "cv.md", "content_base64": "aGk=",
+            })
+        with self.assertRaises(backend.ApiError):
+            backend.upload_offerpilot_resume({"mode": "user", "content_base64": "aGk="})
+        with self.assertRaises(backend.ApiError):
+            backend.upload_offerpilot_resume({
+                "mode": "user", "filename": "cv.md", "content_base64": "not base64!",
+            })
+
+        class _Store:
+            def __init__(self):
+                self.logs = []
+
+            def log(self, *args):
+                self.logs.append(args)
+
+        store = _Store()
+        with patch.object(
+            backend.offerpilot_runtime,
+            "save_resume",
+            return_value={"filename": "cv.md", "available": True, "size_label": "1 KB"},
+        ) as save, patch.object(backend, "get_store", return_value=store):
+            result = backend.upload_offerpilot_resume({
+                "mode": "user",
+                "filename": "cv.md",
+                "content_base64": base64.b64encode("测试简历".encode("utf-8")).decode("ascii"),
+            })
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["resume"]["filename"], "cv.md")
+        self.assertIn("自动评分", result["message"])
+        save.assert_called_once()
+        self.assertEqual(len(store.logs), 1)
+
     def test_embedded_runtime_dependency_error_is_reported_not_raised(self):
         with patch.object(
             backend.offerpilot_runtime,
@@ -985,6 +1021,7 @@ class HttpServerTests(unittest.TestCase):
             'id="collect-cities"',
             'id="collect-pace"',
             'id="collect-auto-score"',
+            'id="collect-resume-upload"',
             'id="collect-checks"',
             'class="panel jobs-manual-entry"',
             'id="jobs-select-all"',
@@ -1026,6 +1063,9 @@ class HttpServerTests(unittest.TestCase):
             "maybeAutoImportCollected",
             "armManualEnqueue",
             "enqueueJobs",
+            "uploadOfferPilotResume",
+            "syncCollectResumeUI",
+            "offerpilot-resume",
             "offerpilot.importedTasks",
             "filterBar.hidden = name !== 'workbench'",
             "collectProfileForm",

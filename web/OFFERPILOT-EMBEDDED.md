@@ -33,12 +33,13 @@ python3 -m venv .venv
 
 | 接口 | 行为 |
 | --- | --- |
-| `GET /api/offerpilot/state` | 能力、偏好快照、当前/最近任务；不返回日志、密钥或凭据 |
+| `GET /api/offerpilot/state` | 能力、偏好快照、当前/最近任务与 `resume`（是否已有评分简历、文件名、大小、上传时间）；不返回日志、密钥或凭据 |
 | `GET /api/offerpilot/jobs` | 只读岗位白名单字段，最多 100 条 |
 | `POST /api/offerpilot/preflight` | 只检查不启动：按 `mode` + `options` 返回搜索参数、浏览器运行时、Chrome 调试端口与 BOSS 标签页检查结果；若已有任务占用浏览器，返回 `browser_busy` 并提示先停止或等待 |
 | `POST /api/offerpilot/tasks` | 仅 `collect` / `monitor` / `full`，必须同时带 `confirm: true` 与 `risk_acknowledged: true`；`demo` 模式拒绝；`collect` / `full` 可带 `options` |
 | `POST /api/offerpilot/tasks/<id>/stop` | 请求停止内嵌运行时的既有任务 |
 | `POST /api/action` `offerpilot-import` | 把只读结果中选中的岗位复制进工作台岗位池（仅 `user` 模式，最多 100 条） |
+| `POST /api/action` `offerpilot-resume` | 上传评分简历（仅 `user` 模式；`.md` / `.docx` / `.pdf`，最大 5 MB），写入本机运行时 `data/resumes/` 并把 `profile.resume_path` 指向它 |
 
 `options` 只作用于本次任务，不写回 `config.yaml`：
 
@@ -70,7 +71,8 @@ python3 -m venv .venv
 - `get_state()` 直接读取配置与 `task_runner.status()`，不走 Bottle 的线程局部 `response`，因此能在工作台的 HTTP 线程里安全调用。
 - `get_jobs()` 直接打开 SQLite 并调用内嵌运行时的 `query_jobs` / `serialize_job`，只保留白名单字段。
 - `preflight()` 复用内嵌运行时的 `collect_preflight_checks`，只读检查配置、搜索参数与浏览器环境，不创建任务、不访问平台。
-- `start_task()` 复用内嵌运行时的 `normalize_collection_options`、`platform_supports`、`collect_preflight_checks` 与 `WorkbenchTaskRunner`；搜索参数通过 `_collection_options` 传入内存配置。`collect` 的自动评分默认关闭，仅在用户勾选且 AI 已配置时开启；`full` 强制自动评分并保留发送前暂停。
+- `start_task()` 复用内嵌运行时的 `normalize_collection_options`、`platform_supports`、`collect_preflight_checks` 与 `WorkbenchTaskRunner`；搜索参数通过 `_collection_options` 传入内存配置。`collect` 的自动评分需要 AI 已配置且本机已有评分简历，前端在两者都满足时默认勾选；没有简历仍可采集，岗位以「未评分」导入。`full` 强制自动评分并保留发送前暂停。
+- `save_resume()` 复用内嵌运行时的 `prepare_resume_content`、`write_resume_artifacts`、`resolve_active_resume_path` 与 `select_resume_markdown_filename`，与上游上传行为一致；简历只写入 `web/data/user/offerpilot/data/resumes/`，不进入仓库。
 - `import_offerpilot_jobs()` 只读 `get_jobs()` 的白名单字段，按岗位指纹去重后写入工作台 `jobs.json`；不写回内嵌运行时，也不改变审批状态。
 - 依赖缺失或初始化失败时返回 `ok: false` 与本地安装提示，面板显示「未就绪」，服务本身继续运行。
 

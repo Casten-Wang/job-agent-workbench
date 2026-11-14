@@ -9,6 +9,7 @@ in a JD, email, transcript, or upload is executed.
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import hashlib
 import io
@@ -1066,6 +1067,7 @@ def _demo_offerpilot_state(store: Store) -> dict[str, Any]:
         },
         "task": None,
         "last_task": None,
+        "resume": {"available": False, "filename": None, "size_label": None, "uploaded_at": None},
         "mode": "demo",
         "note": "演示模式只展示虚构数据，不启动真实采集。",
     }
@@ -1094,6 +1096,36 @@ def get_offerpilot_jobs(mode: str = "user") -> dict[str, Any]:
     if mode == "demo":
         return _demo_offerpilot_jobs(get_store("demo"))
     return offerpilot_runtime.get_jobs()
+
+
+def upload_offerpilot_resume(payload: dict[str, Any]) -> dict[str, Any]:
+    """Store a resume for the embedded runtime's scoring step (user mode only)."""
+    mode = str(payload.get("mode") or payload.get("data_mode") or "user")
+    if mode != "user":
+        raise ApiError("演示模式不能上传简历；请切换到「我的 user」", 400)
+    filename = str(payload.get("filename") or "").strip()
+    if not filename:
+        raise ApiError("缺少简历文件名")
+    if len(filename) > 240 or any(ord(char) < 32 for char in filename):
+        raise ApiError("简历文件名无效")
+    encoded = _bounded_text(payload.get("content_base64"), "简历内容", 7 * 1024 * 1024)
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ApiError("简历内容不是有效的 base64") from exc
+    try:
+        result = offerpilot_runtime.save_resume(filename, raw)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        raise ApiError(str(exc), 400) from exc
+    store = get_store(mode)
+    store.log("上传评分简历", f"{result.get('filename')}；仅保存在本机运行时目录")
+    return {
+        "ok": True,
+        "resume": result,
+        "message": f"已保存简历「{result.get('filename')}」；本次采集可以自动评分",
+    }
 
 
 OFFERPILOT_OPTION_KEYS = {"platform", "keywords", "cities", "max_pages", "auto_score", "pace"}
@@ -1506,6 +1538,7 @@ def pipeline_status(
             "preferences": boss.get("preferences") if boss_connected else None,
             "ai": boss.get("ai") if boss_connected else None,
             "capabilities": boss.get("capabilities") if boss_connected else None,
+            "resume": boss.get("resume") if boss_connected else None,
             "error": boss.get("error") if not boss_connected else None,
         },
         "reserved_features": [dict(feature) for feature in RESERVED_FEATURES],
@@ -2133,6 +2166,7 @@ ACTIONS = {
     "import-profile-cv": import_profile_cv,
     "offerpilot-start": start_offerpilot_task,
     "offerpilot-import": import_offerpilot_jobs,
+    "offerpilot-resume": upload_offerpilot_resume,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(
         str(payload.get("task_id") or ""),
         str(payload.get("data_mode") or payload.get("mode") or "user"),

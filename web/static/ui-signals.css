@@ -582,6 +582,41 @@ textarea {
   margin: 14px 0 4px;
 }
 
+/* 采集页：评分简历上传 */
+.collect-resume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.collect-resume-main {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.collect-resume-main strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.collect-resume-main p {
+  margin: 3px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.collect-resume-actions {
+  flex: 0 0 auto;
+}
+
 .collect-checks-panel {
   margin: 16px 0;
   padding-top: 14px;

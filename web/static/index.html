@@ -258,7 +258,17 @@
                   <input id="collect-pages" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
                 </div>
               </div>
-              <label class="checkbox-label" data-collect-search><input type="checkbox" id="collect-auto-score"> 采集后自动评分（需先在配置页上传简历并配置 AI）</label>
+              <div class="collect-resume" data-collect-search>
+                <div class="collect-resume-main">
+                  <strong>评分简历</strong>
+                  <p id="collect-resume-status">尚未读取简历状态。</p>
+                </div>
+                <div class="collect-resume-actions">
+                  <input type="file" id="collect-resume-file" accept=".md,.docx,.pdf" hidden>
+                  <button class="button button-quiet button-small" type="button" id="collect-resume-upload">上传简历</button>
+                </div>
+              </div>
+              <label class="checkbox-label" data-collect-search><input type="checkbox" id="collect-auto-score"> 采集后自动评分（有简历时默认勾选）</label>
               <div class="collect-summary" id="collect-summary" aria-live="polite"></div>
               <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk"> 我已了解平台自动化可能导致账号封禁</label>
               <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认在本机启动该任务</label>

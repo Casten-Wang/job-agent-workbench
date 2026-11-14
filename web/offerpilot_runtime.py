@@ -25,6 +25,7 @@ RUNTIME_MODES = ("demo", "user")
 TASK_MODES = ("collect", "monitor", "full")
 PACE_MULTIPLIERS = {"cautious": 3.0, "standard": 1.5, "fast": 1.0}
 PACE_LABELS = {"cautious": "稳健", "standard": "标准", "fast": "快速"}
+MAX_RESUME_BYTES = 5 * 1024 * 1024
 
 _lock = threading.RLock()
 _backend: Any | None = None
@@ -123,6 +124,71 @@ def _safe_preferences(value: Any) -> dict[str, Any]:
     return {key: value[key] for key in fields if key in value}
 
 
+def _resume_info(server: Any, config: dict[str, Any]) -> dict[str, Any]:
+    """Return the active resume metadata without exposing its text."""
+    from offerpilot.web.resume_info import (  # type: ignore
+        is_default_resume_placeholder,
+        load_resume_info,
+        resolve_resume_filesystem_path,
+    )
+
+    raw = (config.get("profile") or {}).get("resume_path")
+    if is_default_resume_placeholder(raw):
+        return {"available": False, "filename": None, "size_label": None, "uploaded_at": None}
+    path = resolve_resume_filesystem_path(str(raw), server.BASE_DIR)
+    info = load_resume_info(path) if path.is_file() else None
+    if not info:
+        return {"available": False, "filename": None, "size_label": None, "uploaded_at": None}
+    return {
+        "available": True,
+        "filename": info.get("filename"),
+        "size_label": info.get("size_label"),
+        "uploaded_at": info.get("uploaded_at"),
+        "has_original_pdf": bool(info.get("has_original_pdf")),
+    }
+
+
+def save_resume(filename: str, content: bytes) -> dict[str, Any]:
+    """Store an uploaded resume and point the embedded runtime at it.
+
+    Accepts Markdown, DOCX and text-layer PDF; DOCX/PDF are converted to the
+    Markdown file the scoring agent reads.  The upload never leaves this
+    machine and is written under ``web/data/user/offerpilot/data/resumes``.
+    """
+    if not filename or not str(filename).strip():
+        raise ValueError("缺少简历文件名")
+    if not content:
+        raise ValueError("简历文件为空")
+    if len(content) > MAX_RESUME_BYTES:
+        raise ValueError("简历文件超过 5 MB 上限")
+    server = load_backend()
+    from offerpilot.config import load_config, save_config  # type: ignore
+    from offerpilot.web.resume_names import (  # type: ignore
+        resolve_active_resume_path,
+        select_resume_markdown_filename,
+    )
+    from offerpilot.web.resume_original import (  # type: ignore
+        upload_keeps_original_pdf,
+        write_resume_artifacts,
+    )
+    from offerpilot.web.resume_upload import prepare_resume_content  # type: ignore
+
+    safe_name, stored = prepare_resume_content(str(filename), content)
+    server.RESUME_DIR.mkdir(parents=True, exist_ok=True)
+    config = load_config(server.CONFIG_PATH)
+    active_path = resolve_active_resume_path(
+        (config.get("profile") or {}).get("resume_path") or None,
+        server.BASE_DIR,
+    )
+    final_name = select_resume_markdown_filename(server.RESUME_DIR, safe_name, stored, active_path)
+    destination = server.RESUME_DIR / final_name
+    original_pdf = content if upload_keeps_original_pdf(str(filename)) else None
+    write_resume_artifacts(destination, stored, original_pdf_bytes=original_pdf)
+    config.setdefault("profile", {})["resume_path"] = str(destination.resolve())
+    save_config(config, server.CONFIG_PATH)
+    return {"filename": final_name, **_resume_info(server, config)}
+
+
 def get_state() -> dict[str, Any]:
     """Return the same credential-free shape the old HTTP bridge returned."""
     try:
@@ -143,6 +209,7 @@ def get_state() -> dict[str, Any]:
             "capabilities": capabilities,
             "task": status.get("active"),
             "last_task": status.get("last_task"),
+            "resume": _resume_info(server, config),
         }
     except OfferPilotUnavailable as exc:
         return {"ok": False, "embedded": True, "error": str(exc)}
@@ -158,6 +225,7 @@ def get_state() -> dict[str, Any]:
         "capabilities": capabilities,
         "task": _safe_task(payload.get("task")),
         "last_task": _safe_task(payload.get("last_task")),
+        "resume": payload.get("resume") if isinstance(payload.get("resume"), dict) else {"available": False},
     }
 
 

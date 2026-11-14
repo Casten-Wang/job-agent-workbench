@@ -142,6 +142,8 @@ const state = {
   offerpilotAutoImporting: false,
   offerpilotPrefsMode: null,
   offerpilotPollTimer: null,
+  offerpilotResume: null,
+  offerpilotAutoScoreTouched: false,
   jobsSelection: new Set(),
   profileDirty: false
 };
@@ -212,6 +214,9 @@ const dom = {
   collectPages: document.getElementById('collect-pages'),
   collectPace: document.getElementById('collect-pace'),
   collectAutoScore: document.getElementById('collect-auto-score'),
+  collectResumeFile: document.getElementById('collect-resume-file'),
+  collectResumeUpload: document.getElementById('collect-resume-upload'),
+  collectResumeStatus: document.getElementById('collect-resume-status'),
   collectSummary: document.getElementById('collect-summary'),
   collectChecks: document.getElementById('collect-checks'),
   collectPreflight: document.getElementById('collect-preflight'),
@@ -1991,6 +1996,24 @@ function syncCollectModeUI() {
   syncOfferPilotStartState();
 }
 
+function syncCollectResumeUI() {
+  const resume = state.offerpilotResume || { available: false };
+  const available = Boolean(resume.available);
+  if (dom.collectResumeStatus) {
+    dom.collectResumeStatus.textContent = available
+      ? `已上传：${resume.filename || '简历'}${resume.size_label ? `（${resume.size_label}）` : ''}。本次采集会默认评分。`
+      : '尚未上传；本次采集不会评分，岗位会以「未评分」导入。';
+  }
+  if (dom.collectAutoScore) {
+    dom.collectAutoScore.disabled = !available;
+    if (!available) {
+      dom.collectAutoScore.checked = false;
+    } else if (!state.offerpilotAutoScoreTouched) {
+      dom.collectAutoScore.checked = true;
+    }
+  }
+}
+
 function applyOfferPilotPrefs(data) {
   if (state.mode !== 'user' || !data.preferences || typeof data.preferences !== 'object') return;
   if (state.offerpilotPrefsMode === state.mode) return;
@@ -2069,8 +2092,13 @@ function renderOfferPilot(boss) {
   }
   if (dom.collectAutoScore) {
     const aiReady = Boolean(connected && data.ai && data.ai.configured);
-    dom.collectAutoScore.disabled = !aiReady;
-    if (!aiReady) dom.collectAutoScore.checked = false;
+    state.offerpilotResume = connected && data.resume && typeof data.resume === 'object'
+      ? data.resume
+      : { available: false };
+    syncCollectResumeUI();
+    const scoreReady = aiReady && Boolean(state.offerpilotResume.available);
+    dom.collectAutoScore.disabled = !scoreReady;
+    if (!scoreReady) dom.collectAutoScore.checked = false;
   }
   applyOfferPilotPrefs(data);
   state.offerpilotTaskActive = Boolean(data.task);
@@ -2361,6 +2389,40 @@ async function maybeAutoImportCollected(task) {
   } finally {
     state.offerpilotAutoImporting = false;
   }
+}
+
+async function uploadOfferPilotResume(file) {
+  if (!file) return;
+  const name = String(file.name || '');
+  if (!/\.(md|docx|pdf)$/i.test(name)) {
+    setStatus('简历只支持 .md、.docx 或 .pdf 格式。', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    setStatus('简历文件超过 5 MB 上限。', 'error');
+    return;
+  }
+  const dataUrl = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+  if (!dataUrl) {
+    setStatus('读取简历文件失败。', 'error');
+    return;
+  }
+  const base64 = dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl;
+  const data = await runAction(dom.collectResumeUpload, () => postAction('offerpilot-resume', {
+    filename: name,
+    content_base64: base64
+  }));
+  if (!data) return;
+  state.offerpilotAutoScoreTouched = false;
+  setStatus(data.message || '简历已保存。', 'ok');
+  await refreshOfferPilot();
+  syncCollectResumeUI();
+  syncCollectModeUI();
 }
 
 async function importOfferPilotJobs(button) {
@@ -3145,6 +3207,19 @@ function bindEvents() {
   });
   if (dom.collectPreflight) {
     dom.collectPreflight.addEventListener('click', () => runOfferPilotPreflight(dom.collectPreflight));
+  }
+  if (dom.collectResumeUpload && dom.collectResumeFile) {
+    dom.collectResumeUpload.addEventListener('click', () => dom.collectResumeFile.click());
+    dom.collectResumeFile.addEventListener('change', () => {
+      const file = dom.collectResumeFile.files && dom.collectResumeFile.files[0];
+      dom.collectResumeFile.value = '';
+      uploadOfferPilotResume(file);
+    });
+  }
+  if (dom.collectAutoScore) {
+    dom.collectAutoScore.addEventListener('change', () => {
+      state.offerpilotAutoScoreTouched = true;
+    });
   }
   if (dom.offerpilotImport) {
     dom.offerpilotImport.addEventListener('click', () => importOfferPilotJobs(dom.offerpilotImport));
