@@ -806,7 +806,14 @@ def _demo_jobs() -> list[dict[str, Any]]:
 
 
 def _demo_scores() -> dict[str, float]:
-    return {"demo-job-001": 4.7, "demo-job-002": 4.2, "demo-job-003": 3.5}
+    return {
+        "demo-job-001": 4.7,
+        "demo-job-002": 4.2,
+        "demo-job-003": 3.5,
+        "demo-job-004": 4.1,
+        "demo-job-005": 3.8,
+        "demo-job-006": 4.4,
+    }
 
 
 def _demo_queue() -> list[dict[str, Any]]:

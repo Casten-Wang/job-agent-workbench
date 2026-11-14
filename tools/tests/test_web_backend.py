@@ -128,7 +128,7 @@ class DemoSeedTests(DemoDataTestCase):
         snapshot = backend.snapshot("demo")
         pending_rows = [row for row in snapshot["queue"] if row.get("status") == "pending"]
         self.assertEqual(snapshot["kpis"]["pending"], len(pending_rows))
-        self.assertEqual(len(pending_rows), 2)
+        self.assertEqual(len(pending_rows), 4)
         for row in snapshot["queue"]:
             with self.subTest(job=row.get("id")):
                 self.assertIsInstance(row.get("score"), (int, float))
