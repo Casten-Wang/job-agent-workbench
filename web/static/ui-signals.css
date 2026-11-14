@@ -516,6 +516,90 @@ textarea {
   min-width: 0;
 }
 
+/* 岗位池：手动录入 / 导入收在岗位表之后，避免挡住挑选岗位 */
+.jobs-manual-entry {
+  margin-top: 14px;
+}
+
+.jobs-manual-entry > summary {
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 650;
+  list-style: none;
+}
+
+.jobs-manual-entry > summary::-webkit-details-marker {
+  display: none;
+}
+
+.jobs-manual-entry > summary::before {
+  content: "＋";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--offer-pink);
+}
+
+.jobs-manual-entry[open] > summary::before {
+  content: "－";
+}
+
+.jobs-manual-entry .two-col {
+  margin-top: 14px;
+}
+
+/* 岗位池：批量挑选 */
+.jobs-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.jobs-bulk-bar .checkbox-label {
+  margin: 0;
+}
+
+.jobs-bulk-bar .panel-count {
+  margin-left: auto;
+}
+
+/* 岗位池：低分岗位手动入队的两步确认（替代原生 confirm） */
+.jobs-enqueue-armed {
+  border-color: var(--warn) !important;
+  color: var(--warn) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 22%, transparent);
+}
+
+.collect-form {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 4px;
+}
+
+.collect-checks-panel {
+  margin: 16px 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.collect-checks-panel .panel-head {
+  margin-bottom: 4px;
+}
+
+.collect-explain-details {
+  margin: 10px 0 16px;
+}
+
+.collect-explain-details .collect-explain {
+  margin-top: 10px;
+}
+
 .collect-summary {
   padding: 10px 12px;
   border: 1px dashed var(--line);

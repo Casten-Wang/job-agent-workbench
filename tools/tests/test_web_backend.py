@@ -303,6 +303,7 @@ class DemoSeedTests(DemoDataTestCase):
             "platform_order": ["boss"],
             "platforms": {"boss": {"keywords": ["产品经理", "AI产品经理"], "cities": ["北京"], "max_pages": 2}},
             "auto_score": False,
+            "pace": "cautious",
         })
 
     def test_offerpilot_task_rejects_invalid_search_options(self):
@@ -315,6 +316,7 @@ class DemoSeedTests(DemoDataTestCase):
             {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "max_pages": 11},
             {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "unexpected": True},
             {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "auto_score": "yes"},
+            {"platform": "boss", "keywords": ["产品经理"], "cities": ["北京"], "pace": "turbo"},
         ):
             with self.subTest(options=options):
                 with self.assertRaises(backend.ApiError):
@@ -344,6 +346,7 @@ class DemoSeedTests(DemoDataTestCase):
             "platform_order": ["boss"],
             "platforms": {"boss": {"keywords": ["产品经理"], "cities": ["北京"], "max_pages": 1}},
             "auto_score": False,
+            "pace": "cautious",
         })
 
     def test_offerpilot_preflight_reports_a_running_task_as_browser_busy(self):
@@ -398,7 +401,7 @@ class DemoSeedTests(DemoDataTestCase):
         self.assertEqual(len(result["added"]), 2)
         self.assertEqual(result["unscored"], 1)
         jobs = {job.get("offerpilot_id"): job for job in store.jobs()}
-        self.assertEqual(jobs["op-test-1"]["score"], 4.0)
+        self.assertEqual(jobs["op-test-1"]["score"], 4.5)
         self.assertEqual(jobs["op-test-1"]["score_raw"], 80)
         self.assertEqual(jobs["op-test-1"]["source_channel"], "boss")
         self.assertIsNone(jobs["op-test-2"]["score"])
@@ -416,6 +419,40 @@ class DemoSeedTests(DemoDataTestCase):
             backend.import_offerpilot_jobs({"data_mode": "user", "ids": []})
         with self.assertRaises(backend.ApiError):
             backend.import_offerpilot_jobs({"data_mode": "user", "ids": ["../bad id"]})
+
+    def test_offerpilot_import_accepts_platform_ids_and_skips_missing(self):
+        runtime_jobs = [{
+            "id": "abc:def/中文?x=1",
+            "title": "产品经理",
+            "company": "虚构公司",
+            "city": "上海",
+            "score": 80,
+        }]
+        with patch.object(
+            backend.offerpilot_runtime,
+            "get_jobs",
+            return_value={"ok": True, "jobs": runtime_jobs},
+        ), patch.object(
+            backend,
+            "get_store",
+            return_value=object(),
+        ), patch.object(
+            backend,
+            "_rescale_imported_jobs",
+            return_value=0,
+        ), patch.object(
+            backend,
+            "_import_offerpilot_records",
+            return_value={"ok": True, "added": [], "duplicates": 0, "unscored": 0, "message": "已导入 0 条"},
+        ) as import_records:
+            result = backend.import_offerpilot_jobs({
+                "data_mode": "user",
+                "ids": ["abc:def/中文?x=1", "missing-id"],
+            })
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["missing"], 1)
+        selected = import_records.call_args.args[2]
+        self.assertEqual(selected, ["abc:def/中文?x=1"])
 
     def test_embedded_runtime_dependency_error_is_reported_not_raised(self):
         with patch.object(
@@ -588,6 +625,20 @@ class ApprovalGateTests(DemoDataTestCase):
         low = backend.enqueue({"mode": "demo", "ids": ["demo-job-003"]})
         self.assertIn("demo-job-003", low["dropped"])
         self.assertEqual(low["accepted"], [])
+
+        # An explicit manual override queues the same job without changing the
+        # shared 4.0 gate for normal enqueue calls.
+        manual = backend.enqueue({
+            "mode": "demo",
+            "ids": ["demo-job-003"],
+            "allow_low_score": True,
+        })
+        self.assertIn("demo-job-003", manual["manual"])
+        self.assertNotIn("demo-job-003", manual["dropped"], "手动入队的岗位不应再算作未入队")
+        queue = backend.approval_queue.load_queue(backend.get_store("demo").files["queue"])
+        row = next(item for item in queue if item["id"] == "demo-job-003")
+        self.assertTrue(row["manual_override"])
+        self.assertEqual(row["status"], "pending")
 
         # A job parsed without a score must be filtered out before the queue.
         text = (
@@ -932,7 +983,12 @@ class HttpServerTests(unittest.TestCase):
             'id="view-collect"',
             'id="collect-keywords"',
             'id="collect-cities"',
+            'id="collect-pace"',
+            'id="collect-auto-score"',
             'id="collect-checks"',
+            'class="panel jobs-manual-entry"',
+            'id="jobs-select-all"',
+            'id="jobs-bulk-enqueue"',
             'id="view-push"',
             'id="view-resume"',
             "/api/doc/pipeline-api",
@@ -967,6 +1023,10 @@ class HttpServerTests(unittest.TestCase):
             "buildOfferPilotOptions",
             "runOfferPilotPreflight",
             "offerpilot-import",
+            "maybeAutoImportCollected",
+            "armManualEnqueue",
+            "enqueueJobs",
+            "offerpilot.importedTasks",
             "filterBar.hidden = name !== 'workbench'",
             "collectProfileForm",
             "save-profile",

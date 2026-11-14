@@ -1096,7 +1096,8 @@ def get_offerpilot_jobs(mode: str = "user") -> dict[str, Any]:
     return offerpilot_runtime.get_jobs()
 
 
-OFFERPILOT_OPTION_KEYS = {"platform", "keywords", "cities", "max_pages", "auto_score"}
+OFFERPILOT_OPTION_KEYS = {"platform", "keywords", "cities", "max_pages", "auto_score", "pace"}
+OFFERPILOT_PACE_MULTIPLIERS = {"cautious": 3.0, "standard": 1.5, "fast": 1.0}
 
 
 def _offerpilot_text_list(value: Any, label: str, limit: int) -> list[str]:
@@ -1146,6 +1147,9 @@ def _offerpilot_options(payload: dict[str, Any]) -> dict[str, Any] | None:
     auto_score = raw.get("auto_score", False)
     if not isinstance(auto_score, bool):
         raise ApiError("auto_score 必须是布尔值")
+    pace = str(raw.get("pace") or "cautious").strip().lower()
+    if pace not in OFFERPILOT_PACE_MULTIPLIERS:
+        raise ApiError("采集节奏只能是 cautious、standard 或 fast")
     return {
         "platform_order": [platform],
         "platforms": {
@@ -1156,6 +1160,7 @@ def _offerpilot_options(payload: dict[str, Any]) -> dict[str, Any] | None:
             }
         },
         "auto_score": auto_score,
+        "pace": pace,
     }
 
 
@@ -1195,7 +1200,7 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError(f"岗位自动化 启动失败：{type(exc).__name__}", 500) from exc
     message = "岗位自动化任务已受控提交；发送仍须经过人工确认门和配置时间窗口"
     if task_mode == "collect":
-        message = "采集任务已受控提交；采集结果会先进入只读快照，确认后再导入岗位池"
+        message = "采集任务已受控提交；完成后会自动导入岗位池，再到「岗位池」挑选并加入审批队列"
     return {"ok": True, "task": response, "message": message}
 
 
@@ -1227,6 +1232,46 @@ def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": bool(result.get("ok")), **result}
 
 
+OFFERPILOT_APPROVAL_RAW = 71.0
+
+
+def _offerpilot_score(raw_score: Any) -> float | None:
+    """Map OfferPilot's 0–100 score onto the workbench's 0–5 scale.
+
+    Anchor OfferPilot's own approval threshold (71) at the workbench threshold
+    (4.0), so a job that OfferPilot considers qualified can enter the approval
+    queue after import.  Values above 88.75 are capped at 5.0.
+    """
+    if not isinstance(raw_score, (int, float)) or isinstance(raw_score, bool) or raw_score <= 0:
+        return None
+    value = float(raw_score)
+    if value <= 5:
+        return round(value, 1)
+    return min(5.0, round(value * 4.0 / OFFERPILOT_APPROVAL_RAW, 1))
+
+
+def _rescale_imported_jobs(store: Store) -> int:
+    """Re-map previously imported OfferPilot scores to the anchored scale."""
+    rows = store.jobs()
+    changed = 0
+    for row in rows:
+        if not row.get("offerpilot_id"):
+            continue
+        raw = row.get("score_raw")
+        if not isinstance(raw, (int, float)) or isinstance(raw, bool) or raw <= 5:
+            continue
+        score = _offerpilot_score(raw)
+        if score is None:
+            continue
+        if row.get("score") != score or row.get("score_scale") != "0-100→0-5（71→4.0）":
+            row["score"] = score
+            row["score_scale"] = "0-100→0-5（71→4.0）"
+            changed += 1
+    if changed:
+        store.set_jobs(rows)
+    return changed
+
+
 def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]], ids: list[str]) -> dict[str, Any]:
     """Copy selected read-only OfferPilot jobs into the workbench job pool."""
     rows = store.jobs()
@@ -1240,10 +1285,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
         if source is None:
             continue
         raw_score = source.get("score")
-        score: float | None = None
-        if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool) and raw_score > 0:
-            # OfferPilot stores 0–100; the workbench uses 0–5.
-            score = round(float(raw_score) / 20, 1) if float(raw_score) > 5 else round(float(raw_score), 1)
+        score = _offerpilot_score(raw_score)
         if score is None:
             unscored += 1
         record = {
@@ -1257,7 +1299,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
             "score": score,
             "offerpilot_id": job_id,
             "score_raw": raw_score if score is not None else None,
-            "score_scale": "0-100→0-5" if score is not None else None,
+            "score_scale": "0-100→0-5（71→4.0）" if score is not None else None,
         }
         job = _normalize_job(record, index, "boss")
         fingerprint = _job_fingerprint(job)
@@ -1289,14 +1331,30 @@ def import_offerpilot_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     safe_ids: list[str] = []
     for item in ids:
         text = str(item or "").strip()
-        if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", text):
+        # IDs come from the local runtime database, not from a URL or path.
+        # They may contain platform-specific punctuation, so only reject
+        # empty/oversized/control-character values and match them exactly
+        # against the runtime's own job list below.
+        if not text or len(text) > 200 or any(ord(char) < 32 for char in text):
             raise ApiError("采集结果 id 无效")
         if text not in safe_ids:
             safe_ids.append(text)
     response = offerpilot_runtime.get_jobs(limit=500)
     if not response.get("ok"):
         raise ApiError(str(response.get("error") or "无法读取采集结果"), 503)
-    return _import_offerpilot_records(get_store("user"), response.get("jobs") or [], safe_ids)
+    runtime_jobs = response.get("jobs") or []
+    available = {str(job.get("id")) for job in runtime_jobs if isinstance(job, dict)}
+    selected = [job_id for job_id in safe_ids if job_id in available]
+    if not selected:
+        raise ApiError("选中的岗位已不在采集结果中，请刷新后重新选择", 409)
+    store = get_store("user")
+    _rescale_imported_jobs(store)
+    result = _import_offerpilot_records(store, runtime_jobs, selected)
+    missing = len(safe_ids) - len(selected)
+    if missing:
+        result["missing"] = missing
+        result["message"] += f"；{missing} 条已不在采集结果中"
+    return result
 
 
 def stop_offerpilot_task(task_id: str, data_mode: str = "user") -> dict[str, Any]:
@@ -1628,11 +1686,42 @@ def import_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "count": len(converted["jobs"]), "added": added, "duplicates": duplicates, "message": f"已导入 {len(added)} 条，跳过 {duplicates} 条重复记录"}
 
 
+def _append_manual_queue(store: Store, entries: list[dict[str, Any]]) -> list[str]:
+    """Queue explicitly chosen low/unscored jobs without lowering the shared gate."""
+    cfg = approval_queue.load_config()
+    rows = approval_queue.load_queue(store.files["queue"], cfg)
+    existing = {approval_queue._fingerprint(row) for row in rows}
+    added: list[str] = []
+    stamp = _now()
+    for entry in entries:
+        row = {
+            "id": entry["id"],
+            "score": entry.get("score"),
+            "company": entry.get("company") or "",
+            "title": entry.get("title") or "",
+            "status": cfg["approval"]["pending_status"],
+            "Source_Channel": entry.get("Source_Channel") or "unknown",
+            "created_at": stamp,
+            "high_confidence": False,
+            "manual_override": True,
+        }
+        key = approval_queue._fingerprint(row)
+        if key in existing:
+            continue
+        existing.add(key)
+        rows.append(row)
+        added.append(str(row["id"]))
+    if added:
+        approval_queue.save_queue(rows, store.files["queue"], cfg)
+    return added
+
+
 def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     ids = payload.get("ids")
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
         raise ApiError("ids 必须是字符串数组")
+    allow_low = payload.get("allow_low_score") is True
     store = get_store(mode)
     jobs = {str(job.get("id")): job for job in store.jobs()}
     candidates = []
@@ -1641,7 +1730,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         if not job:
             continue
         score = _score(job)
-        if score is None:
+        if score is None and not allow_low:
             continue
         candidates.append({
             "id": job_id,
@@ -1652,8 +1741,21 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             "created_at": _now(),
         })
     result = approval_queue.enqueue(candidates, store.files["queue"])
-    store.log("加入审批队列", f"接受 {len(result['accepted'])} 条；低分或重复 {len(result['dropped']) + len(result['duplicate'])} 条")
-    return {"ok": True, **result, "message": "已进入待确认队列；没有自动投递"}
+    manual: list[str] = []
+    if allow_low:
+        threshold = float(approval_queue.load_config()["score"]["approval_min"])
+        low = [item for item in candidates if item["score"] is None or item["score"] < threshold]
+        manual = _append_manual_queue(store, low)
+        if manual:
+            result["manual"] = manual
+            # 手动加入的岗位不再算作「未入队」，避免同一条记录被报告两次。
+            result["dropped"] = [job_id for job_id in result["dropped"] if job_id not in manual]
+            result["count"] = len(approval_queue.load_queue(store.files["queue"]))
+    store.log("加入审批队列", f"接受 {len(result['accepted'])} 条，手动 {len(manual)} 条；低分或重复 {len(result['dropped']) + len(result['duplicate'])} 条")
+    message = "已进入待确认队列；没有自动投递"
+    if manual:
+        message += f"；其中 {len(manual)} 条为手动加入（低于评分门或未评分）"
+    return {"ok": True, **result, "message": message}
 
 
 def confirm_queue(payload: dict[str, Any]) -> dict[str, Any]:

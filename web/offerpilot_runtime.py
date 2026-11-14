@@ -23,6 +23,8 @@ WEB_DIR = Path(__file__).resolve().parent
 VENDOR_SRC = ROOT / "vendor" / "offerpilot" / "src"
 RUNTIME_MODES = ("demo", "user")
 TASK_MODES = ("collect", "monitor", "full")
+PACE_MULTIPLIERS = {"cautious": 3.0, "standard": 1.5, "fast": 1.0}
+PACE_LABELS = {"cautious": "稳健", "standard": "标准", "fast": "快速"}
 
 _lock = threading.RLock()
 _backend: Any | None = None
@@ -204,6 +206,8 @@ def _task_options(mode: str, config: dict[str, Any], raw_options: dict[str, Any]
     from offerpilot.collection.orchestrator import normalize_collection_options  # type: ignore
 
     options = normalize_collection_options(config, raw_options)
+    pace = str((raw_options or {}).get("pace") or "cautious").strip().lower()
+    options["pace"] = pace if pace in PACE_MULTIPLIERS else "cautious"
     if mode == "full":
         collection_only = [
             platform for platform in options["platform_order"]
@@ -217,7 +221,17 @@ def _task_options(mode: str, config: dict[str, Any], raw_options: dict[str, Any]
 
 def _options_summary(mode: str, options: dict[str, Any] | None) -> dict[str, Any]:
     if not options:
-        return {"mode": mode, "platform_order": [], "keywords": [], "cities": [], "max_pages": {}, "auto_score": False}
+        return {
+            "mode": mode,
+            "platform_order": [],
+            "keywords": [],
+            "cities": [],
+            "max_pages": {},
+            "auto_score": False,
+            "pace": None,
+            "pace_label": None,
+            "delay_seconds": None,
+        }
     platforms = options.get("platforms") if isinstance(options.get("platforms"), dict) else {}
     keywords: list[str] = []
     cities: list[str] = []
@@ -230,6 +244,8 @@ def _options_summary(mode: str, options: dict[str, Any] | None) -> dict[str, Any
             max_pages[platform] = int(value.get("max_pages", 1))
         except (TypeError, ValueError):
             max_pages[platform] = 1
+    pace = str(options.get("pace") or "cautious")
+    multiplier = PACE_MULTIPLIERS.get(pace, PACE_MULTIPLIERS["cautious"])
     return {
         "mode": mode,
         "platform_order": list(options.get("platform_order", [])),
@@ -237,6 +253,9 @@ def _options_summary(mode: str, options: dict[str, Any] | None) -> dict[str, Any
         "cities": list(dict.fromkeys(cities)),
         "max_pages": max_pages,
         "auto_score": bool(options.get("auto_score")),
+        "pace": pace,
+        "pace_label": PACE_LABELS.get(pace, PACE_LABELS["cautious"]),
+        "delay_seconds": [round(2.0 * multiplier, 1), round(5.0 * multiplier, 1)],
     }
 
 
@@ -316,7 +335,12 @@ def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str
     messages = [*server._preflight_messages(mode, config, options), *error_messages(checks)]
     if messages:
         raise ValueError("请先处理启动前检查：" + "；".join(messages[:5]))
-    extra = {"_collection_options": options} if options is not None else {}
+    extra: dict[str, Any] = {}
+    if options is not None:
+        pace = str(options.get("pace") or "cautious")
+        collection = dict(config.get("collection") or {})
+        collection["collection_delay_multiplier"] = PACE_MULTIPLIERS.get(pace, PACE_MULTIPLIERS["cautious"])
+        extra = {"_collection_options": options, "collection": collection}
     with server.job_mutation_lock:
         task = server.task_runner.start(mode, {**config, **extra, "_agent_workflow": True})
     return {

@@ -50,14 +50,17 @@ python3 -m venv .venv
     "keywords": ["产品经理"],
     "cities": ["北京"],
     "max_pages": 1,
-    "auto_score": false
+    "auto_score": false,
+    "pace": "cautious"
   }
 }
 ```
 
-限制：平台固定为 `boss`；关键词最多 10 个、城市最多 5 个、页数 1–10。`monitor` 不接受 `options`。`full` 只允许支持投递的平台，并强制 `auto_score`。
+限制：平台固定为 `boss`；关键词最多 10 个、城市最多 5 个、页数 1–10；`pace` 只接受 `cautious` / `standard` / `fast`。`monitor` 不接受 `options`。`full` 只允许支持投递的平台，并强制 `auto_score`。
 
-导入时把内嵌运行时的 0–100 分换算为工作台的 0–5 分（`score / 20`），并保留 `score_raw` 与 `score_scale`；同一岗位按指纹去重，重复导入不会产生副本。导入只写岗位信息，不进入审批、不发送任何内容。
+`pace` 决定每次翻页/读详情前的随机等待：稳健（默认）6–15 秒、标准 3–7.5 秒、快速 2–5 秒，对应内嵌运行时的 `collection_delay_multiplier`（3.0 / 1.5 / 1.0）。
+
+导入时把内嵌运行时的 0–100 分换算为工作台的 0–5 分，以两套评分门对齐：71 分（内嵌运行时的审批阈值）对应 4.0，换算为 `min(5.0, round(raw * 4.0 / 71, 1))`，并保留 `score_raw` 与 `score_scale`；同一岗位按指纹去重，重复导入不会产生副本。任务完成后面板会自动调用一次导入（同一任务只导入一次，失败可重试）；导入只写岗位信息，不进入审批、不发送任何内容。
 
 没有 `deliver` 路由，也没有自动 Submit/Send 路径。发送仍由内嵌 OfferPilot 自己的人工确认门、配置时间窗口和首次使用风险提示控制；工作台不绕过、不隐藏这些门禁。
 

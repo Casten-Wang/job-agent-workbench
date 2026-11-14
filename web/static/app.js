@@ -77,6 +77,12 @@ const HUB_FOR_VIEW = {
   data: 'data',
   push: 'push'
 };
+const OFFERPILOT_IMPORTED_TASKS_KEY = 'offerpilot.importedTasks';
+const OFFERPILOT_PACE = {
+  cautious: { label: '稳健', multiplier: 3.0 },
+  standard: { label: '标准', multiplier: 1.5 },
+  fast: { label: '快速', multiplier: 1.0 }
+};
 const OFFERPILOT_MODE_HINTS = {
   collect: '只采集岗位，不评分、不生成招呼语、不投递。',
   monitor: '只检查已有会话中的 HR 回复，不采集新岗位、不发送消息。',
@@ -133,7 +139,10 @@ const state = {
   offerpilotPreflight: null,
   offerpilotPreflightKey: '',
   offerpilotTaskActive: false,
+  offerpilotAutoImporting: false,
   offerpilotPrefsMode: null,
+  offerpilotPollTimer: null,
+  jobsSelection: new Set(),
   profileDirty: false
 };
 
@@ -176,8 +185,12 @@ const dom = {
   importJson: document.getElementById('import-json'),
   importResult: document.getElementById('import-result'),
   jobsCount: document.getElementById('jobs-count'),
+  jobsEmptyHint: document.getElementById('jobs-empty-hint'),
   jobsTable: document.getElementById('jobs-table'),
   jobsActionResult: document.getElementById('jobs-action-result'),
+  jobsSelectAll: document.getElementById('jobs-select-all'),
+  jobsSelectionCount: document.getElementById('jobs-selection-count'),
+  jobsBulkEnqueue: document.getElementById('jobs-bulk-enqueue'),
   offerpilotConnection: document.getElementById('offerpilot-connection'),
   offerpilotState: document.getElementById('offerpilot-state'),
   offerpilotError: document.getElementById('offerpilot-error'),
@@ -197,6 +210,7 @@ const dom = {
   collectKeywords: document.getElementById('collect-keywords'),
   collectCities: document.getElementById('collect-cities'),
   collectPages: document.getElementById('collect-pages'),
+  collectPace: document.getElementById('collect-pace'),
   collectAutoScore: document.getElementById('collect-auto-score'),
   collectSummary: document.getElementById('collect-summary'),
   collectChecks: document.getElementById('collect-checks'),
@@ -1349,8 +1363,27 @@ function renderJobs(snapshot) {
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
   const transitions = snapshot.transitions || {};
   dom.jobsCount.textContent = `显示 ${jobs.length} 条`;
+  if (dom.jobsEmptyHint) dom.jobsEmptyHint.hidden = jobs.length > 0;
+
+  const visibleIds = new Set(jobs.map((job) => String(job.id)));
+  state.jobsSelection.forEach((id) => {
+    if (!visibleIds.has(id)) state.jobsSelection.delete(id);
+  });
 
   const rows = jobs.map((job) => {
+    const jobId = String(job.id);
+    const checkbox = el('input', {
+      attrs: {
+        type: 'checkbox',
+        'aria-label': `选择 ${String(job.company || '')} ${String(job.title || '')}`.trim()
+      }
+    });
+    checkbox.checked = state.jobsSelection.has(jobId);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) state.jobsSelection.add(jobId);
+      else state.jobsSelection.delete(jobId);
+      syncJobsSelection(jobs);
+    });
     const warnings = Array.isArray(job.warnings) ? job.warnings : [];
     const warningCell = warnings.length
       ? badge(String(warnings.length), 'warn', '!')
@@ -1360,23 +1393,31 @@ function renderJobs(snapshot) {
     const actions = el('div', { className: 'row-actions' });
     const scoreValue = typeof job.score === 'number' ? job.score : null;
     const queued = job.approval !== null && job.approval !== undefined;
+    const lowScore = scoreValue === null || scoreValue < 4.0;
     const enqueueButton = el('button', {
       className: 'button button-small button-quiet',
-      text: queued ? '已在审批队列' : '加入审批队列',
+      text: queued ? '已在审批队列' : lowScore ? '手动加入审批队列' : '加入审批队列',
       attrs: { type: 'button' }
     });
-    enqueueButton.disabled = queued || scoreValue === null;
+    enqueueButton.disabled = queued;
     if (queued) {
       enqueueButton.title = '该岗位已在审批队列中';
       enqueueButton.setAttribute('aria-label', '已在审批队列（不可重复加入）');
-    } else if (scoreValue === null) {
-      enqueueButton.title = '未评分，无法加入审批队列（阈值 4.0）';
-      enqueueButton.setAttribute('aria-label', '加入审批队列（未评分，无法加入）');
+    } else if (lowScore) {
+      enqueueButton.title = '低于 4.0 评分门或未评分；点击后确认可手动加入待确认队列';
+      enqueueButton.setAttribute('aria-label', '手动加入审批队列（需要二次确认）');
     } else {
       enqueueButton.title = '只加入待确认队列，不投递';
       enqueueButton.setAttribute('aria-label', '加入审批队列（只加入待确认队列，不投递）');
     }
-    enqueueButton.addEventListener('click', () => enqueueJob(job, enqueueButton));
+    enqueueButton.addEventListener('click', () => {
+      if (lowScore && enqueueButton.dataset.armed !== '1') {
+        armManualEnqueue(enqueueButton);
+        return;
+      }
+      resetManualEnqueue(enqueueButton);
+      enqueueJob(job, enqueueButton, lowScore);
+    });
     actions.append(enqueueButton);
 
     const prepareButton = el('button', {
@@ -1409,6 +1450,7 @@ function renderJobs(snapshot) {
     }
 
     return [
+      checkbox,
       el('span', { text: String(job.company || '未填写公司') }),
       el('span', { text: String(job.title || '未填写岗位') }),
       String(job.city || '—'),
@@ -1425,11 +1467,27 @@ function renderJobs(snapshot) {
 
   renderTable(dom.jobsTable, {
     caption: '表：岗位清单与允许的下一步',
-    columns: ['公司', '岗位', '城市', '薪资', '渠道', '评分', '硬过滤', '状态', '审批状态', '警告数', '动作'],
+    columns: ['选择', '公司', '岗位', '城市', '薪资', '渠道', '评分', '硬过滤', '状态', '审批状态', '警告数', '动作'],
     rows,
     emptyText: '当前筛选下没有岗位。可以调整筛选，或在下方粘贴 JD / 导入静态 JSON。',
     className: 'jobs-table'
   });
+  syncJobsSelection(jobs);
+}
+
+function syncJobsSelection(jobs) {
+  const total = jobs.length;
+  const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id))).length;
+  if (dom.jobsSelectionCount) dom.jobsSelectionCount.textContent = `已选 ${selected} 条`;
+  if (dom.jobsSelectAll) {
+    dom.jobsSelectAll.checked = total > 0 && selected === total;
+    dom.jobsSelectAll.indeterminate = selected > 0 && selected < total;
+    dom.jobsSelectAll.disabled = total === 0;
+  }
+  if (dom.jobsBulkEnqueue) {
+    dom.jobsBulkEnqueue.disabled = selected === 0;
+    dom.jobsBulkEnqueue.textContent = selected > 1 ? `加入审批队列（${selected}）` : '加入审批队列';
+  }
 }
 
 /* Structured personal profile */
@@ -1819,6 +1877,7 @@ function collectFormKey() {
     dom.collectKeywords ? dom.collectKeywords.value.trim() : '',
     dom.collectCities ? dom.collectCities.value.trim() : '',
     dom.collectPages ? dom.collectPages.value.trim() : '',
+    dom.collectPace ? dom.collectPace.value : 'cautious',
     dom.collectAutoScore && dom.collectAutoScore.checked ? '1' : '0'
   ].join('|');
 }
@@ -1844,7 +1903,8 @@ function buildOfferPilotOptions(silent = false) {
     keywords,
     cities,
     max_pages: pages,
-    auto_score: Boolean(dom.collectAutoScore && dom.collectAutoScore.checked)
+    auto_score: Boolean(dom.collectAutoScore && dom.collectAutoScore.checked),
+    pace: dom.collectPace && OFFERPILOT_PACE[dom.collectPace.value] ? dom.collectPace.value : 'cautious'
   };
 }
 
@@ -1857,7 +1917,11 @@ function renderCollectSummary() {
     if (!options) {
       text += ' 填写关键词和城市后，这里会显示本次采集范围。';
     } else {
+      const pace = OFFERPILOT_PACE[options.pace] || OFFERPILOT_PACE.cautious;
+      const low = (2 * pace.multiplier).toFixed(1);
+      const high = (5 * pace.multiplier).toFixed(1);
       text += ` 将在 BOSS 直聘搜索「${options.keywords.join('、')}」，城市「${options.cities.join('、')}」，每个关键词最多 ${options.max_pages} 页。`;
+      text += ` 节奏「${pace.label}」：每次翻页/读详情前随机等待 ${low}–${high} 秒。`;
       text += options.auto_score ? ' 采集后会调用 AI 评分。' : ' 采集后不评分。';
     }
   }
@@ -2013,6 +2077,7 @@ function renderOfferPilot(boss) {
   syncCollectModeUI();
   renderOfferPilotTask(data.task, data.last_task);
   syncOfferPilotStartState();
+  if (!data.task) maybeAutoImportCollected(data.last_task);
   if (!connected) {
     state.offerpilotJobsLoaded = false;
     if (dom.offerpilotJobsCount) dom.offerpilotJobsCount.textContent = '未连接';
@@ -2023,9 +2088,19 @@ function renderOfferPilot(boss) {
   } else if (!state.offerpilotJobsLoaded) {
     loadOfferPilotJobs();
   }
+  syncOfferPilotPoll(state.offerpilotTaskActive);
   const collectView = document.getElementById('view-collect');
   if (state.offerpilotCanStart && collectView && !collectView.hidden) {
     maybeRunOfferPilotPreflight();
+  }
+}
+
+function syncOfferPilotPoll(active) {
+  if (active && !state.offerpilotPollTimer) {
+    state.offerpilotPollTimer = window.setInterval(() => refreshOfferPilot(), 5000);
+  } else if (!active && state.offerpilotPollTimer) {
+    window.clearInterval(state.offerpilotPollTimer);
+    state.offerpilotPollTimer = null;
   }
 }
 
@@ -2046,45 +2121,24 @@ function renderOfferPilotJobs() {
   if (!dom.offerpilotJobsTable) return;
   const jobs = state.offerpilotJobs;
   renderTable(dom.offerpilotJobsTable, {
-    caption: '表：采集结果（只读；勾选后导入岗位池）',
-    columns: ['选择', '岗位', '公司', '城市', '薪资', '评分', '状态'],
-    rows: jobs.map((job) => {
-      const id = String(job.id || '');
-      const checkbox = el('input', {
-        attrs: { type: 'checkbox', 'aria-label': `选择 ${String(job.title || id || '岗位')}` }
-      });
-      checkbox.checked = state.offerpilotSelection.has(id);
-      checkbox.disabled = !id || !state.offerpilotCanStart;
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) state.offerpilotSelection.add(id);
-        else state.offerpilotSelection.delete(id);
-        syncOfferPilotSelection();
-      });
-      return [
-        checkbox,
-        String(job.title || '—'),
-        String(job.company || '—'),
-        String(job.city || '—'),
-        String(job.salary || '—'),
-        job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score),
-        OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
-      ];
-    }),
+    caption: '表：本机采集结果（只读快照）',
+    columns: ['岗位', '公司', '城市', '薪资', '评分', '状态'],
+    rows: jobs.map((job) => [
+      String(job.title || '—'),
+      String(job.company || '—'),
+      String(job.city || '—'),
+      String(job.salary || '—'),
+      job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score),
+      OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
+    ]),
     emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '岗位自动化未就绪。'
   });
   syncOfferPilotSelection();
 }
 
 function syncOfferPilotSelection() {
-  const total = state.offerpilotJobs.length;
-  const selected = state.offerpilotSelection.size;
-  if (dom.offerpilotSelectAll) {
-    dom.offerpilotSelectAll.checked = total > 0 && selected === total;
-    dom.offerpilotSelectAll.indeterminate = selected > 0 && selected < total;
-    dom.offerpilotSelectAll.disabled = total === 0 || !state.offerpilotCanStart;
-  }
   if (dom.offerpilotImport) {
-    dom.offerpilotImport.disabled = selected === 0 || !state.offerpilotCanStart;
+    dom.offerpilotImport.disabled = state.offerpilotJobs.length === 0 || !state.offerpilotCanStart;
   }
 }
 
@@ -2253,10 +2307,66 @@ async function startOfferPilotTask(button) {
   await refreshOfferPilot();
 }
 
+function importedTaskIds() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(OFFERPILOT_IMPORTED_TASKS_KEY) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markTaskImported(taskId, imported) {
+  const ids = importedTaskIds();
+  if (imported) ids.add(String(taskId));
+  else ids.delete(String(taskId));
+  try {
+    window.localStorage.setItem(OFFERPILOT_IMPORTED_TASKS_KEY, JSON.stringify(Array.from(ids).slice(-50)));
+  } catch {
+    // Storage may be unavailable; dedupe on the server still protects the pool.
+  }
+}
+
+async function maybeAutoImportCollected(task) {
+  if (!task || state.mode !== 'user' || !state.offerpilotCanStart) return;
+  if (state.offerpilotTaskActive || state.offerpilotAutoImporting) return;
+  if (!['completed', 'stopped'].includes(String(task.status || ''))) return;
+  const ids = task.progress && Array.isArray(task.progress.collected_job_ids)
+    ? task.progress.collected_job_ids.map(String).filter(Boolean)
+    : [];
+  if (!ids.length || importedTaskIds().has(String(task.id))) return;
+  state.offerpilotAutoImporting = true;
+  markTaskImported(task.id, true);
+  try {
+    const data = await postAction('offerpilot-import', { ids, data_mode: state.mode });
+    if (data && data.ok) {
+      const message = `采集完成，${data.message || '已自动导入岗位池'}`;
+      const collectView = document.getElementById('view-collect');
+      const onCollect = collectView && !collectView.hidden;
+      showInline(dom.offerpilotResult, message, 'ok');
+      await loadState();
+      renderOfferPilotJobs();
+      if (onCollect) {
+        // 采集 → 自动导入 → 挑选岗位 是同一条主线，完成后直接落到岗位表。
+        showView('jobs');
+        setStatus(`${message} 已跳到岗位池，挑好后加入审批队列。`, 'ok');
+      } else {
+        setStatus(message, 'ok');
+      }
+    }
+  } catch (error) {
+    // Let the next refresh retry if the import failed.
+    markTaskImported(task.id, false);
+    showInline(dom.offerpilotResult, `自动导入失败：${friendlyError(error)}。可在下方点击「导入全部到岗位池」重试。`, 'error');
+  } finally {
+    state.offerpilotAutoImporting = false;
+  }
+}
+
 async function importOfferPilotJobs(button) {
-  const ids = Array.from(state.offerpilotSelection);
+  const ids = state.offerpilotJobs.map((job) => String(job.id || '')).filter(Boolean);
   if (!ids.length) {
-    setStatus('请先勾选至少一条采集结果。', 'error');
+    setStatus('当前没有可导入的采集结果。', 'error');
     return;
   }
   const data = await runAction(button, () => postAction('offerpilot-import', {
@@ -2266,7 +2376,6 @@ async function importOfferPilotJobs(button) {
   if (!data) return;
   setStatus(data.message || '已导入岗位池。', 'ok');
   showInline(dom.offerpilotResult, data.message || '已导入岗位池。', 'ok');
-  state.offerpilotSelection.clear();
   await loadState();
   renderOfferPilotJobs();
   syncOfferPilotSelection();
@@ -2283,9 +2392,42 @@ async function stopOfferPilotTask(taskId, button) {
   await refreshOfferPilot();
 }
 
-async function enqueueJob(job, button) {
-  const data = await runAction(button, () => postAction('enqueue', { ids: [String(job.id)] }));
+function armManualEnqueue(button) {
+  const original = button.dataset.label || button.textContent;
+  button.dataset.label = original;
+  // 固定宽度：文案变短时按钮不收缩，第二次点击仍落在同一位置。
+  if (!button.style.minWidth) button.style.minWidth = `${button.offsetWidth}px`;
+  button.dataset.armed = '1';
+  button.textContent = '再点一次确认';
+  button.classList.add('jobs-enqueue-armed');
+  button.title = '低于 4.0 评分门或尚未评分；再点一次加入待确认队列';
+  const timer = window.setTimeout(() => resetManualEnqueue(button), 10000);
+  button.dataset.timer = String(timer);
+  return false;
+}
+
+function resetManualEnqueue(button) {
+  if (button.dataset.timer) {
+    window.clearTimeout(Number(button.dataset.timer));
+    delete button.dataset.timer;
+  }
+  if (button.dataset.label) button.textContent = button.dataset.label;
+  delete button.dataset.armed;
+  button.classList.remove('jobs-enqueue-armed');
+}
+
+async function enqueueJob(job, button, manual = false) {
+  return enqueueJobs([job], button, manual);
+}
+
+async function enqueueJobs(jobs, button, manual = false) {
+  const ids = jobs.map((job) => String(job.id)).filter(Boolean);
+  if (!ids.length) return;
+  const payload = { ids };
+  if (manual) payload.allow_low_score = true;
+  const data = await runAction(button, () => postAction('enqueue', payload));
   if (!data) return;
+  ids.forEach((id) => state.jobsSelection.delete(id));
   let message = data.message || '已加入待确认队列。';
   if (Array.isArray(data.dropped) && data.dropped.length) {
     message += ` 未入队 ${data.dropped.length} 条（评分不足或缺失）。`;
@@ -2293,7 +2435,8 @@ async function enqueueJob(job, button) {
   if (Array.isArray(data.duplicate) && data.duplicate.length) {
     message += ` 重复 ${data.duplicate.length} 条。`;
   }
-  const accepted = Array.isArray(data.accepted) && data.accepted.length > 0;
+  const accepted = (Array.isArray(data.accepted) && data.accepted.length > 0)
+    || (Array.isArray(data.manual) && data.manual.length > 0);
   setStatus(message, accepted ? 'ok' : 'warn');
   showInline(dom.jobsActionResult, message, accepted ? 'ok' : 'warn');
   await loadState();
@@ -2995,25 +3138,13 @@ function bindEvents() {
       maybeRunOfferPilotPreflight();
     });
   }
-  [dom.collectKeywords, dom.collectCities, dom.collectPages, dom.collectAutoScore].forEach((input) => {
+  [dom.collectKeywords, dom.collectCities, dom.collectPages, dom.collectPace, dom.collectAutoScore].forEach((input) => {
     if (!input) return;
     input.addEventListener('input', syncCollectModeUI);
     input.addEventListener('change', syncCollectModeUI);
   });
   if (dom.collectPreflight) {
     dom.collectPreflight.addEventListener('click', () => runOfferPilotPreflight(dom.collectPreflight));
-  }
-  if (dom.offerpilotSelectAll) {
-    dom.offerpilotSelectAll.addEventListener('change', () => {
-      state.offerpilotSelection.clear();
-      if (dom.offerpilotSelectAll.checked) {
-        state.offerpilotJobs.forEach((job) => {
-          const id = String(job.id || '');
-          if (id) state.offerpilotSelection.add(id);
-        });
-      }
-      renderOfferPilotJobs();
-    });
   }
   if (dom.offerpilotImport) {
     dom.offerpilotImport.addEventListener('click', () => importOfferPilotJobs(dom.offerpilotImport));
@@ -3064,6 +3195,29 @@ function bindEvents() {
     }
     await loadState();
   });
+
+  if (dom.jobsSelectAll) {
+    dom.jobsSelectAll.addEventListener('change', () => {
+      const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
+      if (dom.jobsSelectAll.checked) jobs.forEach((job) => state.jobsSelection.add(String(job.id)));
+      else state.jobsSelection.clear();
+      renderJobs(state.snapshot || {});
+    });
+  }
+  if (dom.jobsBulkEnqueue) {
+    dom.jobsBulkEnqueue.addEventListener('click', () => {
+      const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
+      const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
+      if (!selected.length) return;
+      const low = selected.some((job) => typeof job.score !== 'number' || job.score < 4.0);
+      if (low && dom.jobsBulkEnqueue.dataset.armed !== '1') {
+        armManualEnqueue(dom.jobsBulkEnqueue);
+        return;
+      }
+      resetManualEnqueue(dom.jobsBulkEnqueue);
+      enqueueJobs(selected, dom.jobsBulkEnqueue, low);
+    });
+  }
 
   dom.jdForm.addEventListener('submit', async (event) => {
     event.preventDefault();
