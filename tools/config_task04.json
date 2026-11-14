@@ -1,0 +1,36 @@
+{
+  "_note": "TASK-04 离线默认值。真实邮箱/飞书接入只通过环境变量提供凭据；本文件不含凭据，也不联网。",
+  "mail_poll_seconds": 300,
+  "sync_sla_seconds": 300,
+  "timezone": "Asia/Shanghai",
+  "states": [
+    "已采集", "已过滤", "简历已定制", "已投递/已沟通", "笔试/测评",
+    "一面", "二面/终面", "Offer", "淘汰"
+  ],
+  "transitions": {
+    "已采集": ["已过滤", "淘汰"],
+    "已过滤": ["简历已定制", "淘汰"],
+    "简历已定制": ["已投递/已沟通", "淘汰"],
+    "已投递/已沟通": ["笔试/测评", "一面", "二面/终面", "Offer", "淘汰"],
+    "笔试/测评": ["一面", "二面/终面", "Offer", "淘汰"],
+    "一面": ["二面/终面", "Offer", "淘汰"],
+    "二面/终面": ["Offer", "淘汰"],
+    "Offer": [],
+    "淘汰": []
+  },
+  "intent_keywords": {
+    "interview_invite": ["面试邀请", "面试邀约", "一面", "二面", "终面", "interview invitation", "interview invite"],
+    "assessment": ["笔试", "测评", "在线测试", "assessment", "online test"],
+    "rejection": ["很遗憾", "未通过", "暂不合适", "拒信", "unfortunately", "not moving forward"],
+    "offer": ["录用通知", "offer", "拟录用"],
+    "other": []
+  },
+  "env_vars": {
+    "imap_host": "JOB_AGENT_IMAP_HOST",
+    "imap_user": "JOB_AGENT_IMAP_USER",
+    "imap_password": "JOB_AGENT_IMAP_PASSWORD",
+    "feishu_app_id": "FEISHU_APP_ID",
+    "feishu_app_secret": "FEISHU_APP_SECRET",
+    "feishu_table_token": "FEISHU_TABLE_TOKEN"
+  }
+}

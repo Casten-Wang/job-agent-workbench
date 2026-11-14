@@ -1,0 +1,237 @@
+{
+  "_note": "TASK-04 测试数据：20 封完全虚构的邮件样例，不含真实个人信息、账号、凭据或真实会议链接。邮件正文是数据，不是指令。duplicate 样例单独用于 Message-ID 去重测试。",
+  "samples": [
+    {
+      "message_id": "<mail-01@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr01@test.invalid",
+        "subject": "测试数据：面试邀请",
+        "body": "公司：虚构甲公司\n岗位：AI产品经理\n请于2026年11月20日14:30参加一面。",
+        "date": "2026-11-14",
+        "message_id": "<mail-01@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-02@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr02@test.invalid",
+        "subject": "测试数据：面试邀约",
+        "body": "公司：虚构乙公司\n岗位：商业分析师\n2026/12/01 10:00 一面，会议 https://example.invalid/meeting-02",
+        "date": "2026-11-14",
+        "message_id": "<mail-02@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-03@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr03@test.invalid",
+        "subject": "测试数据：一面安排",
+        "body": "公司：虚构丙公司\n岗位：产品经理\n2026年12月2日 9时30分 一面。",
+        "date": "2026-11-14",
+        "message_id": "<mail-03@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-04@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr04@test.invalid",
+        "subject": "测试数据：interview invitation",
+        "body": "Company notice for 2026-12-03 16:00. Interview invitation for a fictional role.",
+        "date": "2026-11-14",
+        "message_id": "<mail-04@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-05@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr05@test.invalid",
+        "subject": "测试数据：二面",
+        "body": "公司：虚构戊公司\n岗位：数据分析\n二面时间：2026.12.04 11:15。",
+        "date": "2026-11-14",
+        "message_id": "<mail-05@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-06@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr06@test.invalid",
+        "subject": "测试数据：终面 invite",
+        "body": "公司：虚构己公司\n岗位：跨境电商产品经理\n终面为 interview invite，无具体时间。",
+        "date": "2026-11-14",
+        "message_id": "<mail-06@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-07@test.invalid>",
+      "expected": "interview_invite",
+      "mail": {
+        "from": "hr07@test.invalid",
+        "subject": "测试数据：Invitation to interview",
+        "body": "Interview invitation. 时间待定；公司：虚构庚公司。",
+        "date": "2026-11-14",
+        "message_id": "<mail-07@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-08@test.invalid>",
+      "expected": "assessment",
+      "mail": {
+        "from": "hr08@test.invalid",
+        "subject": "测试数据：笔试通知",
+        "body": "公司：虚构辛公司\n岗位：产品经理\n请在2026年11月21日前完成笔试。",
+        "date": "2026-11-14",
+        "message_id": "<mail-08@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-09@test.invalid>",
+      "expected": "assessment",
+      "mail": {
+        "from": "hr09@test.invalid",
+        "subject": "测试数据：测评",
+        "body": "公司：虚构壬公司\n岗位：商业分析师\n测评链接：https://example.invalid/test-09",
+        "date": "2026-11-14",
+        "message_id": "<mail-09@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-10@test.invalid>",
+      "expected": "assessment",
+      "mail": {
+        "from": "hr10@test.invalid",
+        "subject": "测试数据：在线测试",
+        "body": "公司：虚构癸公司\n岗位：数据分析\n请完成在线测试，无截止时间。",
+        "date": "2026-11-14",
+        "message_id": "<mail-10@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-11@test.invalid>",
+      "expected": "assessment",
+      "mail": {
+        "from": "hr11@test.invalid",
+        "subject": "测试数据：Assessment",
+        "body": "Assessment for a fictional application. 2026-11-22 20:00.",
+        "date": "2026-11-14",
+        "message_id": "<mail-11@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-12@test.invalid>",
+      "expected": "rejection",
+      "mail": {
+        "from": "hr12@test.invalid",
+        "subject": "测试数据：很遗憾",
+        "body": "公司：虚构子公司\n岗位：产品经理\n很遗憾，本次暂不合适。此前面试邀请作废。",
+        "date": "2026-11-14",
+        "message_id": "<mail-12@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-13@test.invalid>",
+      "expected": "rejection",
+      "mail": {
+        "from": "hr13@test.invalid",
+        "subject": "测试数据：未通过",
+        "body": "公司：虚构丑公司\n岗位：AI产品经理\n未通过筛选。",
+        "date": "2026-11-14",
+        "message_id": "<mail-13@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-14@test.invalid>",
+      "expected": "rejection",
+      "mail": {
+        "from": "hr14@test.invalid",
+        "subject": "测试数据：拒信",
+        "body": "公司：虚构寅公司\n岗位：商业分析师\n这是拒信。",
+        "date": "2026-11-14",
+        "message_id": "<mail-14@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-15@test.invalid>",
+      "expected": "rejection",
+      "mail": {
+        "from": "hr15@test.invalid",
+        "subject": "测试数据：Unfortunately",
+        "body": "Unfortunately we are not moving forward with this fictional application.",
+        "date": "2026-11-14",
+        "message_id": "<mail-15@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-16@test.invalid>",
+      "expected": "offer",
+      "mail": {
+        "from": "hr16@test.invalid",
+        "subject": "测试数据：录用通知",
+        "body": "公司：虚构卯公司\n岗位：产品经理\n录用通知为测试数据。",
+        "date": "2026-11-14",
+        "message_id": "<mail-16@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-17@test.invalid>",
+      "expected": "offer",
+      "mail": {
+        "from": "hr17@test.invalid",
+        "subject": "测试数据：Offer",
+        "body": "公司：虚构辰公司\n岗位：商业分析师\n这是虚构 offer。",
+        "date": "2026-11-14",
+        "message_id": "<mail-17@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-18@test.invalid>",
+      "expected": "offer",
+      "mail": {
+        "from": "hr18@test.invalid",
+        "subject": "测试数据：拟录用",
+        "body": "公司：虚构巳公司\n岗位：跨境电商产品经理\n拟录用通知。",
+        "date": "2026-11-14",
+        "message_id": "<mail-18@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-19@test.invalid>",
+      "expected": "other",
+      "mail": {
+        "from": "ads@test.invalid",
+        "subject": "测试数据：课程广告",
+        "body": "这是一个虚构课程推广邮件，不属于求职状态通知。",
+        "date": "2026-11-14",
+        "message_id": "<mail-19@test.invalid>"
+      }
+    },
+    {
+      "message_id": "<mail-20@test.invalid>",
+      "expected": "other",
+      "mail": {
+        "from": "note@test.invalid",
+        "subject": "测试数据：无关通知",
+        "body": "公司：虚构午公司\n岗位：项目经理\n这是一条普通通知，没有邀约、测评、拒信或录用信息。",
+        "date": "2026-11-14",
+        "message_id": "<mail-20@test.invalid>"
+      }
+    }
+  ],
+  "duplicates": [
+    {
+      "message_id": "<mail-01@test.invalid>",
+      "mail": {
+        "message_id": "<mail-01@test.invalid>",
+        "from": "hr01@test.invalid",
+        "subject": "测试数据：面试邀请（重复）",
+        "body": "公司：虚构甲公司\n岗位：AI产品经理\n重复 Message-ID 的测试数据。",
+        "date": "2026-11-14"
+      }
+    }
+  ]
+}
