@@ -42,7 +42,6 @@ const BOUNDARY_VALUES = {
   dry_run_only: '仅 dry-run',
   unavailable: '不可用'
 };
-const QUEUE_CONFIRM_PHRASE = '确认可人工投递';
 const OFFERPILOT_MODE_LABELS = {
   collect: '仅采集',
   monitor: '仅监控',
@@ -257,8 +256,6 @@ const dom = {
   queueSelectAll: document.getElementById('queue-select-all'),
   queueSelectionCount: document.getElementById('queue-selection-count'),
   queuePendingTable: document.getElementById('queue-pending-table'),
-  confirmForm: document.getElementById('confirm-form'),
-  queueConfirm: document.getElementById('queue-confirm'),
   queueConfirmButton: document.getElementById('queue-confirm-button'),
   queueApprovedCount: document.getElementById('queue-approved-count'),
   queueApprovedTable: document.getElementById('queue-approved-table'),
@@ -742,7 +739,6 @@ function clearTransientResults() {
   dom.dryRunResult.hidden = true;
   dom.dryRunResult.textContent = '';
   dom.atsFile.value = '';
-  dom.queueConfirm.value = '';
   state.queueSelection.clear();
 }
 
@@ -1372,6 +1368,18 @@ function badge(text, kind, symbol) {
   return node;
 }
 
+function riskBadgeNode(risk) {
+  const level = risk && typeof risk === 'object' ? String(risk.level || 'low') : 'low';
+  const signals = risk && Array.isArray(risk.signals) ? risk.signals : [];
+  const detail = signals.map((item) => `${item.label}${item.evidence ? `（${item.evidence}）` : ''}`).join('；');
+  let node;
+  if (level === 'high') node = badge('高风险', 'bad', '×');
+  else if (level === 'verify') node = badge('需核实', 'warn', '!');
+  else node = badge('正常', 'good', '✓');
+  if (detail) node.setAttribute('title', detail);
+  return node;
+}
+
 function hardFilterNode(job) {
   const raw = job.hard_filter;
   const status = raw && typeof raw === 'object' ? String(raw.status || 'unknown') : String(raw || 'unknown');
@@ -1421,6 +1429,7 @@ function renderJobs(snapshot) {
       ? badge(String(warnings.length), 'warn', '!')
       : el('span', { className: 'muted', text: '0' });
     if (warnings.length) warningCell.setAttribute('title', warnings.join('；'));
+    const riskNode = riskBadgeNode(job.risk);
 
     const actions = el('div', { className: 'row-actions' });
     const scoreValue = typeof job.score === 'number' ? job.score : null;
@@ -1436,18 +1445,13 @@ function renderJobs(snapshot) {
       enqueueButton.title = '该岗位已在审批队列中';
       enqueueButton.setAttribute('aria-label', '已在审批队列（不可重复加入）');
     } else if (lowScore) {
-      enqueueButton.title = '低于 4.0 评分门或未评分；点击后确认可手动加入待确认队列';
-      enqueueButton.setAttribute('aria-label', '手动加入审批队列（需要二次确认）');
+      enqueueButton.title = '低于 4.0 评分门或未评分；点击后手动加入待确认队列';
+      enqueueButton.setAttribute('aria-label', '手动加入审批队列（评分不足，需你自行判断）');
     } else {
       enqueueButton.title = '只加入待确认队列，不投递';
       enqueueButton.setAttribute('aria-label', '加入审批队列（只加入待确认队列，不投递）');
     }
     enqueueButton.addEventListener('click', () => {
-      if (lowScore && enqueueButton.dataset.armed !== '1') {
-        armManualEnqueue(enqueueButton);
-        return;
-      }
-      resetManualEnqueue(enqueueButton);
       enqueueJob(job, enqueueButton, lowScore);
     });
     actions.append(enqueueButton);
@@ -1490,6 +1494,7 @@ function renderJobs(snapshot) {
       channelLabel(job.source_channel),
       formatScore(job.score),
       hardFilterNode(job),
+      riskNode,
       String(job.state || '未知'),
       approvalNode(job.approval),
       warningCell,
@@ -1499,7 +1504,7 @@ function renderJobs(snapshot) {
 
   renderTable(dom.jobsTable, {
     caption: '表：岗位清单与允许的下一步',
-    columns: ['选择', '公司', '岗位', '城市', '薪资', '渠道', '评分', '硬过滤', '状态', '审批状态', '警告数', '动作'],
+    columns: ['选择', '公司', '岗位', '城市', '薪资', '渠道', '评分', '硬过滤', '风险', '状态', '审批状态', '警告数', '动作'],
     rows,
     emptyText: '当前筛选下没有岗位。可以调整筛选，或在下方粘贴 JD / 导入静态 JSON。',
     className: 'jobs-table'
@@ -2488,30 +2493,6 @@ async function stopOfferPilotTask(taskId, button) {
   await refreshOfferPilot();
 }
 
-function armManualEnqueue(button) {
-  const original = button.dataset.label || button.textContent;
-  button.dataset.label = original;
-  // 固定宽度：文案变短时按钮不收缩，第二次点击仍落在同一位置。
-  if (!button.style.minWidth) button.style.minWidth = `${button.offsetWidth}px`;
-  button.dataset.armed = '1';
-  button.textContent = '再点一次确认';
-  button.classList.add('jobs-enqueue-armed');
-  button.title = '低于 4.0 评分门或尚未评分；再点一次加入待确认队列';
-  const timer = window.setTimeout(() => resetManualEnqueue(button), 10000);
-  button.dataset.timer = String(timer);
-  return false;
-}
-
-function resetManualEnqueue(button) {
-  if (button.dataset.timer) {
-    window.clearTimeout(Number(button.dataset.timer));
-    delete button.dataset.timer;
-  }
-  if (button.dataset.label) button.textContent = button.dataset.label;
-  delete button.dataset.armed;
-  button.classList.remove('jobs-enqueue-armed');
-}
-
 async function enqueueJob(job, button, manual = false) {
   return enqueueJobs([job], button, manual);
 }
@@ -2599,8 +2580,7 @@ function updateQueueSelectionUI() {
   const allSelected = pending.length > 0 && selected === pending.length;
   dom.queueSelectAll.checked = allSelected;
   dom.queueSelectAll.indeterminate = selected > 0 && !allSelected;
-  const phraseOk = dom.queueConfirm.value === QUEUE_CONFIRM_PHRASE;
-  dom.queueConfirmButton.disabled = !(selected > 0 && phraseOk);
+  dom.queueConfirmButton.disabled = selected === 0;
 }
 
 function renderQueue(snapshot) {
@@ -2667,12 +2647,13 @@ function renderQueue(snapshot) {
       channelLabel(row.Source_Channel),
       greetingStatusBadge(row.greeting),
       deliveryStatusBadge(row.delivery),
+      planBadge(row.plan),
       badge('approved · 可人工投递', 'good', '✓')
     ];
   });
   renderTable(dom.queueApprovedTable, {
     caption: '表：已确认可人工投递',
-    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '状态'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。approved 只表示可人工投递，不代表已投递。',
     className: 'data-table-wide'
@@ -2682,6 +2663,13 @@ function renderQueue(snapshot) {
 
   updateQueueSelectionUI();
   updateQueueApprovedSelectionUI();
+}
+
+function planBadge(plan) {
+  if (!plan || typeof plan !== 'object') return el('span', { className: 'muted', text: '—' });
+  const node = plan.today ? badge(`今日第 ${plan.rank} 位`, 'good', '✓') : badge('顺延', 'neutral', '·');
+  if (plan.reason) node.setAttribute('title', String(plan.reason));
+  return node;
 }
 
 function approvedQueueRows() {
@@ -3540,7 +3528,6 @@ function bindEvents() {
     syncQueueCheckboxes();
     updateQueueSelectionUI();
   });
-  dom.queueConfirm.addEventListener('input', updateQueueSelectionUI);
 
   if (dom.queueApprovedSelectAll) {
     dom.queueApprovedSelectAll.addEventListener('change', () => {
@@ -3582,26 +3569,17 @@ function bindEvents() {
     });
   }
 
-  dom.confirmForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (dom.queueConfirm.value !== QUEUE_CONFIRM_PHRASE) {
-      setStatus(`请先输入完整确认语「${QUEUE_CONFIRM_PHRASE}」。`, 'error');
-      return;
-    }
+  dom.queueConfirmButton.addEventListener('click', async () => {
     const ids = Array.from(state.queueSelection);
     if (!ids.length) {
       setStatus('请先勾选至少一条待确认岗位。', 'error');
       return;
     }
-    const data = await runAction(dom.queueConfirmButton, () => postAction('confirm', {
-      ids,
-      confirm: QUEUE_CONFIRM_PHRASE
-    }));
+    const data = await runAction(dom.queueConfirmButton, () => postAction('confirm', { ids }));
     if (!data) return;
-    const ok = announceActionResult(data, '已标记为可人工投递；仍需本人到平台提交。');
+    const ok = announceActionResult(data, '已通过；发送前还会再让你复核一次。');
     if (ok) {
       state.queueSelection.clear();
-      dom.queueConfirm.value = '';
       updateQueueSelectionUI();
     }
     await loadState();
@@ -3621,11 +3599,6 @@ function bindEvents() {
       const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
       if (!selected.length) return;
       const low = selected.some((job) => typeof job.score !== 'number' || job.score < 4.0);
-      if (low && dom.jobsBulkEnqueue.dataset.armed !== '1') {
-        armManualEnqueue(dom.jobsBulkEnqueue);
-        return;
-      }
-      resetManualEnqueue(dom.jobsBulkEnqueue);
       enqueueJobs(selected, dom.jobsBulkEnqueue, low);
     });
   }

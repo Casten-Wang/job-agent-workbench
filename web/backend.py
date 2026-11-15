@@ -46,6 +46,8 @@ import filters  # noqa: E402
 import resume_quality  # noqa: E402
 import evidence_checker  # noqa: E402
 import greeting  # noqa: E402
+import job_risk  # noqa: E402
+import quota_planner  # noqa: E402
 import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
 import mock_interview  # noqa: E402
@@ -121,7 +123,7 @@ PIPELINE_STAGES = (
         "owner_label": "人工",
         "entry": "queue",
         "actions": ["confirm"],
-        "description": "输入完整确认语后才标记 approved；approved 仅表示可人工投递。",
+        "description": "点击「通过所选」或评分达标自动通过后标记 approved；approved 仅表示可人工投递，不代表已发送。",
     },
     {
         "key": "greeting",
@@ -793,6 +795,65 @@ def _normalize_job(record: dict[str, Any], index: int, source: str) -> dict[str,
     return job
 
 
+def _job_risk_map(jobs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Read-only risk screen for every job; never edits the job rows."""
+    counts = Counter(
+        (str(job.get("company") or "").strip().lower(), str(job.get("title") or "").strip().lower())
+        for job in jobs
+    )
+    result: dict[str, dict[str, Any]] = {}
+    for job in jobs:
+        key = (str(job.get("company") or "").strip().lower(), str(job.get("title") or "").strip().lower())
+        result[str(job.get("id"))] = job_risk.assess_job_risk(job, duplicate_count=max(counts[key] - 1, 0))
+    return result
+
+
+def _contact_plan(
+    queue_view: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    deliveries: list[dict[str, Any]],
+    risk_map: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Read-only ranking of today's approved, unsent rows within the daily quota."""
+    job_by_id = {str(job.get("id")): job for job in jobs}
+    history: list[dict[str, Any]] = []
+    sent_ids: set[str] = set()
+    for batch in deliveries:
+        for item in batch.get("items") or []:
+            if not isinstance(item, dict) or item.get("status") != "sent":
+                continue
+            job_id = str(item.get("job_id") or "")
+            job = job_by_id.get(job_id) or {}
+            sent_ids.add(job_id)
+            history.append({
+                "company": job.get("company"),
+                "title": job.get("title"),
+                "contacted_at": item.get("finished_at"),
+            })
+    candidates = []
+    for row in queue_view:
+        row_id = str(row.get("id"))
+        if row.get("status") != "approved" or row_id in sent_ids:
+            continue
+        job = job_by_id.get(row_id) or {}
+        candidates.append({
+            "id": row_id,
+            "company": row.get("company") or job.get("company"),
+            "title": row.get("title") or job.get("title"),
+            "score": row.get("score"),
+            "risk_level": (risk_map.get(row_id) or {}).get("level"),
+            "posted_at": job.get("posted_at"),
+        })
+    plan = quota_planner.plan_contact_queue(
+        candidates,
+        daily_quota=DEFAULT_DAILY_CONTACT_QUOTA,
+        history=history,
+        today=dt.date.today(),
+    )
+    plan["daily_quota"] = DEFAULT_DAILY_CONTACT_QUOTA
+    return plan
+
+
 def _job_fingerprint(job: dict[str, Any]) -> str:
     return "|".join(str(job.get(key) or "").strip() for key in ("company", "title", "city", "source_channel"))
 
@@ -829,7 +890,7 @@ def _demo_queue() -> list[dict[str, Any]]:
             "score": score,
             "company": job["company"],
             "title": job["title"],
-            "status": "pending",
+            "status": "approved",
             "Source_Channel": job["source_channel"],
             "created_at": "2026-11-14T09:00:00+08:00",
             "high_confidence": score >= 4.5,
@@ -1309,6 +1370,9 @@ def start_offerpilot_greet(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 DELIVERY_CONFIRM_TEMPLATE = "确认发送本批 {count} 条"
+# 与内嵌发送器的 throttle.daily_limit 默认值一致；仅用于排序提示，实际上限仍由发送器强制。
+DEFAULT_DAILY_CONTACT_QUOTA = 30
+
 DELIVERY_BLOCKED_REASONS = frozenset(
     {
         "captcha",
@@ -1895,6 +1959,7 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
     sliced = _filter_payload(jobs, store.mails(), store.debriefs(), events, query)
     boss_state = get_offerpilot_state(mode)
     filtered_jobs = sliced["jobs"]
+    risk_map = _job_risk_map(jobs)
     state_counts = _state_counts(filtered_jobs, sliced["events"], queue)
     channel_rows = _channel_rows(filtered_jobs, sliced["events"], sliced["debriefs"])
     quarter = _quarter_rows(filtered_jobs, sliced["events"], sliced["debriefs"])
@@ -1962,8 +2027,22 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
         delivery = latest_by_job.get(str(row.get("id")))
         if delivery:
             row["delivery"] = delivery
+    contact_plan = _contact_plan(queue_view, jobs, deliveries, risk_map)
+    ranked_by_id = {item["id"]: item for item in contact_plan["ranked"]}
+    deferred_by_id = {item["id"]: item for item in contact_plan["deferred"]}
+    for row in queue_view:
+        row_id = str(row.get("id"))
+        if row_id in ranked_by_id:
+            row["plan"] = {"today": True, "rank": ranked_by_id[row_id]["rank"], "reason": ranked_by_id[row_id]["reason"]}
+        elif row_id in deferred_by_id:
+            row["plan"] = {"today": False, "rank": None, "reason": deferred_by_id[row_id]["reason"]}
     pipeline_payload = pipeline_status(store, jobs, queue, store.mails(), boss_state)
     pipeline_payload["delivery"] = _delivery_summary(deliveries)
+    pipeline_payload["delivery"]["quota"] = {
+        "daily": contact_plan["daily_quota"],
+        "remaining": contact_plan["remaining_quota"],
+        "planned_today": len(contact_plan["ranked"]),
+    }
     return {
         "mode": mode,
         "generated_at": _now(),
@@ -1982,7 +2061,7 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
             "id", "company", "title", "city", "salary_label", "source_channel",
             "posted_at", "hard_filter", "warnings", "score", "state", "approval",
             "fingerprint", "raw_text", "date", "created_at",
-        )} for job in filtered_jobs],
+        )} | {"risk": risk_map.get(str(job.get("id")))} for job in filtered_jobs],
         "queue": queue_view,
         "mails": sliced["mails"],
         "debriefs": sliced["debriefs"],
@@ -2083,9 +2162,11 @@ def _append_manual_queue(store: Store, entries: list[dict[str, Any]]) -> list[st
             "score": entry.get("score"),
             "company": entry.get("company") or "",
             "title": entry.get("title") or "",
-            "status": cfg["approval"]["pending_status"],
+            # The user's explicit click on a low-score job is the approval.
+            "status": cfg["approval"]["approved_status"],
             "Source_Channel": entry.get("Source_Channel") or "unknown",
             "created_at": stamp,
+            "approved_at": stamp,
             "high_confidence": False,
             "manual_override": True,
         }
@@ -2109,9 +2190,15 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     store = get_store(mode)
     jobs = {str(job.get("id")): job for job in store.jobs()}
     candidates = []
+    risk_blocked: list[str] = []
+    risk_map = _job_risk_map(list(jobs.values()))
     for job_id in ids:
         job = jobs.get(job_id)
         if not job:
+            continue
+        # 高风险岗位（收费/培训贷/保就业承诺等）不进入队列，手动加入也不例外。
+        if (risk_map.get(job_id) or {}).get("blocks_queue"):
+            risk_blocked.append(job_id)
             continue
         score = _score(job)
         if score is None and not allow_low:
@@ -2125,6 +2212,12 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             "created_at": _now(),
         })
     result = approval_queue.enqueue(candidates, store.files["queue"])
+    # 评分达标（>= approval_min）即视为筛选通过；不再要求人工输入确认语，
+    # 直接标记为 approved。人工确认只保留在最终发送前。
+    approved: list[str] = []
+    if result["accepted"]:
+        confirmed = approval_queue.confirm(result["accepted"], store.files["queue"])
+        approved = confirmed.get("confirmed") or []
     manual: list[str] = []
     if allow_low:
         threshold = float(approval_queue.load_config()["score"]["approval_min"])
@@ -2135,25 +2228,33 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             # 手动加入的岗位不再算作「未入队」，避免同一条记录被报告两次。
             result["dropped"] = [job_id for job_id in result["dropped"] if job_id not in manual]
             result["count"] = len(approval_queue.load_queue(store.files["queue"]))
-    store.log("加入审批队列", f"接受 {len(result['accepted'])} 条，手动 {len(manual)} 条；低分或重复 {len(result['dropped']) + len(result['duplicate'])} 条")
-    message = "已进入待确认队列；没有自动投递"
+    result["approved"] = approved
+    result["risk_blocked"] = risk_blocked
+    store.log("加入审批队列", f"评分达标自动通过 {len(approved)} 条，手动加入 {len(manual)} 条；未入队 {len(result['dropped']) + len(result['duplicate'])} 条")
+    message = "已进入审批队列"
+    if approved:
+        message = f"{len(approved)} 条评分达标，已自动通过"
     if manual:
-        message += f"；其中 {len(manual)} 条为手动加入（低于评分门或未评分）"
+        message += f"；{len(manual)} 条评分不足，已按你的选择手动加入（标记为已通过）"
+    if risk_blocked:
+        message += f"；{len(risk_blocked)} 条疑似高风险岗位（收费/承诺类），已拦截不入队"
     return {"ok": True, **result, "message": message}
 
 
 def confirm_queue(payload: dict[str, Any]) -> dict[str, Any]:
+    """Mark pending rows approved after one explicit click.
+
+    No typed phrase: the button itself is the human decision. Sending still
+    goes through the separate delivery review panel.
+    """
     mode = str(payload.get("mode") or "user")
     ids = payload.get("ids")
-    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
-        raise ApiError("ids 必须是字符串数组")
-    token = str(payload.get("confirm") or "")
-    if token != "确认可人工投递":
-        raise ApiError("请在确认框输入「确认可人工投递」")
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or not ids:
+        raise ApiError("请先勾选至少一条待确认岗位")
     store = get_store(mode)
     result = approval_queue.confirm(ids, store.files["queue"])
-    store.log("确认可人工投递", f"{len(result['confirmed'])} 条；auto_submit=false")
-    return {"ok": True, **result, "message": "已标记为可人工投递；仍需本人到平台提交"}
+    store.log("人工通过待确认岗位", f"{len(result['confirmed'])} 条；auto_submit=false")
+    return {"ok": True, **result, "message": "已通过；发送前还会再让你复核一次"}
 
 
 def prepare(payload: dict[str, Any]) -> dict[str, Any]:

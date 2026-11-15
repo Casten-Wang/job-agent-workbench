@@ -128,7 +128,9 @@ class DemoSeedTests(DemoDataTestCase):
         snapshot = backend.snapshot("demo")
         pending_rows = [row for row in snapshot["queue"] if row.get("status") == "pending"]
         self.assertEqual(snapshot["kpis"]["pending"], len(pending_rows))
-        self.assertEqual(len(pending_rows), 4)
+        # Qualified demo jobs are auto-approved; no demo row waits for a human pass.
+        self.assertEqual(len(pending_rows), 0)
+        self.assertGreaterEqual(sum(1 for row in snapshot["queue"] if row.get("status") == "approved"), 4)
         for row in snapshot["queue"]:
             with self.subTest(job=row.get("id")):
                 self.assertIsInstance(row.get("score"), (int, float))
@@ -695,7 +697,7 @@ class ApprovalGateTests(DemoDataTestCase):
         queue = backend.approval_queue.load_queue(backend.get_store("demo").files["queue"])
         row = next(item for item in queue if item["id"] == "demo-job-003")
         self.assertTrue(row["manual_override"])
-        self.assertEqual(row["status"], "pending")
+        self.assertEqual(row["status"], "approved")
 
         # A job parsed without a score must be filtered out before the queue.
         text = (
@@ -721,31 +723,80 @@ class ApprovalGateTests(DemoDataTestCase):
                 self.assertIsInstance(row.get("score"), (int, float))
                 self.assertNotIsInstance(row.get("score"), bool)
 
-    def test_confirm_requires_the_exact_confirmation_phrase(self):
-        for token in ("", "确认", "确认可人工投递 ", "确认可人工投递\n", "可以投递"):
-            with self.subTest(token=token):
-                with self.assertRaises(backend.ApiError):
-                    backend.confirm_queue(
-                        {"mode": "demo", "ids": ["demo-job-001"], "confirm": token}
-                    )
-        rows = backend.get_store("demo").queue()
-        self.assertTrue(all(row.get("status") == "pending" for row in rows))
+    def test_high_risk_job_is_blocked_from_queue_even_when_manual(self):
+        store = backend.get_store("demo")
+        rows = store.jobs()
+        rows.append({
+            "id": "risk-demo-job",
+            "company": "虚构风险有限公司",
+            "title": "产品助理",
+            "city": "上海",
+            "score": 4.8,
+            "source_channel": "manual_paste",
+            "raw_text": "测试数据：入职需缴纳培训费，包就业。",
+        })
+        store.set_jobs(rows)
+        result = backend.enqueue({"mode": "demo", "ids": ["risk-demo-job"], "allow_low_score": True})
+        self.assertEqual(result["risk_blocked"], ["risk-demo-job"])
+        self.assertEqual(result["accepted"], [])
+        self.assertIn("拦截", result["message"])
+        queue = store.queue()
+        self.assertFalse(any(str(row.get("id")) == "risk-demo-job" for row in queue))
 
-    def test_confirm_marks_manual_submission_only(self):
-        result = backend.confirm_queue(
-            {"mode": "demo", "ids": ["demo-job-001"], "confirm": "确认可人工投递"}
-        )
+    def test_snapshot_jobs_expose_read_only_risk(self):
+        store = backend.get_store("demo")
+        rows = store.jobs()
+        rows.append({
+            "id": "risk-demo-job-2",
+            "company": "虚构风险有限公司二",
+            "title": "产品助理",
+            "city": "上海",
+            "score": 4.5,
+            "source_channel": "manual_paste",
+            "raw_text": "测试数据：需缴纳押金。",
+        })
+        store.set_jobs(rows)
+        snap = backend.snapshot("demo", {})
+        by_id = {job["id"]: job for job in snap["jobs"]}
+        self.assertEqual(by_id["risk-demo-job-2"]["risk"]["level"], "high")
+        for job in snap["jobs"]:
+            self.assertIn(job["risk"]["level"], ("low", "verify", "high"))
+
+    def test_snapshot_queue_rows_carry_read_only_contact_plan(self):
+        snap = backend.snapshot("demo", {})
+        approved = [row for row in snap["queue"] if row["status"] == "approved"]
+        self.assertTrue(approved)
+        for row in approved:
+            self.assertIn("plan", row)
+            self.assertIn(row["plan"]["today"], (True, False))
+            self.assertTrue(row["plan"]["reason"])
+        ranks = sorted(row["plan"]["rank"] for row in approved if row["plan"]["today"])
+        self.assertEqual(ranks, list(range(1, len(ranks) + 1)))
+        quota = snap["pipeline"]["delivery"]["quota"]
+        self.assertEqual(quota["daily"], backend.DEFAULT_DAILY_CONTACT_QUOTA)
+        self.assertEqual(quota["planned_today"], len(ranks))
+        self.assertLessEqual(quota["planned_today"], quota["remaining"])
+
+    def test_confirm_requires_at_least_one_selected_row(self):
+        with self.assertRaises(backend.ApiError):
+            backend.confirm_queue({"mode": "demo", "ids": []})
+
+    def test_confirm_marks_selected_pending_rows_approved(self):
+        store = backend.get_store("demo")
+        rows = store.queue()
+        for row in rows:
+            row["status"] = "pending"
+        store.set_queue(rows)
+        result = backend.confirm_queue({"mode": "demo", "ids": ["demo-job-001"]})
         self.assertTrue(result["ok"])
         self.assertEqual(result["confirmed"], ["demo-job-001"])
         self.assertIs(result["auto_submit"], False)
         self.assertEqual(result["status"], "ready_for_manual_submission_only")
-        self.assertIn("仍需本人", result["message"])
-        rows = {str(row.get("id")): row for row in backend.get_store("demo").queue()}
+        self.assertIn("复核", result["message"])
+        rows = {str(row.get("id")): row for row in store.queue()}
         self.assertEqual(rows["demo-job-001"]["status"], "approved")
         self.assertEqual(rows["demo-job-002"]["status"], "pending")
 
-
-class GreetingGenerationTests(unittest.TestCase):
     def test_greet_rejects_demo_mode_and_oversized_batches(self):
         with self.assertRaises(backend.ApiError) as ctx:
             backend.start_offerpilot_greet({"mode": "demo", "ids": ["demo-job-001"]})
@@ -1532,7 +1583,6 @@ class HttpServerTests(unittest.TestCase):
             "runOfferPilotPreflight",
             "offerpilot-import",
             "maybeAutoImportCollected",
-            "armManualEnqueue",
             "enqueueJobs",
             "uploadOfferPilotResume",
             "syncCollectResumeUI",
@@ -1542,6 +1592,7 @@ class HttpServerTests(unittest.TestCase):
             "renderQueueGreetings",
             "greetingStatusBadge",
             "updateQueueApprovedSelectionUI",
+            "queueConfirmButton",
             "offerpilot-deliver",
             "openDeliveryPanel",
             "startQueueDelivery",

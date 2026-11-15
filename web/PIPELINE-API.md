@@ -117,6 +117,16 @@ GET /api/pipeline?mode=demo
 
 `GET /api/state?mode=demo` 的 `pipeline` 字段与上面的 `status` 相同，前端直接使用。内嵌后端状态也会出现在 `pipeline.offerpilot`；主工作台岗位 JSON 与 OfferPilot SQLite 岗位池始终分开。
 
+### 2.1 只增字段（岗位、审批队列、发送额度）
+
+以下字段是只读派生值，由 `GET /api/state` 返回，不写入任何本地文件：
+
+- `jobs[].risk`：`{level: "low" | "verify" | "high", signals: [{code, severity, label, evidence}], blocks_queue: bool}`，来自 `tools/job_risk.py`。`level = "high"` 的岗位不能进入审批队列。
+- `queue[].plan`：`{today: bool, rank: int | null, reason: string}`，来自 `tools/quota_planner.py`。只对 `approved` 且尚未发送的行计算。
+- `pipeline.delivery.quota`：`{daily, remaining, planned_today}`。`daily` 为默认每日额度（30），仅用于排序提示；实际上限由内嵌发送器强制。
+
+`POST /api/action` 的 `enqueue` 响应新增 `risk_blocked: string[]`，列出因高风险被拦截的岗位 id（即使带 `allow_low_score` 也会拦截）。
+
 ## 3.1 岗位自动化接口
 
 ```http

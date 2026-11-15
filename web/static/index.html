@@ -109,7 +109,7 @@
       <div class="views" id="views" aria-busy="true">
         <section class="view" id="view-workbench" data-view-panel="workbench" aria-labelledby="workbench-title">
           <h2 class="view-title" id="workbench-title">工作台</h2>
-          <p class="view-lede">主线只有三步：找岗位 → 投递跟进 → 求职准备。先在「找岗位」采集，再到「岗位池」筛选，最后在「审批队列」人工确认；任何环节都不会自动投递。</p>
+          <p class="view-lede">按顺序做四步：1 采集岗位，2 筛选岗位，3 通过岗位，4 回复 HR。采集和评分全自动；只有最后发出招呼语前需要你确认，任何环节都不会自动投递。</p>
           <div class="workbench-quick-actions">
             <button class="button" type="button" data-view-link="collect">开始采集岗位</button>
             <button class="button button-quiet" type="button" data-view-link="jobs">查看岗位池</button>
@@ -208,10 +208,10 @@
         <section class="view" id="view-collect" data-view-panel="collect" aria-labelledby="collect-title" hidden>
           <h2 class="view-title" id="collect-title">采集岗位</h2>
           <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">采集岗位</button>
-            <button class="ui-hub-tab" type="button" data-view="jobs">岗位池</button>
-            <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
-            <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">1 采集</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
           </nav>
           <p class="view-lede">按关键词和城市采集岗位，不会自动投递或发消息。</p>
 
@@ -331,12 +331,12 @@
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
           <h2 class="view-title" id="jobs-title">岗位池</h2>
           <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab" type="button" data-view="collect">采集岗位</button>
-            <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">岗位池</button>
-            <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
-            <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
+            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
           </nav>
-          <p class="view-lede">采集结果会自动进入这里。挑选适合的岗位，点「加入审批队列」；再到上方「审批队列」页签确认哪些可以人工投递。未评分或低于 4.0 的岗位可两步确认后手动入队；上传简历并勾选自动评分后，岗位会按匹配度排序。所有动作只写本机文件，不访问平台。</p>
+          <p class="view-lede">采集到的岗位会自动进入这里，并按你的简历评分。评分达到 4.0 的岗位会自动通过，进入「3 通过」。评分不足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
           <p class="notice notice-accent" id="jobs-empty-hint">还没有岗位？先到 <button class="ui-link-button" type="button" data-view-link="collect">采集岗位</button> 按关键词采集，或在下方手动录入 JD。</p>
 
           <section class="panel" aria-labelledby="jobs-table-title">
@@ -415,18 +415,18 @@
         <section class="view" id="view-queue" data-view-panel="queue" aria-labelledby="queue-title" hidden>
           <h2 class="view-title" id="queue-title">审批队列</h2>
           <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab" type="button" data-view="collect">采集岗位</button>
-            <button class="ui-hub-tab" type="button" data-view="jobs">岗位池</button>
-            <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">审批队列</button>
-            <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
+            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">3 通过</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
           </nav>
-          <p class="view-lede">多选待确认岗位，输入确认语标记为可投递；确认后可生成招呼语并发送。</p>
-          <p class="notice notice-accent" id="queue-policy">发送前都会先给你看一遍文案，需要你再确认一次才会真的发出去。</p>
+          <p class="view-lede">评分达标的岗位已自动通过。这里只需处理手动加入的岗位；「今日安排」显示每天可联系的顺序，超出额度的岗位会顺延。</p>
+          <p class="notice notice-accent" id="queue-policy">真正发送前会再给你看一遍文案，由你确认后才发出。</p>
 
           <section class="panel" aria-labelledby="pending-title">
             <div class="panel-head">
               <div>
-                <h3 id="pending-title">待确认 pending</h3>
+                <h3 id="pending-title">待你确认</h3>
               </div>
               <p class="panel-count" id="queue-pending-count">0 条待确认</p>
             </div>
@@ -435,20 +435,15 @@
               <span class="panel-count" id="queue-selection-count">已选 0 条</span>
             </div>
             <div id="queue-pending-table"></div>
-            <form class="confirm-row" id="confirm-form">
-              <div class="form-field">
-                <label for="queue-confirm">输入确认语「确认可人工投递」</label>
-                <input id="queue-confirm" type="text" autocomplete="off" spellcheck="false" placeholder="确认可人工投递">
-              </div>
-              <button class="button" type="submit" id="queue-confirm-button" disabled>确认可人工投递</button>
-            </form>
-            <p class="hint">确认只改变队列状态；还没有真正发送出去。</p>
+            <div class="queue-toolbar">
+              <button class="button button-small" type="button" id="queue-confirm-button" disabled>通过所选</button>
+            </div>
           </section>
 
           <section class="panel" aria-labelledby="approved-title">
             <div class="panel-head">
               <div>
-                <h3 id="approved-title">已确认 approved</h3>
+                <h3 id="approved-title">已通过，可以回复</h3>
               </div>
               <p class="panel-count" id="queue-approved-count">0 条已确认</p>
             </div>
@@ -484,10 +479,10 @@
         <section class="view" id="view-mail" data-view-panel="mail" aria-labelledby="mail-title" hidden>
           <h2 class="view-title" id="mail-title">HR 回复</h2>
           <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab" type="button" data-view="collect">采集岗位</button>
-            <button class="ui-hub-tab" type="button" data-view="jobs">岗位池</button>
-            <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
-            <button class="ui-hub-tab is-active" type="button" data-view="mail" aria-current="page">HR 回复</button>
+            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="mail" aria-current="page">4 回复</button>
           </nav>
           <p class="view-lede">粘贴邮件内容，用离线规则识别意图、公司与岗位；不连接真实邮箱。识别出明确时间时可生成 .ics。</p>
 
