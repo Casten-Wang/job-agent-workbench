@@ -940,11 +940,15 @@ def _demo_variants() -> list[dict[str, Any]]:
 
 
 def _demo_profile() -> dict[str, Any]:
-    """Obviously fictional demo profile; never a real person's contact data."""
+    """Obviously fictional demo profile, matching demo/demo-resume-002.md.
+
+    Every name, school, company and number here is invented for testing. Contact
+    fields are placeholders, never a real person's details.
+    """
     return normalize_profile({
         "truth_confirmed": True,
         "basic": {
-            "name": "演示用户（虚构演示）",
+            "name": "虚构应聘者乙",
             "phone": "00000000000",
             "email": "demo@example.invalid",
             "city": "上海",
@@ -952,41 +956,59 @@ def _demo_profile() -> dict[str, Any]:
             "links": "https://example.invalid/portfolio",
         },
         "job_intent": {
-            "titles": ["产品经理", "产品助理"],
-            "cities": ["上海", "杭州"],
-            "salary_min": 15000,
-            "salary_max": 25000,
+            "titles": ["AI 产品经理", "产品助理"],
+            "cities": ["上海", "杭州", "北京"],
+            "salary_min": 12000,
+            "salary_max": 20000,
             "job_type": "全职",
-            "availability": "一个月内",
+            "availability": "2027 届校招，2027 年 6 月毕业",
         },
         "education": [{
-            "school": "虚构大学",
-            "major": "信息管理",
+            "school": "虚构理工大学",
+            "major": "信息管理与信息系统",
             "degree": "本科",
-            "start": "2018-09",
-            "end": "2022-06",
-            "summary": "演示数据，仅用于验证个人资料模块。",
+            "start": "2023-09",
+            "end": "2027-06",
+            "summary": "主修数据库原理、统计学、用户研究方法、产品设计基础、Python 程序设计；自学线性代数与概率论、机器学习入门。",
         }],
-        "experiences": [{
-            "company": "虚构科技有限公司",
-            "title": "产品实习生",
-            "start": "2021-07",
-            "end": "2022-05",
-            "summary": "演示经历：参与需求分析、用户调研与产品原型整理。",
-        }],
-        "projects": [{
-            "name": "虚构官网改版",
-            "role": "产品助理",
-            "start": "2021-09",
-            "end": "2022-03",
-            "summary": "演示项目：整理流程图、竞品资料与用户体验反馈。",
-        }],
+        "experiences": [
+            {
+                "company": "虚构智能科技有限公司（A）",
+                "title": "AI 产品经理实习生",
+                "start": "2025-09",
+                "end": "2026-03",
+                "summary": "负责智能内容审核工作台的产品设计，结合图像分类与文字识别降低人工审核成本。访谈 8 名审核员并归纳 4 类痛点；通过 A/B 测试选定模型方案；输出 PRD，上线后机审覆盖率提升至 90%，人工审核效率提升 40%，获部门季度创新奖。",
+            },
+            {
+                "company": "虚构科技有限公司（B）",
+                "title": "AI 产品助理实习生",
+                "start": "2025-02",
+                "end": "2025-08",
+                "summary": "参与 AI 面试官产品设计，参与 5 场 HR 访谈并整理 12 项需求，设计候选人端、面试官与管理后台流程。单场面试耗时由 40 分钟降到 20 分钟，评估报告自动生成率达到 90%，需求澄清时间由 3 天缩短到 1 天。",
+            },
+        ],
+        "projects": [
+            {
+                "name": "虚构英语学习浏览器插件",
+                "role": "产品设计 / MVP",
+                "start": "2025-09",
+                "end": "2025-09",
+                "summary": "访谈 5 名英语学习者并完成竞品分析，用提示词工程与 AI coding 工具搭建 MVP；组织 10 人参与 A/B 实验，学习步骤减少 60%。",
+            },
+            {
+                "name": "虚构角色聊天 Agent 搭建",
+                "role": "RAG / 提示词工程",
+                "start": "2025-08",
+                "end": "2025-08",
+                "summary": "搭建带检索增强的角色聊天 Agent 并设计评测指标，召回率提升 30%，检索相关性提升 25%。",
+            },
+        ],
         "skills": {
-            "tools": ["Axure", "Visio", "Excel", "PowerPoint"],
-            "strengths": ["需求分析", "用户调研", "数据分析"],
+            "tools": ["Figma", "Axure", "墨刀", "XMind", "SQL", "Excel", "Python", "AI coding 工具"],
+            "strengths": ["需求分析", "PRD 撰写", "用户访谈", "竞品分析", "RAG 流程与基础评测"],
         },
-        "summary": "虚构演示资料：信息管理背景，关注需求分析与用户体验，正在寻找产品方向的机会。",
-        "excluded_terms": ["外包", "驻场"],
+        "summary": "信息管理背景的本科生，做过两段 AI 方向产品实习与 0-1 的 MVP，习惯先访谈、再出方案、用数据复盘，能与研发、测试对齐需求与排期。",
+        "excluded_terms": ["外包", "驻场", "培训贷"],
     })
 
 

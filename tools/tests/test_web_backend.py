@@ -13,6 +13,7 @@ import base64
 import datetime as dt
 import http.client
 import json
+import re
 import socket
 import sys
 import threading
@@ -558,6 +559,22 @@ class DemoSeedTests(DemoDataTestCase):
         self.assertEqual(profile["completeness"]["level"], "ready")
         self.assertNotIn("{{", json.dumps(profile, ensure_ascii=False))
         self.assertIn("Axure", profile["skills"]["tools"])
+
+    def test_demo_profile_is_rich_and_matches_demo_resume(self):
+        profile = backend.snapshot("demo")["profile"]
+        self.assertEqual(profile["completeness"]["percent"], 100)
+        self.assertEqual(len(profile["experiences"]), 2)
+        self.assertEqual(len(profile["projects"]), 2)
+        self.assertGreaterEqual(len(profile["skills"]["tools"]), 5)
+        self.assertGreaterEqual(len(profile["skills"]["strengths"]), 3)
+        self.assertEqual(profile["basic"]["name"], "虚构应聘者乙")
+        self.assertEqual(profile["education"][0]["school"], "虚构理工大学")
+        # Fictional-only guard: no real phone-like number or non-example email.
+        serialized = json.dumps(profile, ensure_ascii=False)
+        self.assertIsNone(re.search(r"1[3-9]\d{9}", serialized))
+        self.assertNotIn("@qq.com", serialized)
+        self.assertNotIn("@163.com", serialized)
+        self.assertNotIn("@gmail.com", serialized)
 
     def test_save_profile_normalizes_persists_and_feeds_screening(self):
         try:
