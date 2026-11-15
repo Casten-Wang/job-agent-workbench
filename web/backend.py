@@ -1695,6 +1695,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
     added: list[str] = []
     duplicates = 0
     unscored = 0
+    backfilled = 0
     for index, job_id in enumerate(ids, start=1):
         source = by_id.get(job_id)
         if source is None:
@@ -1720,18 +1721,31 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
         fingerprint = _job_fingerprint(job)
         if fingerprint in existing:
             duplicates += 1
+            # A job imported before OfferPilot scored it keeps score=None forever
+            # unless we backfill it here. Only fill an empty score; never overwrite.
+            if score is not None:
+                for row in rows:
+                    if _job_fingerprint(row) == fingerprint and row.get("score") is None:
+                        row["score"] = score
+                        row["score_raw"] = raw_score
+                        row["score_scale"] = record["score_scale"]
+                        backfilled += 1
+                        break
             continue
         existing.add(fingerprint)
         rows.append(job)
         added.append(str(job["id"]))
     store.set_jobs(rows)
-    store.log("导入采集岗位", f"新增 {len(added)} 条，重复 {duplicates} 条，未评分 {unscored} 条")
+    store.log("导入采集岗位", f"新增 {len(added)} 条，重复 {duplicates} 条，未评分 {unscored} 条，回填评分 {backfilled} 条")
     message = f"已导入 {len(added)} 条到岗位池"
     if duplicates:
         message += f"，跳过 {duplicates} 条重复记录"
+    if backfilled:
+        message += f"；{backfilled} 条已有记录补上了评分"
     if unscored:
         message += f"；其中 {unscored} 条没有评分，不会进入审批队列"
-    return {"ok": True, "added": added, "duplicates": duplicates, "unscored": unscored, "message": message}
+    return {"ok": True, "added": added, "duplicates": duplicates, "unscored": unscored, "backfilled": backfilled, "message": message}
+
 
 
 def import_offerpilot_jobs(payload: dict[str, Any]) -> dict[str, Any]:

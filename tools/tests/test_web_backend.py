@@ -415,6 +415,29 @@ class DemoSeedTests(DemoDataTestCase):
         self.assertEqual(duplicate["added"], [])
         self.assertEqual(duplicate["duplicates"], 1)
 
+    def test_offerpilot_reimport_backfills_score_on_existing_unscored_row(self):
+        store = backend.get_store("demo")
+        base = {
+            "title": "产品经理",
+            "company": "虚构回填公司",
+            "city": "上海",
+            "salary": "15-20k",
+            "created_at": "2026-11-15T10:00:00+08:00",
+        }
+        # First import happens before OfferPilot has scored the job.
+        backend._import_offerpilot_records(store, [dict(base, id="op-backfill-1", score=0)], ["op-backfill-1"])
+        before = next(job for job in store.jobs() if job.get("offerpilot_id") == "op-backfill-1")
+        self.assertIsNone(before["score"])
+
+        # Re-import after scoring: the existing row must pick up the score.
+        result = backend._import_offerpilot_records(store, [dict(base, id="op-backfill-1", score=61)], ["op-backfill-1"])
+        self.assertEqual(result["added"], [])
+        self.assertEqual(result["duplicates"], 1)
+        after = next(job for job in store.jobs() if job.get("offerpilot_id") == "op-backfill-1")
+        self.assertEqual(after["score"], 3.4)
+        self.assertEqual(after["score_raw"], 61)
+        self.assertEqual(len([job for job in store.jobs() if job.get("offerpilot_id") == "op-backfill-1"]), 1)
+
     def test_offerpilot_import_rejects_demo_and_unknown_ids(self):
         with self.assertRaises(backend.ApiError):
             backend.import_offerpilot_jobs({"data_mode": "demo", "ids": ["op-test-1"]})

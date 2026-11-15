@@ -77,6 +77,12 @@ def load_backend() -> Any:
         base_dir = _ensure_user_runtime()
         try:
             server.set_base_dir(base_dir)
+            # set_base_dir only rebinds the server's own paths. Many vendored modules
+            # call get_db() with no argument, which falls back to db.DB_PATH (a
+            # cwd-relative ./data/offerpilot.db). Pin it to the runtime database so
+            # scoring and collection read and write the same file.
+            from offerpilot import db as offerpilot_db  # type: ignore
+            offerpilot_db.DB_PATH = base_dir / "data" / "offerpilot.db"
         except Exception as exc:  # pragma: no cover - depends on local data
             _backend_error = f"岗位自动化 初始化失败：{type(exc).__name__}"
             raise OfferPilotUnavailable(_backend_error) from exc
