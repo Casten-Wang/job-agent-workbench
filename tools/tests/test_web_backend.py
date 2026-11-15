@@ -18,7 +18,7 @@ import sys
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -453,6 +453,27 @@ class DemoSeedTests(DemoDataTestCase):
         self.assertEqual(result["missing"], 1)
         selected = import_records.call_args.args[2]
         self.assertEqual(selected, ["abc:def/中文?x=1"])
+
+    def test_offerpilot_collect_and_full_require_uploaded_resume(self):
+        runtime = backend.offerpilot_runtime
+        for mode in ("collect", "full"):
+            fake = {
+                "offerpilot": MagicMock(),
+                "offerpilot.config": MagicMock(load_config=lambda _path: {}),
+                "offerpilot.web": MagicMock(),
+                "offerpilot.web.preflight": MagicMock(),
+            }
+            with self.subTest(mode=mode), patch.dict("sys.modules", fake), \
+                    patch.object(runtime, "load_backend", return_value=MagicMock()), \
+                    patch.object(runtime, "_resume_info", return_value={"available": False}), \
+                    patch.object(runtime, "_task_options", return_value=None):
+                result = runtime.preflight(mode, None)
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["checks"][0]["id"], "resume_required")
+                with self.assertRaises(ValueError) as ctx:
+                    runtime.start_task(mode, None)
+                self.assertIn("上传评分简历", str(ctx.exception))
+        self.assertIsNone(runtime._resume_blocker(object(), "monitor", {}))
 
     def test_offerpilot_resume_upload_validates_and_saves(self):
         with self.assertRaises(backend.ApiError):

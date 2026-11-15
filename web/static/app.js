@@ -84,7 +84,7 @@ const OFFERPILOT_PACE = {
   fast: { label: '快速', multiplier: 1.0 }
 };
 const OFFERPILOT_MODE_HINTS = {
-  collect: '只采集岗位，不评分、不生成招呼语、不投递。',
+  collect: '采集岗位并按你的简历评分，不投递、不发消息。',
   monitor: '只检查已有会话中的 HR 回复，不采集新岗位、不发送消息。',
   full: '采集后调用 AI 评分并生成招呼语；发送仍会停在人工确认门。'
 };
@@ -1954,7 +1954,7 @@ function renderCollectSummary() {
       const high = (5 * pace.multiplier).toFixed(1);
       text += ` 将在 BOSS 直聘搜索「${options.keywords.join('、')}」，城市「${options.cities.join('、')}」，每个关键词最多 ${options.max_pages} 页。`;
       text += ` 节奏「${pace.label}」：每次翻页/读详情前随机等待 ${low}–${high} 秒。`;
-      text += options.auto_score ? ' 采集后会调用 AI 评分。' : ' 采集后不评分。';
+      text += ' 采集后会按你的简历自动评分。';
     }
   }
   dom.collectSummary.textContent = text;
@@ -2029,15 +2029,14 @@ function syncCollectResumeUI() {
   if (dom.collectResumeStatus) {
     dom.collectResumeStatus.textContent = available
       ? `已上传：${resume.filename || '简历'}${resume.size_label ? `（${resume.size_label}）` : ''}。本次采集会默认评分。`
-      : '尚未上传；本次采集不会评分，岗位会以「未评分」导入。';
+      : '必须先上传简历才能开始采集（用于给岗位评分、生成招呼语）。支持 .md / .docx / .pdf。';
+    dom.collectResumeStatus.classList.toggle('resume-missing', !available);
   }
   if (dom.collectAutoScore) {
-    dom.collectAutoScore.disabled = !available;
-    if (!available) {
-      dom.collectAutoScore.checked = false;
-    } else if (!state.offerpilotAutoScoreTouched) {
-      dom.collectAutoScore.checked = true;
-    }
+    // Scoring is no longer optional: a resume is required to start collect/full.
+    dom.collectAutoScore.checked = available;
+    const scoreLabel = dom.collectAutoScore.closest('label');
+    if (scoreLabel) scoreLabel.hidden = true;
   }
 }
 
@@ -2123,9 +2122,8 @@ function renderOfferPilot(boss) {
       ? data.resume
       : { available: false };
     syncCollectResumeUI();
-    const scoreReady = aiReady && Boolean(state.offerpilotResume.available);
-    dom.collectAutoScore.disabled = !scoreReady;
-    if (!scoreReady) dom.collectAutoScore.checked = false;
+    dom.collectAutoScore.checked = Boolean(state.offerpilotResume.available);
+    state.offerpilotAiReady = aiReady;
   }
   applyOfferPilotPrefs(data);
   state.offerpilotTaskActive = Boolean(data.task);
@@ -2159,16 +2157,25 @@ function syncOfferPilotPoll(active) {
   }
 }
 
+function collectResumeMissing() {
+  const mode = collectMode();
+  const needsResume = mode === 'collect' || mode === 'full';
+  return needsResume && !(state.offerpilotResume && state.offerpilotResume.available);
+}
+
 function syncOfferPilotStartState() {
   if (!dom.offerpilotStart) return;
   const preflightReady = Boolean(state.offerpilotPreflight && state.offerpilotPreflight.ok === true);
-  dom.offerpilotStart.disabled = !state.offerpilotCanStart
+  const resumeMissing = collectResumeMissing();
+  dom.offerpilotStart.disabled = resumeMissing
+    || !state.offerpilotCanStart
     || state.offerpilotTaskActive
     || !dom.offerpilotRisk.checked
     || !dom.offerpilotConfirm.checked
     || !preflightReady;
   dom.offerpilotStart.title = state.offerpilotTaskActive
     ? '已有任务正在运行；请先停止或等待结束'
+    : resumeMissing ? '请先上传评分简历'
     : preflightReady ? '' : '先点击「检查环境」并处理阻塞项';
 }
 

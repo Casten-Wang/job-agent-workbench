@@ -495,6 +495,8 @@ def _task_options(mode: str, config: dict[str, Any], raw_options: dict[str, Any]
     options = normalize_collection_options(config, raw_options)
     pace = str((raw_options or {}).get("pace") or "cautious").strip().lower()
     options["pace"] = pace if pace in PACE_MULTIPLIERS else "cautious"
+    # Resume is a hard prerequisite for collect/full, so scoring is always on.
+    options["auto_score"] = True
     if mode == "full":
         collection_only = [
             platform for platform in options["platform_order"]
@@ -546,6 +548,16 @@ def _options_summary(mode: str, options: dict[str, Any] | None) -> dict[str, Any
     }
 
 
+RESUME_REQUIRED_MESSAGE = "请先上传评分简历（.md / .docx / .pdf）；没有简历无法评分，也无法生成招呼语"
+
+
+def _resume_blocker(server: Any, mode: str, config: dict[str, Any]) -> str | None:
+    """Collect/full tasks need an uploaded resume; monitor does not."""
+    if mode not in {"collect", "full"}:
+        return None
+    return None if _resume_info(server, config).get("available") else RESUME_REQUIRED_MESSAGE
+
+
 def preflight(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run the same pre-start checks as ``start_task`` without starting anything."""
     if mode not in TASK_MODES:
@@ -565,6 +577,21 @@ def preflight(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str,
             "summary": _options_summary(mode, None),
         }
     summary = _options_summary(mode, options)
+    resume_blocker = _resume_blocker(server, mode, config)
+    if resume_blocker:
+        return {
+            "ok": False,
+            "checks": [{
+                "id": "resume_required",
+                "title": "评分简历",
+                "status": "error",
+                "message": resume_blocker,
+                "detail": "在上方「评分简历」处上传后，再检查环境。",
+                "action": "resume",
+            }],
+            "messages": [resume_blocker],
+            "summary": summary,
+        }
     # A running task owns the browser lock.  The upstream check reports that as
     # a generic "browser connection failed", so answer with the real reason
     # before running any browser diagnostics.
@@ -617,6 +644,9 @@ def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str
     from offerpilot.web.preflight import collect_preflight_checks, error_messages  # type: ignore
 
     config = load_config(server.CONFIG_PATH)
+    resume_blocker = _resume_blocker(server, mode, config)
+    if resume_blocker:
+        raise ValueError(resume_blocker)
     options = _task_options(mode, config, raw_options)
     checks = collect_preflight_checks(mode, config, options)
     messages = [*server._preflight_messages(mode, config, options), *error_messages(checks)]

@@ -1754,3 +1754,5 @@ textarea:focus-visible {
     align-items: flex-start;
   }
 }
+
+#collect-resume-status.resume-missing { color: var(--danger, #b3261e); font-weight: 600; }
