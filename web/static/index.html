@@ -213,13 +213,12 @@
             <button class="ui-hub-tab" type="button" data-view="queue">审批队列</button>
             <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
           </nav>
-          <p class="view-lede">按关键词和城市采集 BOSS 岗位。任务完成后会自动把新岗位导入岗位池；再到「岗位池」挑选，加入审批队列。不会自动投递或发送消息。</p>
+          <p class="view-lede">按关键词和城市采集岗位，不会自动投递或发消息。</p>
 
           <section class="panel offerpilot-panel" aria-labelledby="offerpilot-title">
             <div class="panel-head">
               <div>
                 <h3 id="offerpilot-title">BOSS 直聘 · 岗位采集</h3>
-                <p class="panel-note">填条件 → 检查环境 → 启动。任务只在本机执行。</p>
               </div>
               <div class="offerpilot-head-actions">
                 <span class="badge badge-neutral" id="offerpilot-connection">未检测</span>
@@ -270,8 +269,8 @@
               </div>
               <label class="checkbox-label" data-collect-search><input type="checkbox" id="collect-auto-score"> 采集后自动评分（有简历时默认勾选）</label>
               <div class="collect-summary" id="collect-summary" aria-live="polite"></div>
-              <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk"> 我已了解平台自动化可能导致账号封禁</label>
-              <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认在本机启动该任务</label>
+              <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk"> 我知道自动化操作可能被平台限制账号</label>
+              <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
               <div class="form-actions">
                 <button class="button button-quiet" type="button" id="collect-preflight">检查环境</button>
                 <button class="button" type="submit" id="offerpilot-start" disabled>开始采集</button>
@@ -421,14 +420,13 @@
             <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">审批队列</button>
             <button class="ui-hub-tab" type="button" data-view="mail">HR 回复</button>
           </nav>
-          <p class="view-lede">岗位先进入 pending；只有输入完整确认语后才标记 approved。approved 仍不等于已投递。</p>
-          <p class="notice notice-accent" id="queue-policy">approved 仅表示可人工投递，不会自动提交。已确认岗位可以生成招呼语预览；生成只调用本机 AI，不打开平台页面、不发送消息。</p>
+          <p class="view-lede">多选待确认岗位，输入确认语标记为可投递；确认后可生成招呼语并发送。</p>
+          <p class="notice notice-accent" id="queue-policy">发送前都会先给你看一遍文案，需要你再确认一次才会真的发出去。</p>
 
           <section class="panel" aria-labelledby="pending-title">
             <div class="panel-head">
               <div>
                 <h3 id="pending-title">待确认 pending</h3>
-                <p class="panel-note">多选后输入确认语；低分或重复记录不会入队。</p>
               </div>
               <p class="panel-count" id="queue-pending-count">0 条待确认</p>
             </div>
@@ -444,14 +442,13 @@
               </div>
               <button class="button" type="submit" id="queue-confirm-button" disabled>确认可人工投递</button>
             </form>
-            <p class="hint">确认只改变队列状态；投递仍需本人到平台手动完成。</p>
+            <p class="hint">确认只改变队列状态；还没有真正发送出去。</p>
           </section>
 
           <section class="panel" aria-labelledby="approved-title">
             <div class="panel-head">
               <div>
                 <h3 id="approved-title">已确认 approved</h3>
-                <p class="panel-note">approved 只是人工可投递标记，不是已投递记录。</p>
               </div>
               <p class="panel-count" id="queue-approved-count">0 条已确认</p>
             </div>
@@ -474,11 +471,11 @@
                 <label for="queue-delivery-confirm">输入确认语</label>
                 <input id="queue-delivery-confirm" type="text" autocomplete="off" spellcheck="false">
               </div>
-              <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk"> 我已了解平台自动化可能导致账号封禁</label>
+              <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk"> 我知道自动化操作可能被平台限制账号</label>
               <div class="queue-delivery-actions">
                 <button class="button" type="button" id="queue-delivery-start" disabled>开始发送</button>
               </div>
-              <p class="hint">发送受时间窗口 09:00–16:00、每日上限、随机间隔与平台风控锁约束；验证码、限流或连续错误会立即停止。</p>
+              <p class="hint">发送时间固定在 09:00–16:00，每天有上限，中间会随机停顿；遇到验证码或限流会立即停止。</p>
             </div>
             <div class="queue-delivery-results" id="queue-delivery-results"></div>
           </section>
