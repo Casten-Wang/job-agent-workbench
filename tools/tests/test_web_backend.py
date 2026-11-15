@@ -760,6 +760,24 @@ class ApprovalGateTests(DemoDataTestCase):
         queue = store.queue()
         self.assertFalse(any(str(row.get("id")) == "risk-demo-job" for row in queue))
 
+    def test_unscored_job_is_reported_not_silently_dropped(self):
+        store = backend.get_store("demo")
+        rows = store.jobs()
+        rows.append({
+            "id": "unscored-demo-job",
+            "company": "虚构未评分有限公司",
+            "title": "产品助理",
+            "city": "上海",
+            "source_channel": "manual_paste",
+            "raw_text": "测试数据：普通产品助理岗位。",
+        })
+        store.set_jobs(rows)
+        result = backend.enqueue({"mode": "demo", "ids": ["unscored-demo-job"]})
+        self.assertEqual(result["unscored"], ["unscored-demo-job"])
+        self.assertIn("未评分", result["message"])
+        self.assertTrue(result["message"].startswith("没有岗位入队"))
+        self.assertFalse(any(str(row.get("id")) == "unscored-demo-job" for row in store.queue()))
+
     def test_snapshot_jobs_expose_read_only_risk(self):
         store = backend.get_store("demo")
         rows = store.jobs()

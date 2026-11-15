@@ -2275,7 +2275,10 @@ async function runOfferPilotPreflight(button) {
     state.offerpilotPreflight = data;
     state.offerpilotPreflightKey = key;
     renderCollectChecks(data);
-    if (data.ok) setStatus('环境检查通过，可以启动。', 'ok');
+    if (data.ok) {
+      if (collectResumeMissing()) setStatus('环境检查通过，但还需要先上传评分简历才能启动。', 'warn');
+      else setStatus('环境检查通过，可以启动。', 'ok');
+    }
     else setStatus(`环境检查未通过：${(data.messages && data.messages[0]) || '请查看检查项'}`, 'warn');
   } catch (error) {
     const failure = { ok: false, checks: [], messages: [friendlyError(error)] };

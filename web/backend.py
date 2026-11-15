@@ -2213,6 +2213,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     jobs = {str(job.get("id")): job for job in store.jobs()}
     candidates = []
     risk_blocked: list[str] = []
+    unscored: list[str] = []
     risk_map = _job_risk_map(list(jobs.values()))
     for job_id in ids:
         job = jobs.get(job_id)
@@ -2224,6 +2225,8 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         score = _score(job)
         if score is None and not allow_low:
+            # 未评分岗位需要用户明确手动加入；这里记下来，避免被静默丢弃。
+            unscored.append(job_id)
             continue
         candidates.append({
             "id": job_id,
@@ -2252,14 +2255,17 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             result["count"] = len(approval_queue.load_queue(store.files["queue"]))
     result["approved"] = approved
     result["risk_blocked"] = risk_blocked
+    result["unscored"] = unscored
     store.log("加入审批队列", f"评分达标自动通过 {len(approved)} 条，手动加入 {len(manual)} 条；未入队 {len(result['dropped']) + len(result['duplicate'])} 条")
-    message = "已进入审批队列"
+    message = "已进入审批队列" if (result["accepted"] or result["duplicate"]) else "没有岗位入队"
     if approved:
         message = f"{len(approved)} 条评分达标，已自动通过"
     if manual:
         message += f"；{len(manual)} 条评分不足，已按你的选择手动加入（标记为已通过）"
     if risk_blocked:
         message += f"；{len(risk_blocked)} 条疑似高风险岗位（收费/承诺类），已拦截不入队"
+    if unscored:
+        message += f"；{len(unscored)} 条未评分岗位未入队，需要你点「手动加入」"
     return {"ok": True, **result, "message": message}
 
 
