@@ -14,7 +14,9 @@ import datetime as dt
 import http.client
 import json
 import re
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -671,6 +673,157 @@ class DemoSeedTests(DemoDataTestCase):
             backend.ingest_pipeline_event({"mode": "demo", "stage": "send", "status": "delivered"})
 
 
+class JobsDeleteTests(DemoDataTestCase):
+    """delete-jobs: soft delete from the job pool (jobs.json keeps the record)."""
+
+    @staticmethod
+    def _extra_job(job_id: str, company: str) -> dict:
+        return {
+            "id": job_id,
+            "company": company,
+            "title": "产品助理",
+            "city": "上海",
+            "score": 4.8,
+            "source_channel": "manual_paste",
+            "raw_text": "测试数据：普通产品助理岗位。",
+        }
+
+    def test_delete_unqueued_job_hides_it_but_keeps_the_record(self):
+        store = backend.get_store("demo")
+        rows = store.jobs()
+        rows.append(self._extra_job("del-plain-job", "虚构删除有限公司"))
+        store.set_jobs(rows)
+        self.assertIn("del-plain-job", {job["id"] for job in backend.snapshot("demo")["jobs"]})
+        before = backend.snapshot("demo")["kpis"]["jobs"]
+
+        result = backend.ACTIONS["delete-jobs"]({"mode": "demo", "ids": ["del-plain-job"]})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["deleted"], 1)
+        self.assertEqual(result["skipped"], [])
+        self.assertIn("已删除 1 条", result["message"])
+
+        snap = backend.snapshot("demo")
+        self.assertNotIn("del-plain-job", {job["id"] for job in snap["jobs"]})
+        self.assertEqual(snap["kpis"]["jobs"], before - 1)
+        self.assertNotIn("del-plain-job", {job["id"] for job in store.jobs()})
+        # Soft delete: the record is still on disk, flagged with deleted_at.
+        kept = next(job for job in store.all_jobs() if job["id"] == "del-plain-job")
+        self.assertTrue(kept["deleted_at"])
+        # A deleted job can no longer be queued.
+        queued = backend.enqueue({"mode": "demo", "ids": ["del-plain-job"]})
+        self.assertEqual(queued["accepted"], [])
+        self.assertTrue(any("删除岗位" in row["action"] for row in store.activity()))
+
+    def test_approved_and_delivered_jobs_are_skipped_with_reason(self):
+        store = backend.get_store("demo")
+        # demo-job-001 is approved in the seeded queue.
+        rows = store.jobs()
+        rows.append(self._extra_job("del-delivered-job", "虚构已发送有限公司"))
+        rows.append(self._extra_job("del-pending-job", "虚构待处理有限公司"))
+        store.set_jobs(rows)
+        store.set_deliveries([{
+            "batch_id": "dlv-test",
+            "status": "completed",
+            "items": [{"job_id": "del-delivered-job", "status": "sent"}],
+        }])
+        queue = store.queue()
+        queue.append({
+            "id": "del-pending-job", "score": 4.1, "company": "虚构待处理有限公司",
+            "title": "产品助理", "status": "pending", "Source_Channel": "manual_paste",
+        })
+        store.set_queue(queue)
+
+        result = backend.delete_jobs({
+            "mode": "demo",
+            "ids": ["demo-job-001", "del-delivered-job", "del-pending-job", "no-such-job"],
+        })
+        self.assertEqual(result["deleted"], 1)
+        reasons = {item["id"]: item["reason"] for item in result["skipped"]}
+        self.assertEqual(reasons["demo-job-001"], "approved")
+        self.assertEqual(reasons["del-delivered-job"], "delivered")
+        self.assertEqual(reasons["no-such-job"], "not_found")
+        self.assertIn("2 条因已通过或已发送未删除", result["message"])
+        visible = {job["id"] for job in store.jobs()}
+        self.assertIn("demo-job-001", visible)
+        self.assertIn("del-delivered-job", visible)
+        self.assertNotIn("del-pending-job", visible)
+        # Pending queue row is removed together with the job; approved row stays.
+        queue_ids = {str(row.get("id")) for row in store.queue()}
+        self.assertNotIn("del-pending-job", queue_ids)
+        self.assertIn("demo-job-001", queue_ids)
+
+    def test_deleted_job_is_not_revived_by_reimport(self):
+        store = backend.get_store("demo")
+        record = {
+            "id": "op-del-1", "title": "AI 产品经理", "company": "虚构复活测试公司",
+            "city": "北京", "salary": "20-30k", "score": 80,
+        }
+        first = backend._import_offerpilot_records(store, [record], ["op-del-1"])
+        self.assertEqual(len(first["added"]), 1)
+        job_id = first["added"][0]
+        deleted = backend.delete_jobs({"mode": "demo", "ids": [job_id]})
+        self.assertEqual(deleted["deleted"], 1)
+        self.assertNotIn(job_id, {job["id"] for job in store.jobs()})
+
+        again = backend._import_offerpilot_records(store, [record], ["op-del-1"])
+        self.assertEqual(again["added"], [])
+        self.assertEqual(again["duplicates"], 1)
+        self.assertNotIn(job_id, {job["id"] for job in store.jobs()})
+        self.assertEqual(len([job for job in store.all_jobs() if job.get("offerpilot_id") == "op-del-1"]), 1)
+
+        # Other writers keep soft-deleted records and treat them as duplicates.
+        text = (
+            "测试数据：复活测试\n公司：虚构手动复活公司\n岗位：产品经理\n城市：上海\n"
+            "来源渠道：manual_paste\n发布时间：2026-11-14\n记录类型：JD\n职位描述：测试数据。\n"
+        )
+        parsed = backend.parse_jd({"mode": "demo", "text": text, "id": "del-manual-jd"})
+        self.assertTrue(parsed["ok"])
+        backend.delete_jobs({"mode": "demo", "ids": [parsed["job"]["id"]]})
+        second = backend.parse_jd({"mode": "demo", "text": text, "id": "del-manual-jd"})
+        self.assertFalse(second["ok"])
+        self.assertTrue(second["duplicate"])
+        self.assertIn(parsed["job"]["id"], {job["id"] for job in store.all_jobs()})
+
+    def test_delete_validates_ids(self):
+        for ids in (None, [], "demo-job-001", [1], [""], ["  "], [f"job-{i}" for i in range(101)]):
+            with self.subTest(ids=ids):
+                with self.assertRaises(backend.ApiError):
+                    backend.delete_jobs({"mode": "demo", "ids": ids})
+        with self.assertRaises(backend.ApiError):
+            backend.delete_jobs({"mode": "other", "ids": ["demo-job-001"]})
+        # Exactly 100 ids is accepted (unknown ids are reported as not_found).
+        result = backend.delete_jobs({"mode": "demo", "ids": [f"job-{i}" for i in range(100)]})
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(len(result["skipped"]), 100)
+
+    def test_demo_and_user_modes_are_isolated(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(backend, "WEB_DIR", Path(tmp)):
+                user_store = backend.Store("user")  # data dir lives under tmp, never web/data/user
+            demo_store = backend.get_store("demo")
+            user_store.set_jobs([self._extra_job("shared-id", "虚构隔离有限公司")])
+            demo_rows = demo_store.jobs()
+            demo_rows.append(self._extra_job("shared-id", "虚构隔离有限公司"))
+            demo_store.set_jobs(demo_rows)
+
+            stores = {"demo": demo_store, "user": user_store}
+            with patch.object(backend, "get_store", side_effect=lambda mode, seed_if_empty=True: stores[mode]):
+                result = backend.delete_jobs({"mode": "user", "ids": ["shared-id"]})
+                self.assertEqual(result["deleted"], 1)
+                self.assertEqual(user_store.jobs(), [])
+                self.assertIn("shared-id", {job["id"] for job in demo_store.jobs()})
+
+                result = backend.delete_jobs({"mode": "demo", "ids": ["shared-id"]})
+                self.assertEqual(result["deleted"], 1)
+                self.assertNotIn("shared-id", {job["id"] for job in demo_store.jobs()})
+                self.assertEqual(len(user_store.all_jobs()), 1)
+
+    def test_delete_jobs_is_registered_and_served_over_http_action_table(self):
+        self.assertIs(backend.ACTIONS["delete-jobs"], backend.delete_jobs)
+
+
 class DateFilterTests(unittest.TestCase):
     @staticmethod
     def _fixtures():
@@ -731,6 +884,7 @@ class ApprovalGateTests(DemoDataTestCase):
             "mode": "demo",
             "ids": ["demo-job-003"],
             "allow_low_score": True,
+            "override_reason": "值得沟通，人工判断",
         })
         self.assertIn("demo-job-003", manual["manual"])
         self.assertNotIn("demo-job-003", manual["dropped"], "手动入队的岗位不应再算作未入队")
@@ -776,7 +930,12 @@ class ApprovalGateTests(DemoDataTestCase):
             "raw_text": "测试数据：入职需缴纳培训费，包就业。",
         })
         store.set_jobs(rows)
-        result = backend.enqueue({"mode": "demo", "ids": ["risk-demo-job"], "allow_low_score": True})
+        result = backend.enqueue({
+            "mode": "demo",
+            "ids": ["risk-demo-job"],
+            "allow_low_score": True,
+            "override_reason": "值得沟通，人工判断",
+        })
         self.assertEqual(result["risk_blocked"], ["risk-demo-job"])
         self.assertEqual(result["accepted"], [])
         self.assertIn("拦截", result["message"])
@@ -1602,10 +1761,10 @@ class HttpServerTests(unittest.TestCase):
             'id="queue-send-greetings"',
             'id="queue-greetings"',
             'id="queue-delivery-panel"',
-            'id="queue-delivery-confirm"',
             'id="queue-delivery-risk"',
             'id="queue-delivery-start"',
             'id="queue-delivery-results"',
+            'id="jobs-override-reason"',
             'id="view-push"',
             'id="view-resume"',
             "/api/doc/pipeline-api",
@@ -1658,7 +1817,7 @@ class HttpServerTests(unittest.TestCase):
             "deliveryStatusBadge",
             "offerpilot-stop",
             "offerpilot.importedTasks",
-            "filterBar.hidden = name !== 'workbench'",
+            "renderWorkbenchNextStep",
             "collectProfileForm",
             "save-profile",
             "import-profile-cv",
@@ -1666,6 +1825,28 @@ class HttpServerTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, script)
+
+    def test_workbench_shows_one_next_step_and_drops_unused_filters(self):
+        status, _, raw = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        html = raw.decode("utf-8", "replace")
+        self.assertIn('id="workbench-next-text"', html)
+        for removed in (
+            'id="filter-period"',
+            'id="filter-channel"',
+            'id="filter-state"',
+            'class="filter-bar"',
+            'id="scope-line"',
+        ):
+            with self.subTest(removed=removed):
+                self.assertNotIn(removed, html)
+        status, _, raw = self.request("GET", "/app.js")
+        self.assertEqual(status, 200)
+        script = raw.decode("utf-8", "replace")
+        for marker in ("renderWorkbenchNextStep", "workbenchNextText"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, script)
+        self.assertNotIn("filterPeriod", script)
 
     def test_profile_endpoint_returns_structured_profile(self):
         status, headers, raw = self.request("GET", "/api/profile?mode=demo")
@@ -1677,6 +1858,23 @@ class HttpServerTests(unittest.TestCase):
         self.assertIn("completeness", data["profile"])
         self.assertIs(data["guarantees"]["auto_submit"], False)
         self.assertIs(data["guarantees"]["contact_fields_in_drafts"], False)
+
+    def test_profile_endpoint_reports_saved_and_cv_flags(self):
+        status, _, raw = self.request("GET", "/api/profile?mode=demo")
+        self.assertEqual(status, 200)
+        profile = json.loads(raw.decode("utf-8"))["profile"]
+        self.assertIs(profile["saved"], True)
+        self.assertIs(profile["cv_available"], False)
+
+    def test_profile_page_wires_cv_prefill_banner_and_draft_save_state(self):
+        html = (WEB_DIR / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="profile-draft-banner"', html)
+        script = (WEB_DIR / "static" / "app.js").read_text(encoding="utf-8")
+        for marker in ("autoPrefillProfileFromCv", "profileShouldAutoPrefill", "renderProfileDraftBanner", "profileCountPrefilled"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, script)
+        self.assertIn("button-draft", script)
+        self.assertIn("button-draft", (WEB_DIR / "static" / "offer-theme.css").read_text(encoding="utf-8"))
 
     def test_pipeline_api_document_is_downloadable(self):
         status, headers, raw = self.request("GET", "/api/doc/pipeline-api")
@@ -1717,6 +1915,107 @@ class HttpServerTests(unittest.TestCase):
                 status, _, raw = self.request("GET", path)
                 self.assertNotEqual(status, 200, f"{path} 不应成功返回文件")
                 self.assertNotIn(readme_marker, raw, f"{path} 泄露了仓库文件内容")
+
+
+class WorkbenchFlowTests(unittest.TestCase):
+    """六段后端契约只在前端合并成四步；最后一步为 0 时要说明原因。"""
+
+    @staticmethod
+    def _stage_model(snapshot: dict) -> list:
+        node = shutil.which("node")
+        if not node:
+            raise unittest.SkipTest("node 不可用，跳过前端四步渲染校验")
+        script = (WEB_DIR / "static" / "app.js").read_text(encoding="utf-8")
+        start = script.index("/* workbench-four-stages:start")
+        end = script.index("/* workbench-four-stages:end")
+        harness = (
+            script[start:end]
+            + "\nconst fs = require('fs');\n"
+            "const snap = JSON.parse(fs.readFileSync(0, 'utf8'));\n"
+            "process.stdout.write(JSON.stringify(workbenchFourStages(snap)));\n"
+        )
+        completed = subprocess.run(
+            [node, "-e", harness],
+            input=json.dumps(snapshot),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise AssertionError(f"node 执行前端四步渲染失败：{completed.stderr[:800]}")
+        return json.loads(completed.stdout)
+
+    @staticmethod
+    def _fixture(*, intake: int, jobs: list, queue: list, threshold: float = 4.0) -> dict:
+        return {
+            "pipeline": {
+                "stages": [
+                    {"key": "intake", "count": intake},
+                    {"key": "screening", "count": sum(1 for job in jobs if job.get("score") is not None)},
+                    {"key": "approval", "count": sum(1 for row in queue if row.get("status") == "approved")},
+                    {"key": "greeting", "count": 0},
+                    {"key": "send", "count": 0},
+                    {"key": "monitor", "count": 0},
+                ]
+            },
+            "jobs": jobs,
+            "queue": queue,
+            "config": {
+                "score": {"approval_min": threshold, "high_threshold": 4.5, "approval_max": 4.4}
+            },
+        }
+
+    def test_four_stage_model_merges_six_stage_contract(self):
+        queue = [
+            {"id": "j1", "status": "approved", "greeting": {"greeting": "您好，我是虚构应聘者。", "ready": True}},
+            {"id": "j2", "status": "approved", "greeting": {"greeting": ""}},
+            {"id": "j3", "status": "approved"},
+            {"id": "j4", "status": "pending"},
+        ]
+        jobs = [{"id": f"j{index}", "score": 4.5} for index in range(1, 7)]
+        model = self._stage_model(self._fixture(intake=6, jobs=jobs, queue=queue))
+        self.assertEqual([stage["key"] for stage in model], ["intake", "queue", "greeting", "confirm"])
+        self.assertEqual(
+            [stage["title"] for stage in model],
+            ["采集", "评分入队", "招呼语已生成", "等你确认"],
+        )
+        self.assertEqual([stage["index"] for stage in model], ["01", "02", "03", "04"])
+        self.assertEqual([stage["count"] for stage in model], [6, 4, 1, 3])
+        # 只有第四步有动作；前三步只读。
+        self.assertEqual([stage["action"] for stage in model], [False, False, False, True])
+
+    def test_confirm_zero_explains_below_enqueue_threshold(self):
+        jobs = [
+            {"id": "low-1", "score": 3.5},
+            {"id": "low-2", "score": 3.8},
+            {"id": "not-yet-queued", "score": 4.6},
+        ]
+        model = self._stage_model(self._fixture(intake=5, jobs=jobs, queue=[]))
+        confirm = model[3]
+        self.assertEqual(confirm["count"], 0)
+        self.assertEqual(confirm["reason"], "已评分 2 条，未达到入队线（当前 4.0 分）")
+
+    def test_confirm_zero_explains_missing_jobs(self):
+        model = self._stage_model(self._fixture(intake=0, jobs=[], queue=[]))
+        confirm = model[3]
+        self.assertEqual(confirm["count"], 0)
+        self.assertEqual(confirm["reason"], "还没有采集到岗位")
+
+    def test_workbench_flow_markup_and_renderer_are_four_stage(self):
+        html = (WEB_DIR / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('class="pipeline workbench-stages"', html)
+        self.assertIn('aria-label="求职四步流程"', html)
+        script = (WEB_DIR / "static" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            "/* workbench-four-stages:start",
+            "function workbenchFourStages",
+            "data-workbench-stage",
+            "workbench-confirm-button",
+            "去审批队列确认",
+            "renderPipeline(snapshot);",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, script)
 
 
 class SecurityTests(DemoDataTestCase):
@@ -1760,11 +2059,446 @@ class SecurityTests(DemoDataTestCase):
         ignored = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(".venv/", ignored)
 
+    def test_collect_page_defaults_to_one_page_with_guidance_and_criteria(self):
+        html = (WEB_DIR / "static" / "index.html").read_text(encoding="utf-8")
+        match = re.search(r'<input id="collect-pages"[^>]*>', html)
+        self.assertIsNotNone(match, "采集页缺少翻页数输入框")
+        tag = match.group(0)
+        self.assertIn('value="1"', tag)
+        self.assertIn('min="1"', tag)
+        self.assertIn('max="10"', tag)
+        self.assertIn("每次都从第 1 页开始；已抓过的岗位会自动跳过，不会重复。想看到更多新岗位，就多翻几页。", html)
+        self.assertIn('id="collect-criteria"', html)
+        self.assertIn("本次初筛条件", html)
+        self.assertIn('data-view-link="profile"', html)
+        script = (WEB_DIR / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("function renderCollectCriteria", script)
+        self.assertIn("snapshot.profile", script)
+
+    def test_snapshot_profile_exposes_job_intent_fields_used_by_collect_page(self):
+        profile = backend.snapshot("demo")["profile"]
+        intent = profile["job_intent"]
+        for key in ("titles", "cities", "salary_min", "salary_max", "job_type"):
+            self.assertIn(key, intent)
+        options = backend._offerpilot_options({"options": {"keywords": ["a"], "cities": ["b"], "max_pages": 10}})
+        self.assertEqual(options["platforms"]["boss"]["max_pages"], 10)
+        with self.assertRaises(backend.ApiError):
+            backend._offerpilot_options({"options": {"keywords": ["a"], "cities": ["b"], "max_pages": 11}})
+
     def test_make_server_rejects_non_loopback_bindings(self):
         for host in ("0.0.0.0", "192.168.1.10", "example.com"):
             with self.subTest(host=host):
                 with self.assertRaises(ValueError):
                     server.make_server(host, 0)
+
+
+
+class ProfileCvImportTests(unittest.TestCase):
+    """Resume-to-profile parsing and the import source choice.
+
+    Every resume here is an obviously fictional placeholder fixture. Nothing
+    reads workspace/resume.md or web/data/user: paths are patched to a
+    temporary directory and the store is an isolated temp Store.
+    """
+
+    RESUME = (
+        "# 示例应聘者 — 简历\n"
+        "\n"
+        "**Location:** 示例城市甲\n"
+        "**Phone:** 示例电话占位\n"
+        "**Email:** candidate@example.com\n"
+        "\n"
+        "## Professional Summary\n"
+        "\n"
+        "- 熟悉用户研究与需求分析，能独立完成从访谈到原型的流程 [[ILLEGIBLE]]\n"
+        "- 使用 Axure 与 Visio 完成原型和流程图\n"
+        "\n"
+        "## Work Experience\n"
+        "\n"
+        "### 示例公司甲 — 示例城市甲\n"
+        "\n"
+        "**示例岗位甲**\n"
+        "2019年10月 - 至今\n"
+        "\n"
+        "- 整理需求文档并跟进上线 [[ILLEGIBLE]]\n"
+        "- 与设计部门沟通原型图 [[ILLEGIBLE]]\n"
+        "\n"
+        "### 示例公司乙\n"
+        "\n"
+        "**示例岗位乙**\n"
+        "2019.03-2019.06\n"
+        "\n"
+        "* 推动小程序上线并汇报数据\n"
+        "\n"
+        "## Projects\n"
+        "\n"
+        "### 示例项目甲 — 示例角色甲（2018年3月 - 2018年6月）\n"
+        "\n"
+        "- 设计问卷并完成调研报告\n"
+        "\n"
+        "## Education\n"
+        "\n"
+        "### 示例大学 — 示例专业，本科（2015年9月 - 2019年6月，示例城市甲）\n"
+        "\n"
+        "## Skills\n"
+        "\n"
+        "- 技能：Axure、Visio、Excel、需求分析\n"
+    )
+
+    def _run_import(self, text: str | None, runtime_files: dict[str, str] | None = None, cv_exists: bool = True):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cv_path = root / "workspace" / "resume.md"
+            if cv_exists and text is not None:
+                cv_path.parent.mkdir(parents=True, exist_ok=True)
+                cv_path.write_text(text, encoding="utf-8")
+            runtime = root / "runtime"
+            (runtime / "data" / "resumes").mkdir(parents=True, exist_ok=True)
+            for name, body in (runtime_files or {}).items():
+                (runtime / "data" / "resumes" / name).write_text(body, encoding="utf-8")
+            with patch.object(backend, "CV_PATH", cv_path), \
+                    patch.object(backend.offerpilot_runtime, "runtime_dir", lambda mode: runtime), \
+                    patch.object(backend, "WEB_DIR", root):
+                store = backend.Store("user")
+                with patch.object(backend, "get_store", lambda mode, seed_if_empty=True: store):
+                    return backend.import_profile_cv({"mode": "user"}), store
+
+    def test_structured_sections_fill_experiences_projects_education_and_skills(self):
+        profile = backend._extract_profile_from_cv(self.RESUME)
+        self.assertEqual(len(profile["experiences"]), 2)
+        first = profile["experiences"][0]
+        self.assertEqual(first["company"], "示例公司甲")
+        self.assertEqual(first["title"], "示例岗位甲")
+        self.assertEqual(first["start"], "2019-10")
+        self.assertEqual(first["end"], "至今")
+        self.assertIn("整理需求文档", first["summary"])
+        self.assertEqual(len(profile["projects"]), 1)
+        self.assertEqual(profile["projects"][0]["name"], "示例项目甲")
+        self.assertEqual(profile["projects"][0]["role"], "示例角色甲")
+        self.assertEqual(profile["projects"][0]["start"], "2018-03")
+        self.assertEqual(profile["projects"][0]["end"], "2018-06")
+        self.assertEqual(len(profile["education"]), 1)
+        edu = profile["education"][0]
+        self.assertEqual((edu["school"], edu["major"], edu["degree"]), ("示例大学", "示例专业", "本科"))
+        self.assertEqual((edu["start"], edu["end"]), ("2015-09", "2019-06"))
+        self.assertIn("Axure", profile["skills"]["tools"])
+        self.assertIn("需求分析", profile["skills"]["tools"])
+        self.assertEqual(len(profile["skills"]["tools"]), len(set(profile["skills"]["tools"])))
+        self.assertIn("用户研究", profile["summary"])
+        normalized = backend.normalize_profile(profile)
+        self.assertEqual(len(normalized["experiences"]), 2)
+        self.assertEqual(len(normalized["projects"]), 1)
+        self.assertEqual(len(normalized["education"]), 1)
+
+    def test_date_variants_and_chinese_english_headings(self):
+        text = (
+            "# 示例\n\n"
+            "## 工作经历\n\n"
+            "### 示例公司丙 — 示例城市甲\n"
+            "**示例岗位丙**\n"
+            "2019-03 ~ 2019-06\n"
+            "- 完成示例任务一\n\n"
+            "### 示例公司丁｜示例岗位丁｜2020.07–2020.12\n"
+            "- 完成示例任务二\n\n"
+            "## Experience\n\n"
+            "### 示例公司戊 — 示例岗位戊（2021年3月 - 至今）\n"
+            "- 完成示例任务三\n\n"
+            "## 教育背景\n\n"
+            "### 示例大学二 — 示例专业二，硕士（2016.09 - 2019.06）\n"
+        )
+        profile = backend._extract_profile_from_cv(text)
+        spans = [(row["company"], row["start"], row["end"]) for row in profile["experiences"]]
+        self.assertEqual(
+            spans,
+            [
+                ("示例公司丙", "2019-03", "2019-06"),
+                ("示例公司丁", "2020-07", "2020-12"),
+                ("示例公司戊", "2021-03", "至今"),
+            ],
+        )
+        self.assertEqual(profile["experiences"][1]["title"], "示例岗位丁")
+        self.assertEqual(profile["experiences"][2]["title"], "示例岗位戊")
+        self.assertEqual(profile["education"][0]["degree"], "硕士")
+        self.assertEqual((profile["education"][0]["start"], profile["education"][0]["end"]), ("2016-09", "2019-06"))
+
+    def test_illegible_markers_are_stripped_and_empty_lines_dropped(self):
+        text = (
+            "## 工作经历\n\n"
+            "### 示例公司己\n"
+            "- [[ILLEGIBLE]]\n"
+            "- 与 [[ILLEGIBLE]]\n"
+            "- 负责示例模块 [[ILLEGIBLE]] 的数据整理\n"
+        )
+        profile = backend._extract_profile_from_cv(text)
+        summary = profile["experiences"][0]["summary"]
+        self.assertNotIn("ILLEGIBLE", summary)
+        self.assertIn("负责示例模块", summary)
+        self.assertIn("的数据整理", summary)
+        self.assertNotIn("与。", summary)
+        self.assertEqual(summary.count("负责示例模块"), 1)
+
+    def test_unparseable_fields_stay_empty_without_invented_content(self):
+        text = "# 示例人物\n\n## Skills\n\n- 无\n"
+        profile = backend._extract_profile_from_cv(text)
+        self.assertEqual(profile["experiences"], [])
+        self.assertEqual(profile["projects"], [])
+        self.assertEqual(profile["education"], [])
+        self.assertEqual(profile["job_intent"]["titles"], [])
+        self.assertIsNone(profile["job_intent"]["salary_min"])
+        self.assertIsNone(profile["job_intent"]["salary_max"])
+        self.assertEqual(profile["basic"]["email"], "")
+        self.assertEqual(profile["basic"]["phone"], "")
+        self.assertEqual(profile["summary"], "")
+
+    def test_import_prefers_workspace_resume_over_runtime_resume(self):
+        runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
+        result, _ = self._run_import(self.RESUME, {"resume.md": runtime_body})
+        self.assertEqual(result["profile"]["experiences"][0]["company"], "示例公司甲")
+        self.assertEqual(result["source"], "workspace/resume.md")
+
+    def test_import_falls_back_to_runtime_markdown_resume_when_workspace_missing(self):
+        runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
+        result, _ = self._run_import(None, {"resume.md": runtime_body}, cv_exists=False)
+        self.assertEqual(result["profile"]["experiences"][0]["company"], "示例公司庚")
+        self.assertEqual(result["profile"]["experiences"][0]["start"], "2022-01")
+        self.assertIn("运行时示例要点", result["profile"]["experiences"][0]["summary"])
+        self.assertIn("采集页", result["source"])
+
+    def test_import_rejects_non_markdown_runtime_resume_and_missing_everywhere(self):
+        with self.assertRaises(backend.ApiError) as ctx:
+            self._run_import(None, {"resume.pdf": "%PDF-示例"}, cv_exists=False)
+        self.assertEqual(ctx.exception.status, 400)
+        self.assertIn("Markdown", ctx.exception.message)
+        with self.assertRaises(backend.ApiError) as ctx:
+            self._run_import(None, {}, cv_exists=False)
+        self.assertEqual(ctx.exception.status, 404)
+
+    def test_demo_mode_still_refuses_cv_import(self):
+        with self.assertRaises(backend.ApiError) as ctx:
+            backend.import_profile_cv({"mode": "demo"})
+        self.assertIn("演示模式", ctx.exception.message)
+
+    def test_profile_flags_report_saved_and_cv_availability_without_touching_real_data(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cv_path = root / "workspace" / "resume.md"
+            cv_path.parent.mkdir(parents=True, exist_ok=True)
+            cv_path.write_text(self.RESUME, encoding="utf-8")
+            runtime = root / "runtime"
+            (runtime / "data" / "resumes").mkdir(parents=True, exist_ok=True)
+            with patch.object(backend, "CV_PATH", cv_path), \
+                    patch.object(backend.offerpilot_runtime, "runtime_dir", lambda mode: runtime), \
+                    patch.object(backend, "WEB_DIR", root):
+                store = backend.Store("user")
+                fresh = backend.profile_for_api("user", store)
+                self.assertIs(fresh["saved"], False)
+                self.assertIs(fresh["cv_available"], True)
+                self.assertIn("completeness", fresh)
+                self.assertEqual(fresh["basic"]["name"], "")
+                self.assertIs(backend.profile_for_api("demo", backend.Store("demo"))["cv_available"], False)
+
+                cv_path.unlink()
+                self.assertIs(backend.profile_for_api("user", store)["cv_available"], False)
+
+                store.set_profile(backend.normalize_profile({"basic": {"name": "示例保存"}}))
+                saved = backend.profile_for_api("user", store)
+                self.assertIs(saved["saved"], True)
+                self.assertEqual(saved["basic"]["name"], "示例保存")
+
+    def test_snapshot_profile_has_only_new_keys_added_to_profile_object(self):
+        snapshot = backend.snapshot("demo")
+        self.assertIn("saved", snapshot["profile"])
+        self.assertIs(snapshot["profile"]["cv_available"], False)
+        self.assertEqual(set(snapshot), EXPECTED_SNAPSHOT_KEYS)
+
+
+class OfferPilotScorerTests(unittest.TestCase):
+    """六项评分（总分 100）、封顶规则，以及 schema_version 1/2 的 trace 读取。全部使用虚构数据。"""
+
+    scorer = None
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib
+
+        vendor_src = str(PROJECT_ROOT / "vendor" / "offerpilot" / "src")
+        if vendor_src not in sys.path:
+            sys.path.insert(0, vendor_src)
+        # 直接导入真实模块：依赖缺失时测试应明确失败，而不是用假模块通过。
+        cls.scorer = importlib.import_module("offerpilot.ai.scorer")
+
+    def _payload(self, scores=None, **extra):
+        values = dict(self.scorer.COMPONENT_LIMITS)
+        values.update(scores or {})
+        payload = {
+            "role_summary": "示例产品助理岗位",
+            "caps": [],
+            "hard_gaps": [],
+            "reason": "示例匹配判断",
+            "missing": "",
+        }
+        for key, score in values.items():
+            payload[key] = {"evidence": f"示例证据-{key}", "score": score}
+        payload.update(extra)
+        return payload
+
+    def test_component_limits_are_the_six_document_items_summing_to_100(self):
+        self.assertEqual(self.scorer.COMPONENT_LIMITS, {
+            "core_skills": 30,
+            "transferable_evidence": 25,
+            "duty_similarity": 20,
+            "tools_industry": 10,
+            "practical_fit": 10,
+            "resume_expressibility": 5,
+        })
+        self.assertEqual(sum(self.scorer.COMPONENT_LIMITS.values()), 100)
+        self.assertNotIn("hard_requirements", self.scorer.COMPONENT_LIMITS)
+        self.assertNotIn("core_duties", self.scorer.COMPONENT_LIMITS)
+
+    def test_full_marks_sum_to_100_and_never_exceed_100(self):
+        result = self.scorer.validate_structured_score_payload(self._payload())
+        self.assertIsNotNone(result)
+        self.assertEqual(result.raw_score, 100)
+        self.assertEqual(result.score, 100)
+        self.assertLessEqual(result.score, 100)
+        for label in ("核心技能 30/30", "证据 25/25", "职责相似 20/20",
+                      "行业偏好 10/10", "实际条件 10/10", "表达 5/5"):
+            self.assertIn(label, result.reason)
+
+    def test_any_component_over_its_limit_returns_none(self):
+        for key, limit in self.scorer.COMPONENT_LIMITS.items():
+            with self.subTest(component=key):
+                payload = self._payload({key: limit + 1})
+                self.assertIsNone(self.scorer.validate_structured_score_payload(payload))
+
+    def test_negative_non_integer_and_bool_scores_return_none(self):
+        for bad in (-1, 3.5, True, "7", None):
+            with self.subTest(score=bad):
+                payload = self._payload({"core_skills": bad})
+                self.assertIsNone(self.scorer.validate_structured_score_payload(payload))
+
+    def test_missing_resume_expressibility_fails_validation(self):
+        payload = self._payload()
+        del payload["resume_expressibility"]
+        self.assertIsNone(self.scorer.validate_structured_score_payload(payload))
+        self.assertIn(
+            "resume_expressibility",
+            self.scorer._score_validation_failure_reason(json.dumps(payload, ensure_ascii=False)),
+        )
+
+    def test_old_five_component_payload_is_rejected(self):
+        legacy = {"role_summary": "示例岗位", "caps": [], "hard_gaps": [], "reason": "示例", "missing": ""}
+        for key, limit in self.scorer.LEGACY_COMPONENT_LIMITS_V1.items():
+            legacy[key] = {"evidence": "示例", "score": limit}
+        self.assertIsNone(self.scorer.validate_structured_score_payload(legacy))
+
+    def test_technical_required_cap_still_pins_score_to_55(self):
+        result = self.scorer.validate_structured_score_payload(
+            self._payload(caps=["technical_required"], hard_gaps=["示例：必须掌握某硬技术→未体现"])
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result.raw_score, 100)
+        self.assertEqual(result.score, 55)
+        self.assertIn("硬技术缺口封顶55", result.reason)
+        self.assertEqual(result.hard_gaps, ("示例：必须掌握某硬技术→未体现",))
+
+    def test_strictest_cap_wins_when_several_caps_apply(self):
+        result = self.scorer.validate_structured_score_payload(
+            self._payload(caps=["weak_core_transfer", "sales_acquisition_core"])
+        )
+        self.assertEqual(result.score, 65)
+
+    def test_v2_trace_has_six_components_and_round_trips(self):
+        result = self.scorer.validate_structured_score_payload(
+            self._payload({"core_skills": 20, "resume_expressibility": 3})
+        )
+        trace = self.scorer.build_score_trace(result)
+        self.assertEqual(trace["schema_version"], 2)
+        self.assertEqual(self.scorer.TRACE_SCHEMA_VERSION, 2)
+        self.assertEqual(list(trace["components"]), list(self.scorer.COMPONENT_LIMITS))
+        self.assertEqual(trace["components"]["resume_expressibility"]["max_score"], 5)
+        self.assertEqual(trace["raw_score"], 88)
+        self.assertEqual(trace["final_score"], 88)
+        sanitized = self.scorer.sanitize_score_trace(json.loads(json.dumps(trace, ensure_ascii=False)))
+        self.assertEqual(sanitized, trace)
+
+    def test_v2_trace_with_a_missing_or_over_limit_component_is_rejected(self):
+        trace = self.scorer.build_score_trace(
+            self.scorer.validate_structured_score_payload(self._payload())
+        )
+        missing = json.loads(json.dumps(trace))
+        del missing["components"]["resume_expressibility"]
+        self.assertIsNone(self.scorer.sanitize_score_trace(missing))
+        too_high = json.loads(json.dumps(trace))
+        too_high["components"]["duty_similarity"]["score"] = 21
+        self.assertIsNone(self.scorer.sanitize_score_trace(too_high))
+
+    def test_legacy_schema_version_1_trace_is_still_readable_unchanged(self):
+        legacy_trace = {
+            "schema_version": 1,
+            "role_summary": "示例旧版岗位",
+            "components": {
+                key: {"score": limit // 2, "max_score": limit, "evidence": f"示例旧证据-{key}"}
+                for key, limit in self.scorer.LEGACY_COMPONENT_LIMITS_V1.items()
+            },
+            "raw_score": 50,
+            "final_score": 50,
+            "caps": ["weak_core_transfer"],
+            "hard_gaps": ["示例旧版硬缺口"],
+            "summary_reason": "示例旧版理由",
+            "missing": "示例缺失",
+            "review_status": "initial",
+        }
+        original = json.loads(json.dumps(legacy_trace))
+        sanitized = self.scorer.sanitize_score_trace(legacy_trace)
+        self.assertIsNotNone(sanitized)
+        self.assertEqual(sanitized["schema_version"], 1)
+        self.assertEqual(
+            set(sanitized["components"]),
+            {"core_duties", "transferable_evidence", "hard_requirements", "tools_industry", "practical_fit"},
+        )
+        self.assertEqual(sanitized, original)
+        self.assertEqual(legacy_trace, original)  # 输入不会被修改
+
+    def test_unknown_trace_schema_versions_are_rejected_without_error(self):
+        trace = self.scorer.build_score_trace(
+            self.scorer.validate_structured_score_payload(self._payload())
+        )
+        for version in (0, 3, "2", True, None):
+            with self.subTest(version=version):
+                self.assertIsNone(self.scorer.sanitize_score_trace(dict(trace, schema_version=version)))
+        self.assertIsNone(self.scorer.sanitize_score_trace(None))
+        self.assertIsNone(self.scorer.sanitize_score_trace("not-a-trace"))
+
+    def test_scoring_prompt_formats_and_lists_exactly_the_six_fields(self):
+        job = {
+            "title": "示例产品助理", "company": "示例公司", "salary": "10-15K",
+            "experience": "1-3年", "education": "本科", "recruitment_type": "campus",
+            "jd": "负责需求整理与数据看板。",
+        }
+        config = {"profile": {"salary_min": 8, "salary_max": 12, "target_cities": ["示例城市"],
+                              "education": "本科", "recruitment_type": "campus"}}
+        prompt = self.scorer._build_scoring_prompt(job, "示例简历内容", config)
+        for key in self.scorer.COMPONENT_LIMITS:
+            self.assertIn(f'"{key}"', prompt)
+        self.assertNotIn('"hard_requirements"', prompt)
+        self.assertNotIn('"core_duties"', prompt)
+        self.assertNotIn("{{", prompt)
+        self.assertIn("hard_gaps中列出", prompt)
+
+    def test_merge_review_keeps_six_components_and_stricter_cap(self):
+        first = self.scorer.validate_structured_score_payload(self._payload({"core_skills": 20}))
+        review = self.scorer.validate_structured_score_payload(
+            self._payload({"core_skills": 10}, caps=["technical_required"]), reviewed=True
+        )
+        merged = self.scorer._merge_review_results(first, review)
+        self.assertEqual(set(merged.components), set(self.scorer.COMPONENT_LIMITS))
+        self.assertEqual(merged.components["core_skills"], 15)
+        self.assertEqual(merged.score, 55)
 
 
 if __name__ == "__main__":

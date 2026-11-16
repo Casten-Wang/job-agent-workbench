@@ -70,15 +70,17 @@ SCORING_PROMPT = """你是一位严谨的招聘匹配评估员。请依据完整
 
 ## 统一评分维度
 逐项给分，不要自行输出总分；程序会统一求和：
-1. 核心职责匹配（0-40分）：主要职责已有直接实践32-40；多项重要职责有直接或实质相邻实践24-31；仅部分职责相关12-23；主要工作基本无证据0-11。依据实际工作内容，不要求同名职位。
-2. 可迁移证据（0-25分）：有相近问题、工作方法及可核对成果20-25；有部分相关方法与成果13-19；只有通用辅助经验5-12；几乎无相关证据0-4。
-3. 硬性要求（0-15分）：先逐项列出JD明确必备的年限、学历、资格、技能或现有资源，再核对证据。全部有证据满足或未提出硬要求才给15；仅次要条件待确认11-14；至少一项关键必备条件未体现或不满足6-10；主要必备条件缺乏支持0-5。未知不等于不满足，也不等于已满足；不得把“需确认是否满足”同时评为15分。
-4. 工具与行业（0-10分）：工具、产品类型、客户类型或行业背景；JD仅写“优先/加分”时不能当作硬缺口。
-5. 实际条件（0-10分）：仅评价已知的城市、薪资与工作方式；已知条件匹配且无明确冲突时给10分，不因未写驻场意愿或臆测稳定性扣分。
+硬条件未满足时在hard_gaps中列出，并在reason中说明；不再计入六项分数。硬条件（JD明确必备的年限、学历、资格等）不单独计分，未知不等于不满足，也不等于已满足。
+1. 核心技能匹配（0-30分）：只看JD要求的核心技能与工具是否有简历证据。直接使用并有成果24-30；多项有直接或实质相邻证据12-23；仅少量有证据或基本无证据0-11。职位名称不同但实际使用过同类技能的，按实际情况给分。
+2. 相关经历和项目证据（0-25分）：相关经历、项目中是否有相近问题、工作方法及可核对成果。有相近问题、工作方法及可核对成果20-25；有部分相关方法与成果10-19；只有通用辅助经验或几乎无相关证据0-9。
+3. 职责相似度（0-20分）：日常工作内容与JD主要职责是否相近。主要职责高度相近16-20；多数或部分职责相近8-15；基本不相近0-7。依据实际工作内容，不要求同名职位。
+4. 发展方向和行业偏好（0-10分）：发展方向与行业偏好是否贴合用户偏好，包括工具、产品类型、客户类型和行业背景。贴合8-10；部分贴合4-7；基本不贴合0-3。JD仅写“优先/加分”时不能当作硬缺口。
+5. 薪资、城市和工作制度（0-10分）：仅评价已知的目标城市、薪资，以及JD写明的工作制度（工作时间、是否驻场、是否单休）。已知条件匹配且无明确冲突时给10分；有明确冲突时按程度降分；未写明的条件不扣分，也不臆测稳定性。
+6. 简历可表达程度（0-5分）：简历能否把相关经历清楚地写出来，有无数据与产出描述。经历清楚且有数据或产出4-5；写到了但缺少数据或产出2-3；描述模糊、难以核对0-1。经历缺失已在前几项扣分，这里只评价表述，不重复扣分。
 
 ## 薪资判断
 程序按月薪范围核对的结果：{salary_fit}
-区间有交集（含端点相等）即存在可谈薪资，不得因岗位下限低于期望下限、或岗位上限高于期望上限而判不匹配；交集不代表承诺拿到该薪资。0表示该边界未设置。薪资只影响“实际条件”，不得影响职责、经验或硬性要求分数。
+区间有交集（含端点相等）即存在可谈薪资，不得因岗位下限低于期望下限、或岗位上限高于期望上限而判不匹配；交集不代表承诺拿到该薪资。0表示该边界未设置。薪资只影响第5项“薪资、城市和工作制度”，不得影响其他分数。
 
 ## 封顶规则
 仅在JD把相关内容作为核心职责或明确必备条件，且简历没有相应证据时填写caps：
@@ -87,17 +89,18 @@ SCORING_PROMPT = """你是一位严谨的招聘匹配评估员。请依据完整
 - weak_core_transfer：只有少量辅助职责可迁移，核心工作缺少直接或相邻证据，最终最高70分。
 行业“优先”、工具可入职后学习、普通协作事项均不得触发封顶。已有实质相邻证据时不能仅因行业或职位名称不同触发weak_core_transfer。hard_gaps只写JD明确必备且未获证据支持或明确不满足的内容，区分“未体现”和“明确不满足”，不得把待确认意愿写成硬缺口。每个cap必须在理由中指出对应的JD要求及证据缺口。
 
-请严格输出一个JSON对象，不要Markdown，不要额外说明。先写每项evidence再给score，引用具体工作或项目事实；五个score必须是整数且不得超过各自上限：
+请严格输出一个JSON对象，不要Markdown，不要额外说明。先写每项evidence再给score，引用具体工作或项目事实；六个score必须是整数且不得超过各自上限：
 {{
   "role_summary": "岗位核心工作概括（40字内）",
-  "hard_requirements": {{"evidence": "摘录JD必备条件原文（保留或、优先），对应具体公司/项目中的简历事实；区分满足、未体现与不满足（120字内）", "score": 0}},
-  "core_duties": {{"evidence": "引用简历原文短句，说明具体工作或项目如何覆盖主要职责及差距（80字内）", "score": 0}},
+  "core_skills": {{"evidence": "JD要求的核心技能与工具对应的简历证据，说明未覆盖的部分（80字内）", "score": 0}},
   "transferable_evidence": {{"evidence": "可迁移的具体行动、方法和成果（80字内）", "score": 0}},
-  "tools_industry": {{"evidence": "已有相关工具与行业证据，再说明细分方向差距（80字内）", "score": 0}},
-  "practical_fit": {{"evidence": "城市与薪资核对结果，其他条件只用已知事实（60字内）", "score": 0}},
+  "duty_similarity": {{"evidence": "日常工作内容与JD主要职责的相近程度及差距（80字内）", "score": 0}},
+  "tools_industry": {{"evidence": "发展方向与行业偏好的贴合情况，再说明细分方向差距（80字内）", "score": 0}},
+  "practical_fit": {{"evidence": "城市、薪资与工作制度（工作时间、驻场、单休）核对结果，其他条件只用已知事实（60字内）", "score": 0}},
+  "resume_expressibility": {{"evidence": "相关经历在简历中的表述是否清楚，有无数据与产出描述（60字内）", "score": 0}},
   "caps": [],
   "hard_gaps": ["有硬缺口时写：JD必备原文→未体现或不满足；仅优先、加分项不可列入；无硬缺口时输出空数组"],
-  "reason": "最关键的匹配判断（60字内）",
+  "reason": "最关键的匹配判断（60字内；硬条件未满足时在此说明）",
   "missing": "最关键缺失（40字内，没有则为空）"
 }}
 """
@@ -110,6 +113,15 @@ REVIEW_PROMPT_SUFFIX = """
 """
 
 COMPONENT_LIMITS = {
+    "core_skills": 30,
+    "transferable_evidence": 25,
+    "duty_similarity": 20,
+    "tools_industry": 10,
+    "practical_fit": 10,
+    "resume_expressibility": 5,
+}
+# 旧版（schema_version 1）trace 的五组件结构，只用于原样读取历史数据，不参与新评分。
+LEGACY_COMPONENT_LIMITS_V1 = {
     "core_duties": 40,
     "transferable_evidence": 25,
     "hard_requirements": 15,
@@ -126,7 +138,7 @@ CAP_LIMITS = {
     "sales_acquisition_core": (65, "核心销售获客封顶65"),
     "weak_core_transfer": (70, "核心职责迁移较弱封顶70"),
 }
-TRACE_SCHEMA_VERSION = 1
+TRACE_SCHEMA_VERSION = 2
 ROLE_SUMMARY_LIMIT = 160
 COMPONENT_EVIDENCE_LIMIT = 240
 SUMMARY_REASON_LIMIT = 240
@@ -322,11 +334,12 @@ def _format_structured_reason(
     cap_details = [CAP_LIMITS[cap] for cap in caps if cap in CAP_LIMITS]
     score = min([raw_score, *(limit for limit, _ in cap_details)])
     labels = (
-        f"职责{components['core_duties']}/40 · "
-        f"证据{components['transferable_evidence']}/25 · "
-        f"硬要求{components['hard_requirements']}/15 · "
-        f"工具行业{components['tools_industry']}/10 · "
-        f"实际条件{components['practical_fit']}/10"
+        f"核心技能 {components['core_skills']}/30 · "
+        f"证据 {components['transferable_evidence']}/25 · "
+        f"职责相似 {components['duty_similarity']}/20 · "
+        f"行业偏好 {components['tools_industry']}/10 · "
+        f"实际条件 {components['practical_fit']}/10 · "
+        f"表达 {components['resume_expressibility']}/5"
     )
     parts = [f"二次复核后：{labels}" if reviewed else labels]
     if cap_details:
@@ -507,15 +520,26 @@ def build_score_trace(result: ScoreResult) -> dict:
     }
 
 
+def _trace_component_limits(schema_version: int) -> dict[str, int] | None:
+    """Return the component limits a persisted trace version was written with."""
+    if schema_version == TRACE_SCHEMA_VERSION:
+        return COMPONENT_LIMITS
+    if schema_version == 1:
+        return LEGACY_COMPONENT_LIMITS_V1
+    return None
+
+
 def sanitize_score_trace(value: object) -> dict | None:
-    """Return only the V1 API contract fields, or reject malformed persisted JSON."""
+    """Return only the trace API contract fields, or reject malformed persisted JSON.
+
+    Schema version 1 traces (five components, including hard_requirements and
+    core_duties) are read as stored and keep their original schema_version.
+    """
     schema_version = value.get("schema_version") if isinstance(value, dict) else None
-    if (
-        not isinstance(value, dict)
-        or isinstance(schema_version, bool)
-        or not isinstance(schema_version, int)
-        or schema_version != TRACE_SCHEMA_VERSION
-    ):
+    if not isinstance(value, dict) or isinstance(schema_version, bool) or not isinstance(schema_version, int):
+        return None
+    limits = _trace_component_limits(schema_version)
+    if limits is None:
         return None
     if value.get("review_status") not in {"initial", "reviewed"}:
         return None
@@ -524,7 +548,7 @@ def sanitize_score_trace(value: object) -> dict | None:
     if not isinstance(components_value, dict):
         return None
     components: dict[str, dict[str, int | str]] = {}
-    for key, limit in COMPONENT_LIMITS.items():
+    for key, limit in limits.items():
         component = components_value.get(key)
         if not isinstance(component, dict):
             return None
@@ -546,7 +570,7 @@ def sanitize_score_trace(value: object) -> dict | None:
         or isinstance(final_score, bool)
         or not isinstance(raw_score, int)
         or not isinstance(final_score, int)
-        or not 0 <= final_score <= raw_score <= sum(COMPONENT_LIMITS.values())
+        or not 0 <= final_score <= raw_score <= sum(limits.values())
     ):
         return None
     required_text = {
@@ -563,7 +587,7 @@ def sanitize_score_trace(value: object) -> dict | None:
     caps = [cap for cap in raw_caps if isinstance(cap, str) and cap in CAP_LIMITS]
     hard_gaps = _normalize_short_strings(raw_hard_gaps, item_limit=HARD_GAP_LIMIT, maximum=MAX_HARD_GAPS)
     return {
-        "schema_version": TRACE_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "role_summary": _normalize_short_text(value["role_summary"], ROLE_SUMMARY_LIMIT),
         "components": components,
         "raw_score": raw_score,

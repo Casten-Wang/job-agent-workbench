@@ -4,12 +4,6 @@
    attributes; API data is never interpolated into HTML. */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const PERIOD_LABELS = {
-  all: '全部时间',
-  '7d': '近 7 天',
-  '30d': '近 30 天',
-  '90d': '近 90 天'
-};
 const CHANNEL_LABELS = {
   all: '全部渠道',
   manual_paste: '手动粘贴',
@@ -85,7 +79,7 @@ const OFFERPILOT_PACE = {
 const OFFERPILOT_MODE_HINTS = {
   collect: '采集岗位并按你的简历评分，不投递、不发消息。',
   monitor: '只检查已有会话中的 HR 回复，不采集新岗位、不发送消息。',
-  full: '采集后调用 AI 评分并生成招呼语；发送仍会停在人工确认门。'
+  full: '采集后自动评分、入队并生成招呼语，停在最终确认门；发送仍需你确认。'
 };
 const OFFERPILOT_JOB_STATUS_LABELS = {
   pending: '待评分',
@@ -121,8 +115,6 @@ const state = {
   theme: ['auto', 'light', 'dark'].includes(safeLocalGet('job-workbench-theme'))
     ? safeLocalGet('job-workbench-theme')
     : 'auto',
-  period: 'all',
-  channel: 'all',
   jobState: 'all',
   snapshot: null,
   fetchSeq: 0,
@@ -143,10 +135,13 @@ const state = {
   offerpilotPollTimer: null,
   offerpilotResume: null,
   offerpilotAutoScoreTouched: false,
+  offerpilotPipeline: null,
   jobsSelection: new Set(),
   queueApprovedSelection: new Set(),
   queueDeliveryIds: [],
-  profileDirty: false
+  profileDirty: false,
+  profileAutoPrefillTried: false,
+  profilePrefillCount: 0
 };
 
 const dom = {
@@ -157,15 +152,10 @@ const dom = {
   generatedAt: document.getElementById('generated-at'),
   loadingNote: document.getElementById('loading-note'),
   refreshButton: document.getElementById('refresh-button'),
-  filterBar: document.querySelector('.filter-bar'),
-  filterPeriod: document.getElementById('filter-period'),
-  filterChannel: document.getElementById('filter-channel'),
-  filterState: document.getElementById('filter-state'),
-  scopeLine: document.getElementById('scope-line'),
+  workbenchNextText: document.getElementById('workbench-next-text'),
   belt: document.getElementById('belt'),
   beltFocus: document.getElementById('belt-focus'),
   pipeline: document.getElementById('pipeline'),
-  pipelineConnection: document.getElementById('pipeline-connection'),
   pipelineEvents: document.getElementById('pipeline-events'),
   kpiRow: document.getElementById('kpi-row'),
   channelChart: document.getElementById('channel-chart'),
@@ -194,6 +184,7 @@ const dom = {
   jobsSelectAll: document.getElementById('jobs-select-all'),
   jobsSelectionCount: document.getElementById('jobs-selection-count'),
   jobsBulkEnqueue: document.getElementById('jobs-bulk-enqueue'),
+  jobsBulkDelete: document.getElementById('jobs-bulk-delete'),
   offerpilotConnection: document.getElementById('offerpilot-connection'),
   offerpilotState: document.getElementById('offerpilot-state'),
   offerpilotError: document.getElementById('offerpilot-error'),
@@ -220,6 +211,8 @@ const dom = {
   collectResumeStatus: document.getElementById('collect-resume-status'),
   collectSummary: document.getElementById('collect-summary'),
   collectChecks: document.getElementById('collect-checks'),
+  collectCriteria: document.getElementById('collect-criteria'),
+  collectCriteriaHint: document.getElementById('collect-criteria-hint'),
   collectPreflight: document.getElementById('collect-preflight'),
   profileForm: document.getElementById('profile-form'),
   profileName: document.getElementById('profile-name'),
@@ -247,6 +240,7 @@ const dom = {
   profileImport: document.getElementById('profile-import'),
   profileSave: document.getElementById('profile-save'),
   profileResult: document.getElementById('profile-result'),
+  profileDraftBanner: document.getElementById('profile-draft-banner'),
   atsForm: document.getElementById('ats-form'),
   atsFile: document.getElementById('ats-file'),
   atsKeywords: document.getElementById('ats-keywords'),
@@ -264,11 +258,12 @@ const dom = {
   queueGenerateGreetings: document.getElementById('queue-generate-greetings'),
   queueSendGreetings: document.getElementById('queue-send-greetings'),
   queueGreetings: document.getElementById('queue-greetings'),
+  queuePipelineStatus: document.getElementById('queue-pipeline-status'),
   queueDeliveryPanel: document.getElementById('queue-delivery-panel'),
   queueDeliverySummary: document.getElementById('queue-delivery-summary'),
   queueDeliveryList: document.getElementById('queue-delivery-list'),
-  queueDeliveryConfirm: document.getElementById('queue-delivery-confirm'),
   queueDeliveryRisk: document.getElementById('queue-delivery-risk'),
+  jobsOverrideReason: document.getElementById('jobs-override-reason'),
   queueDeliveryStart: document.getElementById('queue-delivery-start'),
   queueDeliveryCancel: document.getElementById('queue-delivery-cancel'),
   queueDeliveryResults: document.getElementById('queue-delivery-results'),
@@ -437,19 +432,10 @@ function truncate(value, maxLength) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
 }
 
-function periodLabel(value) {
-  return PERIOD_LABELS[value] || String(value || '全部时间');
-}
-
 function channelLabel(value) {
   if (value === undefined || value === null || value === '') return CHANNEL_LABELS.unknown;
   const key = String(value);
   return CHANNEL_LABELS[key] || key;
-}
-
-function stateLabel(value) {
-  if (!value || value === 'all') return '全部状态';
-  return String(value);
 }
 
 function intentLabel(value) {
@@ -539,8 +525,6 @@ async function loadState(options = {}) {
   try {
     const params = new URLSearchParams({
       mode: state.mode,
-      period: state.period,
-      channel: state.channel,
       state: state.jobState
     });
     const response = await fetch(`/api/state?${params.toString()}`, {
@@ -712,12 +696,14 @@ function showView(name) {
   dom.viewPanels.forEach((panel) => {
     panel.hidden = panel.dataset.viewPanel !== name;
   });
-  // 时间/渠道/状态筛选只作用于工作台快照，其他入口显示会变成无关噪音。
-  if (dom.filterBar) dom.filterBar.hidden = name !== 'workbench';
   window.scrollTo({ top: 0, behavior: 'auto' });
   if (name === 'collect') {
     if (state.offerpilotConnected && !state.offerpilotJobsLoaded) loadOfferPilotJobs();
     if (state.offerpilotConnected) maybeRunOfferPilotPreflight();
+  }
+  if (name === 'profile') {
+    state.profileAutoPrefillTried = false;
+    maybeAutoPrefillProfile();
   }
 }
 
@@ -747,21 +733,13 @@ function switchMode(mode) {
   if (mode === state.mode) return;
   state.mode = mode;
   safeLocalSet('job-workbench-mode', mode);
-  state.period = 'all';
-  state.channel = 'all';
   state.jobState = 'all';
   state.profileDirty = false;
-  dom.filterPeriod.value = 'all';
+  state.profileAutoPrefillTried = false;
+  state.profilePrefillCount = 0;
   clearTransientResults();
   syncModeButtons();
   loadState({ announce: true });
-}
-
-function handleFilterChange() {
-  state.period = dom.filterPeriod.value;
-  state.channel = dom.filterChannel.value;
-  state.jobState = dom.filterState.value;
-  loadState();
 }
 
 /* Generic table and chart rendering */
@@ -1059,56 +1037,133 @@ function renderMeta(snapshot) {
     : '用户数据模式：只读写本机 web/data/user。';
   dom.generatedAt.textContent = `生成于 ${formatDateTime(snapshot.generated_at)} · ${demo ? '演示数据' : '用户数据'}`;
 
-  const filter = snapshot.filter || {};
-  const scope = snapshot.scope || {};
-  dom.scopeLine.textContent = [
-    `筛选范围：${periodLabel(filter.period)} / ${channelLabel(filter.channel)} / ${stateLabel(filter.state)}`,
-    `显示 ${toInt(scope.jobs)} / 共 ${toInt(scope.all_jobs)} 个岗位`,
-    `邮件 ${toInt(scope.mails)} 封`,
-    `复盘 ${toInt(scope.debriefs)} 份`
-  ].join(' · ');
-
   dom.resetDemoButton.disabled = !demo;
   dom.resetNote.textContent = demo
     ? '只重置 demo 数据，不触碰 user 数据。'
     : 'user 模式不能重置；请切换到 demo 后操作。';
 }
 
-function renderFilterOptions(snapshot) {
-  const channels = Array.isArray(snapshot.channels) ? snapshot.channels : [];
-  clear(dom.filterChannel);
-  dom.filterChannel.append(new Option('全部渠道', 'all'));
-  channels.forEach((channel) => {
-    dom.filterChannel.append(new Option(channelLabel(channel), String(channel)));
-  });
-  const hasChannel = state.channel === 'all' || channels.map(String).includes(String(state.channel));
-  if (!hasChannel) {
-    dom.filterChannel.append(new Option(channelLabel(state.channel), state.channel));
-  }
-  dom.filterChannel.value = state.channel;
+/* 首页只保留一句「下一步」：按本地数据从采集推进到发送。 */
+function renderWorkbenchNextStep(snapshot) {
+  if (!dom.workbenchNextText) return;
+  const queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
+  const stages = snapshot.pipeline && Array.isArray(snapshot.pipeline.stages)
+    ? snapshot.pipeline.stages
+    : [];
+  const countOf = (key) => {
+    const stage = stages.find((item) => item && item.key === key);
+    return stage ? toInt(stage.count) : 0;
+  };
+  const intake = countOf('intake');
+  const screening = countOf('screening');
+  const pending = queue.filter((row) => row && row.status === 'pending').length;
+  const approved = queue.filter((row) => row && row.status === 'approved').length;
+  const ready = queue.filter((row) => row && row.status === 'approved'
+    && row.greeting && row.greeting.ready).length;
 
-  const states = Array.isArray(snapshot.states) ? snapshot.states : [];
-  clear(dom.filterState);
-  dom.filterState.append(new Option('全部状态', 'all'));
-  states.forEach((item) => {
-    dom.filterState.append(new Option(String(item), String(item)));
-  });
-  if (state.jobState !== 'all' && !states.map(String).includes(String(state.jobState))) {
-    state.jobState = 'all';
+  let text;
+  if (!intake) {
+    text = '下一步：还没有岗位，先去「求职主线 · 采集」拉取岗位。';
+  } else if (pending > 0) {
+    text = `下一步：有 ${pending} 个岗位等你确认，打开「审批队列」逐条通过或拒绝。`;
+  } else if (ready > 0) {
+    text = `下一步：${ready} 条招呼语已就绪，在「审批队列」确认后发送（不会自动投递）。`;
+  } else if (approved > 0) {
+    text = `下一步：为 ${approved} 个已通过岗位生成招呼语。`;
+  } else if (screening < intake) {
+    text = `下一步：岗位池有 ${intake - screening} 个岗位未评分，去「筛选」加入审批队列。`;
+  } else {
+    text = '下一步：去岗位池挑出合适的岗位，加入审批队列。';
   }
-  dom.filterState.value = state.jobState;
-  dom.filterPeriod.value = state.period;
+  dom.workbenchNextText.textContent = text;
 }
 
-const PIPELINE_STATUS_LABELS = {
-  ready: '本地可用',
-  local: '本地可用',
-  connected: '已接入回报',
-  waiting: '待接入'
-};
+/* 六段契约只在前端合并成用户要做的四步：后端 PIPELINE_STAGES 与 /api/pipeline 的键都不变。 */
+/* workbench-four-stages:start（tools/tests/test_web_backend.py 会截取本段用 node 执行） */
+function workbenchFourStages(snapshot) {
+  const snap = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const pipeline = snap.pipeline && typeof snap.pipeline === 'object' ? snap.pipeline : {};
+  const stages = Array.isArray(pipeline.stages) ? pipeline.stages : [];
+  const queue = Array.isArray(snap.queue) ? snap.queue : [];
+  const jobs = Array.isArray(snap.jobs) ? snap.jobs : [];
+  const countOf = (key) => {
+    const stage = stages.find((item) => item && item.key === key);
+    const count = stage ? Number(stage.count) : 0;
+    return Number.isFinite(count) ? Math.trunc(count) : 0;
+  };
+  const intake = countOf('intake');
+  const queued = queue.length;
+  const greetings = queue.filter((row) => row && row.greeting
+    && String(row.greeting.greeting || '').trim()).length;
+  // 评分达线即自动 approved；「等你确认」只数最终投递确认门上的已通过岗位。
+  const confirm = queue.filter((row) => row && row.status === 'approved').length;
+  const scoreConfig = snap.config && snap.config.score && typeof snap.config.score === 'object'
+    ? snap.config.score
+    : {};
+  const threshold = Number(scoreConfig.approval_min);
+  const thresholdLabel = Number.isFinite(threshold) ? threshold.toFixed(1) : '—';
+  const queuedIds = new Set(queue.map((row) => String((row && row.id) || '')));
+  const belowLine = jobs.filter((job) => {
+    if (!job) return false;
+    const raw = job.score;
+    if (raw === null || raw === undefined || raw === '' || typeof raw === 'boolean') return false;
+    const score = Number(raw);
+    if (!Number.isFinite(score)) return false;
+    if (queuedIds.has(String(job.id || ''))) return false;
+    return Number.isFinite(threshold) && score < threshold;
+  }).length;
+  let reason = null;
+  if (confirm === 0) {
+    if (intake === 0) reason = '还没有采集到岗位';
+    else if (belowLine > 0) reason = `已评分 ${belowLine} 条，未达到入队线（当前 ${thresholdLabel} 分）`;
+    else reason = '暂时没有需要你确认的岗位';
+  }
+  return [
+    {
+      key: 'intake',
+      index: '01',
+      title: '采集',
+      unit: '个岗位',
+      count: intake,
+      description: '自动采集岗位，写入本地岗位池。',
+      action: false,
+      reason: null
+    },
+    {
+      key: 'queue',
+      index: '02',
+      title: '评分入队',
+      unit: '个岗位',
+      count: queued,
+      description: '按评分门自动筛选，达线岗位进入审批队列。',
+      action: false,
+      reason: null
+    },
+    {
+      key: 'greeting',
+      index: '03',
+      title: '招呼语已生成',
+      unit: '条',
+      count: greetings,
+      description: '只为已入队岗位生成草稿，不会发送。',
+      action: false,
+      reason: null
+    },
+    {
+      key: 'confirm',
+      index: '04',
+      title: '等你确认',
+      unit: '个岗位',
+      count: confirm,
+      description: '确认后才会开始投递；未确认前不会发出任何消息。',
+      action: true,
+      reason
+    }
+  ];
+}
+/* workbench-four-stages:end */
 
 const PIPELINE_STAGE_LABELS = { send: '发送', monitor: '监控' };
-const PIPELINE_ENTRY_LABELS = { jobs: '岗位池', queue: '审批队列', mail: 'HR 回复', workbench: '工作台' };
 const PIPELINE_EVENT_LABELS = {
   started: '开始',
   succeeded: '成功',
@@ -1116,46 +1171,48 @@ const PIPELINE_EVENT_LABELS = {
   skipped: '跳过'
 };
 
-function renderPipeline(pipeline) {
+function renderPipeline(snapshot) {
   if (!dom.pipeline) return;
   clear(dom.pipeline);
-  const stages = pipeline && Array.isArray(pipeline.stages) ? pipeline.stages : [];
-  stages.forEach((stage, index) => {
-    const status = String(stage.status || 'ready');
-    const statusLabel = PIPELINE_STATUS_LABELS[status] || status;
-    const count = toInt(stage.count);
-    const node = el('button', {
-      className: `pipeline-node owner-${stage.owner || 'local'} status-${status}`,
+  const stages = workbenchFourStages(snapshot);
+  stages.forEach((stage) => {
+    const card = el('div', {
+      className: `pipeline-node workbench-stage${stage.action ? ' is-confirm' : ' is-readonly'}`,
       attrs: {
-        type: 'button',
-        'aria-label': `${stage.title}，${count} ${stage.unit || ''}，${statusLabel}；打开${PIPELINE_ENTRY_LABELS[stage.entry] || stage.entry}面板`
+        'data-workbench-stage': stage.key,
+        'aria-label': `${stage.title}，${stage.count} ${stage.unit}${stage.reason ? `；${stage.reason}` : ''}`
       }
     }, [
       el('span', { className: 'pipeline-top' }, [
-        el('span', { className: 'pipeline-index', text: String(index + 1).padStart(2, '0') }),
-        el('span', { className: 'pipeline-owner', text: stage.owner_label || '' })
+        el('span', { className: 'pipeline-index', text: stage.index }),
+        el('span', { className: 'pipeline-owner', text: stage.action ? '需要你' : '自动' })
       ]),
-      el('span', { className: 'pipeline-name', text: stage.title || '' }),
-      el('span', { className: 'pipeline-desc', text: stage.description || '' }),
+      el('span', { className: 'pipeline-name', text: stage.title }),
+      el('span', { className: 'pipeline-desc', text: stage.description }),
       el('span', { className: 'pipeline-count' }, [
-        el('strong', { text: String(count) }),
-        el('span', { text: stage.unit || '' })
-      ]),
-      el('span', { className: `pipeline-status${stage.external ? ' is-external' : ''}`, text: statusLabel })
+        el('strong', { text: String(stage.count) }),
+        el('span', { text: stage.unit })
+      ])
     ]);
-    node.addEventListener('click', () => {
-      showView(stage.entry || 'workbench');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-    dom.pipeline.append(node);
+    if (stage.reason) {
+      card.append(el('span', { className: 'workbench-reason', text: stage.reason }));
+    }
+    if (stage.action) {
+      const button = el('button', {
+        className: 'button button-small workbench-confirm-button',
+        attrs: { type: 'button' },
+        text: '去审批队列确认'
+      });
+      button.addEventListener('click', () => {
+        showView('queue');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      card.append(button);
+    }
+    dom.pipeline.append(card);
   });
 
-  if (dom.pipelineConnection) {
-    const connected = Boolean(pipeline && pipeline.external_connected);
-    dom.pipelineConnection.className = `badge badge-${connected ? 'good' : 'neutral'}`;
-    dom.pipelineConnection.textContent = connected ? '外部 Agent 已回报' : '外部 Agent 待接入';
-  }
-
+  const pipeline = snapshot && snapshot.pipeline ? snapshot.pipeline : null;
   if (dom.pipelineEvents) {
     const events = pipeline && Array.isArray(pipeline.external_events) ? pipeline.external_events : [];
     clear(dom.pipelineEvents);
@@ -1217,7 +1274,6 @@ function renderBelt(snapshot) {
     node.classList.toggle('is-current', state.jobState === stateName);
     node.addEventListener('click', () => {
       state.jobState = state.jobState === stateName ? 'all' : stateName;
-      dom.filterState.value = state.jobState;
       loadState();
     });
     dom.belt.append(node);
@@ -1525,6 +1581,10 @@ function syncJobsSelection(jobs) {
     dom.jobsBulkEnqueue.disabled = selected === 0;
     dom.jobsBulkEnqueue.textContent = selected > 1 ? `加入审批队列（${selected}）` : '加入审批队列';
   }
+  if (dom.jobsBulkDelete) {
+    dom.jobsBulkDelete.disabled = selected === 0;
+    dom.jobsBulkDelete.textContent = selected > 1 ? `删除所选（${selected}）` : '删除所选';
+  }
 }
 
 /* Structured personal profile */
@@ -1700,11 +1760,74 @@ function renderProfileMeter(completeness) {
   }
 }
 
+/* 首次导入：user 模式下尚未保存过资料、但本机有可读简历时，自动预填一次草稿（只预填，不保存）。 */
+function profileCountPrefilled(profile) {
+  const basic = profile.basic || {};
+  const skills = profile.skills || {};
+  const basicCount = ['name', 'email', 'phone', 'city'].filter((key) => basic[key]).length;
+  const rowCount = (profile.education || []).length + (profile.experiences || []).length + (profile.projects || []).length;
+  const skillCount = (skills.tools || []).length ? 1 : 0;
+  const summaryCount = profile.summary ? 1 : 0;
+  return basicCount + rowCount + skillCount + summaryCount;
+}
+
+function renderProfileDraftBanner() {
+  const banner = dom.profileDraftBanner;
+  if (!banner) return;
+  const showing = state.profileDirty && state.profilePrefillCount > 0;
+  banner.hidden = !showing;
+  if (!showing) {
+    clear(banner);
+    return;
+  }
+  clear(banner);
+  banner.append(el('strong', {
+    text: `已根据你的简历预填了 ${state.profilePrefillCount} 项，请核对并补充后点「保存」——现在还只是草稿，没保存的话离开页面会丢失。`
+  }));
+}
+
+function profileShouldAutoPrefill(profile) {
+  return state.mode === 'user'
+    && profile.saved === false
+    && profile.cv_available === true
+    && !state.profileAutoPrefillTried;
+}
+
+/* 进入个人资料页时调用：只在快照确认「未保存过 + 可读简历」时预填一次。 */
+function maybeAutoPrefillProfile() {
+  const profile = state.snapshot && state.snapshot.profile;
+  if (!profile || state.profileDirty || !profileShouldAutoPrefill(profile)) return;
+  autoPrefillProfileFromCv();
+}
+
+async function autoPrefillProfileFromCv() {
+  state.profileAutoPrefillTried = true;
+  if (!dom.profileImport) return;
+  const data = await postAction('import-profile-cv').catch((error) => ({ ok: false, message: friendlyError(error) }));
+  if (!data || data.ok === false) {
+    // A missing or unreadable resume is not an error for the user here; the form simply stays empty.
+    if (data && data.message) setStatus(data.message, 'warn');
+    return;
+  }
+  // The form is empty before this point (saved=false), so overwriting needs no confirmation.
+  if (state.mode !== 'user') return;
+  populateProfileForm(data.profile);
+  state.profileDirty = true;
+  state.profilePrefillCount = profileCountPrefilled(data.profile);
+  renderProfile(data.profile);
+  showInline(dom.profileResult, `已根据你的简历预填了 ${state.profilePrefillCount} 项，请核对后保存。`, 'ok');
+}
+
 function renderProfile(profile) {
   if (!dom.profileForm || !profile || typeof profile !== 'object') return;
   if (!state.profileDirty) populateProfileForm(profile);
   const completeness = profile.completeness || {};
   renderProfileMeter(completeness);
+  renderProfileDraftBanner();
+  if (dom.profileSave) dom.profileSave.classList.toggle('button-draft', state.profileDirty);
+  // The snapshot can arrive after the user already opened this page; retry the one-time prefill then.
+  const profilePanel = document.querySelector('[data-view-panel="profile"]');
+  if (profilePanel && !profilePanel.hidden) maybeAutoPrefillProfile();
   if (dom.profileBadge) {
     const level = completeness.level || 'empty';
     dom.profileBadge.textContent = state.profileDirty
@@ -1803,6 +1926,7 @@ async function saveProfileForm(event) {
     return;
   }
   state.profileDirty = false;
+  state.profilePrefillCount = 0;
   populateProfileForm(data.profile);
   renderProfileMeter(data.profile.completeness);
   showInline(dom.profileResult, data.message || '个人资料已保存到本机。', 'ok');
@@ -1820,6 +1944,7 @@ async function importProfileFromCv() {
   if (!data) return;
   populateProfileForm(data.profile);
   state.profileDirty = true;
+  state.profilePrefillCount = profileCountPrefilled(data.profile);
   renderProfile(data.profile);
   showInline(dom.profileResult, data.message || '已填入建议字段，请核对后保存。', 'ok');
   setStatus(data.message || '已填入建议字段，请核对后保存。', 'ok');
@@ -1906,13 +2031,68 @@ function collectNeedsSearch(mode) {
   return mode === 'collect' || mode === 'full';
 }
 
+/* 采集页「本次初筛条件」：只读展示个人资料里的求职意向，并给空输入框提供默认值。 */
+
+function collectProfileIntent() {
+  const profile = state.snapshot && state.snapshot.profile;
+  const intent = profile && typeof profile.job_intent === 'object' && profile.job_intent ? profile.job_intent : {};
+  const list = (value) => (Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : []);
+  const amount = (value) => {
+    const number = Number(value);
+    return value === null || value === undefined || value === '' || !Number.isFinite(number) || number <= 0 ? null : number;
+  };
+  return {
+    titles: list(intent.titles),
+    cities: list(intent.cities),
+    salaryMin: amount(intent.salary_min),
+    salaryMax: amount(intent.salary_max),
+    jobType: String(intent.job_type || '').trim()
+  };
+}
+
+function collectSalaryText(intent) {
+  if (intent.salaryMin !== null && intent.salaryMax !== null) return `${intent.salaryMin}–${intent.salaryMax} 元/月`;
+  if (intent.salaryMin !== null) return `不低于 ${intent.salaryMin} 元/月`;
+  if (intent.salaryMax !== null) return `不高于 ${intent.salaryMax} 元/月`;
+  return '未设置';
+}
+
+function renderCollectCriteria() {
+  const intent = collectProfileIntent();
+  if (dom.collectKeywords) {
+    dom.collectKeywords.placeholder = intent.titles.length ? intent.titles.slice(0, 10).join(', ') : '产品经理, AI产品经理';
+  }
+  if (dom.collectCities) {
+    dom.collectCities.placeholder = intent.cities.length ? intent.cities.slice(0, 5).join(', ') : '北京';
+  }
+  if (dom.collectCriteria) {
+    clear(dom.collectCriteria);
+    dom.collectCriteria.append(offerpilotMetaRow('求职类型', intent.jobType || '未设置'));
+    dom.collectCriteria.append(offerpilotMetaRow('期望月薪', collectSalaryText(intent)));
+    dom.collectCriteria.append(offerpilotMetaRow('目标城市', intent.cities.length ? intent.cities.join('、') : '未设置'));
+    dom.collectCriteria.append(offerpilotMetaRow('目标岗位', intent.titles.length ? intent.titles.join('、') : '未设置'));
+  }
+  if (dom.collectCriteriaHint) {
+    const incomplete = !intent.jobType || (intent.salaryMin === null && intent.salaryMax === null);
+    dom.collectCriteriaHint.hidden = !incomplete;
+    dom.collectCriteriaHint.textContent = incomplete ? '去个人资料补全求职类型和期望月薪后，初筛会更准；不补全也可以直接开始采集。' : '';
+  }
+}
+
+/* 输入框为空时回退到个人资料的目标岗位/城市；用户已输入的内容永远优先。 */
+function collectEffectiveList(input, fallback, limit) {
+  const typed = splitTextList(input && input.value);
+  return typed.length ? typed : fallback.slice(0, limit);
+}
+
 function collectFormKey() {
   const mode = collectMode();
   if (!collectNeedsSearch(mode)) return mode;
+  const intent = collectProfileIntent();
   return [
     mode,
-    dom.collectKeywords ? dom.collectKeywords.value.trim() : '',
-    dom.collectCities ? dom.collectCities.value.trim() : '',
+    collectEffectiveList(dom.collectKeywords, intent.titles, 10).join(','),
+    collectEffectiveList(dom.collectCities, intent.cities, 5).join(','),
     dom.collectPages ? dom.collectPages.value.trim() : '',
     dom.collectPace ? dom.collectPace.value : 'cautious',
     dom.collectAutoScore && dom.collectAutoScore.checked ? '1' : '0'
@@ -1920,8 +2100,9 @@ function collectFormKey() {
 }
 
 function buildOfferPilotOptions(silent = false) {
-  const keywords = splitTextList(dom.collectKeywords && dom.collectKeywords.value);
-  const cities = splitTextList(dom.collectCities && dom.collectCities.value);
+  const intent = collectProfileIntent();
+  const keywords = collectEffectiveList(dom.collectKeywords, intent.titles, 10);
+  const cities = collectEffectiveList(dom.collectCities, intent.cities, 5);
   const pages = Number(dom.collectPages && dom.collectPages.value);
   if (!keywords.length) {
     if (!silent) setStatus('请至少填写一个搜索关键词。', 'error');
@@ -2011,6 +2192,7 @@ function renderCollectChecks(preflight) {
 }
 
 function syncCollectModeUI() {
+  renderCollectCriteria();
   const mode = collectMode();
   const needsSearch = collectNeedsSearch(mode);
   document.querySelectorAll('[data-collect-search]').forEach((node) => {
@@ -2111,7 +2293,7 @@ function renderOfferPilot(boss) {
       if (Array.isArray(preferences.keywords) && preferences.keywords.length) parts.push(`关键词：${preferences.keywords.slice(0, 6).map(compactValue).join('、')}`);
       if (Array.isArray(preferences.cities) && preferences.cities.length) parts.push(`城市：${preferences.cities.slice(0, 6).map(compactValue).join('、')}`);
       if (preferences.salary !== undefined && preferences.salary !== null && preferences.salary !== '') parts.push(`薪资：${compactValue(preferences.salary)}`);
-      if (preferences.score_threshold !== undefined && preferences.score_threshold !== null) parts.push(`评分门：${compactValue(preferences.score_threshold)}`);
+      if (preferences.score_threshold !== undefined && preferences.score_threshold !== null) parts.push(`评分门：${compactValue(preferences.score_threshold)}/100`);
       dom.offerpilotState.append(offerpilotMetaRow('偏好快照', parts.length ? parts.join('；') : '已连接，暂无偏好字段'));
     }
   }
@@ -2132,6 +2314,8 @@ function renderOfferPilot(boss) {
   }
   applyOfferPilotPrefs(data);
   state.offerpilotTaskActive = Boolean(data.task);
+  state.offerpilotPipeline = data.pipeline && typeof data.pipeline === 'object' ? data.pipeline : null;
+  renderPipelineStatus();
   syncCollectModeUI();
   renderOfferPilotTask(data.task, data.last_task);
   syncOfferPilotStartState();
@@ -2369,7 +2553,7 @@ async function startOfferPilotTask(button) {
   if (!data) return;
   setStatus(data.message || '岗位自动化任务已受控提交。', 'ok');
   showInline(dom.offerpilotResult, data.message || '岗位自动化任务已受控提交。', 'ok');
-  dom.offerpilotRisk.checked = false;
+  dom.offerpilotRisk.checked = true;
   dom.offerpilotConfirm.checked = false;
   state.offerpilotPreflight = null;
   state.offerpilotPreflightKey = '';
@@ -2405,18 +2589,30 @@ async function maybeAutoImportCollected(task) {
     ? task.progress.collected_job_ids.map(String).filter(Boolean)
     : [];
   if (!ids.length || importedTaskIds().has(String(task.id))) return;
+  const full = String(task.mode || '') === 'full';
   state.offerpilotAutoImporting = true;
   markTaskImported(task.id, true);
   try {
-    const data = await postAction('offerpilot-import', { ids, data_mode: state.mode });
+    const payload = full
+      ? { ids, data_mode: state.mode, task_id: String(task.id || '') }
+      : { ids, data_mode: state.mode };
+    const data = await postAction(full ? 'offerpilot-automate' : 'offerpilot-import', payload);
     if (data && data.ok) {
-      const message = `采集完成，${data.message || '已自动导入岗位池'}`;
+      const message = full
+        ? String(data.message || '自动流程已停在最终确认门')
+        : `采集完成，${data.message || '已自动导入岗位池'}`;
+      if (full) state.offerpilotPipeline = data;
+      renderPipelineStatus();
       const collectView = document.getElementById('view-collect');
       const onCollect = collectView && !collectView.hidden;
       showInline(dom.offerpilotResult, message, 'ok');
       await loadState();
       renderOfferPilotJobs();
-      if (onCollect) {
+      if (full) {
+        // 采集 → 评分 → 入队 → 招呼语 都是自动的，完成后直接落到审批队列。
+        showView('queue');
+        setStatus(`${message} 请在「已通过，可以回复」里复核文案后确认发送。`, 'ok');
+      } else if (onCollect) {
         // 采集 → 自动导入 → 挑选岗位 是同一条主线，完成后直接落到岗位表。
         showView('jobs');
         setStatus(`${message} 已跳到岗位池，挑好后加入审批队列。`, 'ok');
@@ -2504,7 +2700,10 @@ async function enqueueJobs(jobs, button, manual = false) {
   const ids = jobs.map((job) => String(job.id)).filter(Boolean);
   if (!ids.length) return;
   const payload = { ids };
-  if (manual) payload.allow_low_score = true;
+  if (manual) {
+    payload.allow_low_score = true;
+    payload.override_reason = dom.jobsOverrideReason ? dom.jobsOverrideReason.value : '';
+  }
   const data = await runAction(button, () => postAction('enqueue', payload));
   if (!data) return;
   ids.forEach((id) => state.jobsSelection.delete(id));
@@ -2515,10 +2714,30 @@ async function enqueueJobs(jobs, button, manual = false) {
   if (Array.isArray(data.duplicate) && data.duplicate.length) {
     message += ` 重复 ${data.duplicate.length} 条。`;
   }
+  if (Array.isArray(data.recent_duplicates) && data.recent_duplicates.length) {
+    message += ` 30 天内已入队或发送过，已跳过 ${data.recent_duplicates.length} 条。`;
+  }
   const accepted = (Array.isArray(data.accepted) && data.accepted.length > 0)
     || (Array.isArray(data.manual) && data.manual.length > 0);
   setStatus(message, accepted ? 'ok' : 'warn');
   showInline(dom.jobsActionResult, message, accepted ? 'ok' : 'warn');
+  await loadState();
+}
+
+async function jobsDeleteSelected(jobs, button) {
+  const ids = jobs.map((job) => String(job.id)).filter(Boolean);
+  if (!ids.length) return;
+  if (!window.confirm(`删除 ${ids.length} 条岗位？已通过或已发送的不会被删除。`)) return;
+  const data = await runAction(button, () => postAction('delete-jobs', { ids }));
+  if (!data) return;
+  const kept = new Set(
+    (Array.isArray(data.skipped) ? data.skipped : [])
+      .filter((item) => item && item.reason !== 'not_found')
+      .map((item) => String(item.id))
+  );
+  ids.forEach((id) => { if (!kept.has(id)) state.jobsSelection.delete(id); });
+  const message = data.message || `已删除 ${data.deleted || 0} 条。`;
+  showInline(dom.jobsActionResult, message, data.deleted ? 'ok' : 'warn');
   await loadState();
 }
 
@@ -2584,6 +2803,29 @@ function updateQueueSelectionUI() {
   dom.queueSelectAll.checked = allSelected;
   dom.queueSelectAll.indeterminate = selected > 0 && !allSelected;
   dom.queueConfirmButton.disabled = selected === 0;
+}
+
+function renderPipelineStatus() {
+  if (!dom.queuePipelineStatus) return;
+  const pipeline = state.offerpilotPipeline && typeof state.offerpilotPipeline === 'object'
+    ? state.offerpilotPipeline
+    : null;
+  const awaiting = Boolean(pipeline && pipeline.awaiting_confirmation);
+  const approved = Number(pipeline && pipeline.approved_count) || 0;
+  const message = pipeline && pipeline.message ? String(pipeline.message) : '';
+  if (!message && !awaiting) {
+    dom.queuePipelineStatus.hidden = true;
+    dom.queuePipelineStatus.textContent = '';
+    return;
+  }
+  const parts = [];
+  if (message) parts.push(message);
+  if (awaiting) {
+    parts.push(`当前有 ${approved} 条已通过岗位等待你最终确认；未点「开始发送」前不会发出任何消息。`);
+  }
+  dom.queuePipelineStatus.textContent = parts.join(' ');
+  dom.queuePipelineStatus.className = awaiting ? 'notice notice-accent' : 'notice';
+  dom.queuePipelineStatus.hidden = false;
 }
 
 function renderQueue(snapshot) {
@@ -2663,6 +2905,7 @@ function renderQueue(snapshot) {
   });
   renderQueueGreetings(approved);
   renderDeliveryResults(snapshot);
+  renderPipelineStatus();
 
   updateQueueSelectionUI();
   updateQueueApprovedSelectionUI();
@@ -2826,21 +3069,16 @@ function openDeliveryPanel() {
     item.append(el('p', { text: String((row.greeting || {}).greeting || '') }));
     dom.queueDeliveryList.append(item);
   });
-  dom.queueDeliveryConfirm.value = '';
-  dom.queueDeliveryConfirm.placeholder = deliveryConfirmPhrase(count);
-  dom.queueDeliveryRisk.checked = false;
+  dom.queueDeliveryRisk.checked = true;
   dom.queueDeliveryPanel.hidden = false;
   updateDeliveryStartState();
-  dom.queueDeliveryConfirm.focus();
 }
 
 function updateDeliveryStartState() {
   if (!dom.queueDeliveryStart) return;
   const count = state.queueDeliveryIds.length;
-  const phraseOk = dom.queueDeliveryConfirm.value === deliveryConfirmPhrase(count);
   dom.queueDeliveryStart.disabled = !(
     count > 0
-    && phraseOk
     && dom.queueDeliveryRisk.checked
     && !state.offerpilotTaskActive
   );
@@ -2849,9 +3087,14 @@ function updateDeliveryStartState() {
 async function startQueueDelivery(button) {
   const ids = [...state.queueDeliveryIds];
   if (!ids.length) return;
+  const count = ids.length;
+  const confirmed = window.confirm(
+    `确认发送本批 ${count} 条？\n\n发送会在 BOSS 直聘上代你操作，可能被平台限制账号。\n发送时间固定在 09:00–16:00，每天有上限，中间会随机停顿。`
+  );
+  if (!confirmed) return;
   const data = await runAction(button, () => postAction('offerpilot-deliver', {
     ids,
-    confirm: deliveryConfirmPhrase(ids.length),
+    confirm: deliveryConfirmPhrase(count),
     risk_acknowledged: true
   }));
   if (!data) return;
@@ -2861,6 +3104,7 @@ async function startQueueDelivery(button) {
   setStatus(data.message || '已提交发送；受窗口与日限约束。', 'ok');
   await refreshOfferPilot();
 }
+
 
 async function stopQueueDelivery(button, taskId) {
   if (!taskId) return;
@@ -3237,8 +3481,8 @@ function renderData(snapshot) {
 
 function renderAll(snapshot) {
   renderMeta(snapshot);
-  renderFilterOptions(snapshot);
-  renderPipeline(snapshot.pipeline);
+  renderWorkbenchNextStep(snapshot);
+  renderPipeline(snapshot);
   renderProfile(snapshot.profile);
   renderOfferPilot(snapshot.pipeline && snapshot.pipeline.offerpilot);
   renderBelt(snapshot);
@@ -3453,9 +3697,6 @@ function bindEvents() {
     button.addEventListener('click', () => applyTheme(button.dataset.themeChoice));
   });
 
-  dom.filterPeriod.addEventListener('change', handleFilterChange);
-  dom.filterChannel.addEventListener('change', handleFilterChange);
-  dom.filterState.addEventListener('change', handleFilterChange);
   dom.refreshButton.addEventListener('click', () => loadState({ announce: true }));
 
   if (dom.profileForm) {
@@ -3560,9 +3801,6 @@ function bindEvents() {
       state.queueDeliveryIds = [];
     });
   }
-  if (dom.queueDeliveryConfirm) {
-    dom.queueDeliveryConfirm.addEventListener('input', updateDeliveryStartState);
-  }
   if (dom.queueDeliveryRisk) {
     dom.queueDeliveryRisk.addEventListener('change', updateDeliveryStartState);
   }
@@ -3603,6 +3841,14 @@ function bindEvents() {
       if (!selected.length) return;
       const low = selected.some((job) => typeof job.score !== 'number' || job.score < 4.0);
       enqueueJobs(selected, dom.jobsBulkEnqueue, low);
+    });
+  }
+  if (dom.jobsBulkDelete) {
+    dom.jobsBulkDelete.addEventListener('click', () => {
+      const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
+      const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
+      if (!selected.length) return;
+      jobsDeleteSelected(selected, dom.jobsBulkDelete);
     });
   }
 
@@ -3867,7 +4113,6 @@ function bindAmbient() {
 function init() {
   applyTheme(state.theme);
   syncModeButtons();
-  dom.filterPeriod.value = state.period;
   dom.mailDate.value = todayIso();
   showView('workbench');
   bindEvents();

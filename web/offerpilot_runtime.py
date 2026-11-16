@@ -414,6 +414,23 @@ def save_resume(filename: str, content: bytes) -> dict[str, Any]:
     return {"filename": final_name, **_resume_info(server, config)}
 
 
+def get_score_threshold() -> int:
+    """Return the runtime's scoring threshold on the scorer's 0–100 scale.
+
+    This is the single source the workbench converts into its 0–5 queue gate;
+    the runtime config is read, never written.
+    """
+    server = load_backend()
+    from offerpilot.config import load_config  # type: ignore
+
+    config = load_config(server.CONFIG_PATH)
+    scoring = config.get("scoring") if isinstance(config.get("scoring"), dict) else {}
+    try:
+        return int(scoring.get("threshold", 71))
+    except (TypeError, ValueError):
+        return 71
+
+
 def get_state() -> dict[str, Any]:
     """Return the same credential-free shape the old HTTP bridge returned."""
     try:
@@ -554,6 +571,36 @@ def _options_summary(mode: str, options: dict[str, Any] | None) -> dict[str, Any
     }
 
 
+def _option_cities(options: dict[str, Any] | None) -> list[str]:
+    """Collect this run's search cities across the selected platforms."""
+    if not isinstance(options, dict):
+        return []
+    platforms = options.get("platforms") if isinstance(options.get("platforms"), dict) else {}
+    cities: list[str] = []
+    for platform in options.get("platform_order", []):
+        value = platforms.get(platform) if isinstance(platforms.get(platform), dict) else {}
+        for item in value.get("cities", []) or []:
+            text = str(item or "").strip()
+            if text and text not in cities:
+                cities.append(text)
+    return cities
+
+
+def _with_collection_cities(config: dict[str, Any], options: dict[str, Any] | None) -> dict[str, Any]:
+    """Point the in-memory profile at this run's search cities.
+
+    The quick-score city gate reads ``profile.target_cities``; the search form
+    reads the per-platform cities.  They must agree, so a task started with an
+    explicit city list also overrides the profile for that run only.  The saved
+    ``config.yaml`` is never written and the workbench profile is not read.
+    """
+    cities = _option_cities(options)
+    if not cities:
+        return config
+    profile = config.get("profile") if isinstance(config.get("profile"), dict) else {}
+    return {**config, "profile": {**profile, "target_cities": cities}}
+
+
 RESUME_REQUIRED_MESSAGE = "请先上传评分简历（.md / .docx / .pdf）；没有简历无法评分，也无法生成招呼语"
 
 
@@ -582,6 +629,7 @@ def preflight(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str,
             "messages": [str(exc)],
             "summary": _options_summary(mode, None),
         }
+    config = _with_collection_cities(config, options)
     summary = _options_summary(mode, options)
     resume_blocker = _resume_blocker(server, mode, config)
     if resume_blocker:
@@ -654,6 +702,7 @@ def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str
     if resume_blocker:
         raise ValueError(resume_blocker)
     options = _task_options(mode, config, raw_options)
+    config = _with_collection_cities(config, options)
     checks = collect_preflight_checks(mode, config, options)
     messages = [*server._preflight_messages(mode, config, options), *error_messages(checks)]
     if messages:
@@ -664,12 +713,18 @@ def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str
         collection = dict(config.get("collection") or {})
         collection["collection_delay_multiplier"] = PACE_MULTIPLIERS.get(pace, PACE_MULTIPLIERS["cautious"])
         extra = {"_collection_options": options, "collection": collection}
+    if mode == "full":
+        # The workbench confirmation gate lives in the approval queue and its
+        # delivery popup, so the runtime full flow stops right after scoring
+        # instead of waiting on the embedded dashboard's own confirmation.
+        extra["_workbench_auto_pipeline"] = True
     with server.job_mutation_lock:
         task = server.task_runner.start(mode, {**config, **extra, "_agent_workflow": True})
     return {
         "task": _safe_task(task),
         "checks": checks,
         "summary": _options_summary(mode, options),
+        "auto_pipeline": mode == "full",
         "policy": {
             "auto_score": bool(options.get("auto_score")) if options is not None else None,
             "delivery": "full 工作流会在发送前暂停，必须经现有人工确认流程继续",

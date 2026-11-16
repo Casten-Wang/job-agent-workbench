@@ -105,6 +105,26 @@ POST /api/action
 
 只读取本机 `workspace/resume.md`，返回可识别的姓名、邮箱、电话、城市、技能词与一段简介建议；**不会自动保存**。演示模式返回 `400`，避免把真实简历写进 demo 数据。
 
+导入来源与解析范围（只增不改，旧字段保持原样）：
+
+- 来源：优先 `workspace/resume.md`；不存在时回退到采集页已上传的 Markdown 简历（运行时目录内的 `resume.md` 优先，否则最近修改的 `.md`，只读取，不改动其内容）。两处都没有返回 `404`；只有非 `.md` 的上传简历时返回 `400` 并提示改用 `.md` 或手动填写。
+- 响应新增 `source` 字段，标明本次读取的是哪一份简历。
+- 解析 Markdown 的 `##` 段落：`Professional Summary` / 个人简介 → `summary`；`Work Experience` / 工作经历 / 实习经历 → `experiences`（`### 公司 — 城市` + `**职位**` + 日期行 + `-`/`*`/`•` 要点）；`Projects` / 项目经历 → `projects`；`Education` / 教育经历 / 教育背景 → `education`；`Skills` / 技能 → `skills.tools`（与内置词表命中合并去重）。
+- 日期支持 `2019年10月 - 至今`、`2018.03-2018.06`、`2019-03 ~ 2019-06` 等写法，统一输出为 `YYYY-MM` 或 `至今`。
+- 要点中的 `[[ILLEGIBLE]]` 标记会被去掉，保留可读部分；去掉后几乎没有文字的要点直接丢弃。
+- 解析不到的字段保持空值，不推断期望薪资，`job_intent.titles` 留空。联系方式（电话/邮箱）照常提取进 `basic`。
+
+### 3.1 资料状态字段（GET 与快照的只增字段）
+
+`GET /api/profile` 的 `profile` 对象，以及工作台快照的 `profile` 键，新增两个只读字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `saved` | 该模式是否已通过 `save-profile` 写入过 `profile.json`。`false` 表示还只是空白或未保存的草稿来源 |
+| `cv_available` | user 模式下本机是否有可读的 Markdown 简历可供导入；demo 模式恒为 `false` |
+
+页面据此决定是否在首次进入时自动预填一次草稿：仅当 `saved=false` 且 `cv_available=true` 时，预填结果只进入表单、不保存，并要求用户核对后再点「保存」。已保存过的资料（`saved=true`）不会被自动覆盖。
+
 ## 4. 被哪些模块使用
 
 | 模块 | 用法 |

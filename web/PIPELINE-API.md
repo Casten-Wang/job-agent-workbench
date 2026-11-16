@@ -14,7 +14,7 @@
 | --- | --- | --- | --- | --- |
 | 1 | `intake` | 岗位采集 | 本地工作台 | 岗位池：粘贴 JD / 导入静态 JSON |
 | 2 | `screening` | AI 评分与筛选 | 本地规则 + 可选评分 | 岗位池：入队、硬性过滤、评分门 |
-| 3 | `approval` | 人工确认 | 人工 | 审批队列：精确确认语 |
+| 3 | `approval` | 人工确认 | 人工 | 审批队列：点击「通过」，发送前另有确认框 |
 | 4 | `greeting` | 生成招呼语 | 本地工作台 | 岗位池：生成人工准备清单 |
 | 5 | `send` | 发送 | 外部执行流程 / 本人 | 接收发送结果回报 |
 | 6 | `monitor` | 监控 HR 回复 | 外部 Agent / 本地邮件解析 | 接收回复结果回报 |
@@ -125,7 +125,17 @@ GET /api/pipeline?mode=demo
 - `queue[].plan`：`{today: bool, rank: int | null, reason: string}`，来自 `tools/quota_planner.py`。只对 `approved` 且尚未发送的行计算。
 - `pipeline.delivery.quota`：`{daily, remaining, planned_today}`。`daily` 为默认每日额度（30），仅用于排序提示；实际上限由内嵌发送器强制。
 
-`POST /api/action` 的 `enqueue` 响应新增 `risk_blocked: string[]`，列出因高风险被拦截的岗位 id（即使带 `allow_low_score` 也会拦截）。
+`POST /api/action` 的 `enqueue` 响应新增以下只增字段：
+
+- `risk_blocked: string[]`：因高风险被拦截的岗位 id（即使带 `allow_low_score` 也会拦截）。
+- `city_blocked: {id, reason}[]`：城市不在 `profile.json` 的 `job_intent.cities` 内的岗位，即使手动加入也拦截。`profile.json` 没有目标城市时，回退到 `tools/config.json` 的 `target_cities`。城市为空时放行并不猜测。
+- `recent_duplicates: {id, company, title, reason}[]`：与审批队列或已发送记录中、30 天内相同（公司、岗位名、城市指纹一致，规则同 `tools/precheck.py`）的岗位，已跳过。已结束或放弃的记录不计入。
+
+`allow_low_score: true`（手动加入低分或未评分岗位）时必须带 `override_reason`，且取值只能是下拉框的三项之一：`值得沟通，人工判断`、`有内推或熟人渠道`、`公司或岗位我已了解`。缺失或不在列表内返回 400，不改动任何数据。手动加入的队列行会写入 `override_reason` 与 `override_at`。
+
+`POST /api/action` 的 `confirm` 响应同样新增 `recent_duplicates`：批准时若岗位在 30 天内已发送过，该行保持 `pending` 并列在此字段中。
+
+`POST /api/action` 的 `delete-jobs`（body：`{ids: string[], mode}`，一次最多 100 条）对岗位池做软删除：仅标记 `deleted_at`，不物理删除记录，便于指纹去重防止重新导入复活；已 `approved` 或已出现在发送记录中的岗位会被跳过并在 `skipped: [{id, reason}]` 中列出原因，响应为 `{deleted: number, skipped: [...], message}`。
 
 ## 3.1 岗位自动化接口
 
@@ -145,6 +155,15 @@ POST /api/offerpilot/tasks/<task_id>/stop
 ```
 
 工作台不开放不受约束的任意任务入口；任务能力、发送配置和确认流程由当前功能实现及用户配置决定。`/api/offerpilot/jobs` 只返回界面所需字段，不返回敏感配置或凭据。
+
+`full` 任务在运行时会完成采集与评分，然后由工作台自动导入岗位池、把达标岗位加入审批队列（城市、30 天重复、高风险、评分门槛照旧拦截），并为已通过岗位生成招呼语，停在最终确认门。`GET /api/offerpilot/state` 新增只增字段 `pipeline`：`approved_count`、`awaiting_confirmation`、`auto_submit`，以及最近一次自动流程的导入/入队/招呼语摘要。自动流程也可通过统一动作入口重试（幂等：重复导入按指纹跳过，已入队与已生成招呼语的岗位不会重复处理）：
+
+```json
+POST /api/action
+{"action":"offerpilot-automate","mode":"user","data_mode":"user","task_id":"<task-id>","ids":["<runtime-job-id>"]}
+```
+
+该动作只导入、入队和生成招呼语，不发送；发送仍需 `offerpilot-deliver` 的确认语与风险勾选。
 
 ## 3. 回报流程事件
 

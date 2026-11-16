@@ -201,7 +201,7 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                 self._json({
                     "ok": True,
                     "mode": mode,
-                    "profile": backend.profile_public(store.profile()),
+                    "profile": backend.profile_for_api(mode, store),
                     "guarantees": {
                         "local_only": True,
                         "contact_fields_in_drafts": False,

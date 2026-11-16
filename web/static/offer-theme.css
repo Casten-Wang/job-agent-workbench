@@ -1745,6 +1745,15 @@ textarea:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+/* 草稿态：有未保存的预填或修改时，保存按钮用更醒目的样式，提示用户落盘。 */
+.profile-draft-banner { margin: 12px 0; }
+.profile-draft-banner[hidden] { display: none; }
+#profile-save.button-draft {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 620px) {
   .profile-item {
     padding: 10px 12px;
@@ -1756,3 +1765,55 @@ textarea:focus-visible {
 }
 
 #collect-resume-status.resume-missing { color: var(--danger, #b3261e); font-weight: 600; }
+
+.collect-criteria-panel { margin-bottom: 16px; }
+.collect-criteria-panel .integration-meta { margin-top: 8px; }
+.collect-criteria-panel .notice { margin-top: 10px; }
+.collect-pages-hint { margin: 6px 0 0; }
+
+/* 工作台四步流程（workbench 模块追加） --------------------------------------- */
+
+.pipeline.workbench-stages {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pipeline-node.workbench-stage {
+  min-height: 0;
+}
+
+.pipeline-node.workbench-stage.is-readonly {
+  cursor: default;
+}
+
+.pipeline-node.workbench-stage.is-readonly:hover {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.pipeline-node.workbench-stage.is-confirm {
+  border-color: rgba(228, 136, 156, 0.55);
+}
+
+.workbench-reason {
+  color: var(--mute);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.workbench-confirm-button {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+@media (max-width: 1180px) {
+  .pipeline.workbench-stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .pipeline.workbench-stages {
+    grid-template-columns: 1fr;
+  }
+}

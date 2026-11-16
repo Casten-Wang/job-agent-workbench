@@ -261,9 +261,19 @@ class Store:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(value, ensure_ascii=False) + "\n")
 
-    def jobs(self) -> list[dict[str, Any]]:
+    def all_jobs(self) -> list[dict[str, Any]]:
+        """Every job record on disk, including soft-deleted ones (``deleted_at``).
+
+        Writers that rewrite jobs.json and fingerprint de-duplication must use
+        this, otherwise a soft-deleted record would be dropped from the file or
+        re-imported as new.
+        """
         value = self._read_json("jobs", [])
         return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+    def jobs(self) -> list[dict[str, Any]]:
+        """The visible job pool: soft-deleted jobs are excluded."""
+        return [row for row in self.all_jobs() if not row.get("deleted_at")]
 
     def set_jobs(self, rows: list[dict[str, Any]]) -> None:
         self._write_json("jobs", rows)
@@ -641,6 +651,271 @@ def save_profile(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+CV_SECTION_HEADINGS = (
+    # Order matters: "Project Experience" must resolve to projects, not experiences.
+    ("projects", ("project", "项目")),
+    ("experiences", ("experience", "工作经历", "实习经历", "工作经验")),
+    ("education", ("education", "教育")),
+    ("summary", ("summary", "个人简介", "个人概述", "自我评价")),
+    ("skills", ("skill", "技能")),
+)
+CV_CITIES = (
+    "北京", "上海", "深圳", "广州", "杭州", "成都", "武汉", "南京", "苏州", "西安",
+    "长沙", "重庆", "天津", "合肥", "厦门", "青岛", "郑州", "济南", "大连", "宁波",
+)
+# One date such as 2019, 2019.03, 2019-03 or 2019年3月.
+CV_DATE_PART = r"\d{4}(?:\s*[./年-]\s*\d{1,2}月?)?"
+# A date range such as "2019年10月 - 至今", "2018.03-2018.06", "2019-03 ~ 2019-06", "2025.09–2026.03".
+CV_DATE_RANGE_RE = re.compile(
+    rf"({CV_DATE_PART})\s*(?:[-~～–—－]+|到|至(?!今)|(?=至今|现在))\s*(至今|现在|Present|present|Now|now|{CV_DATE_PART})"
+)
+CV_ILLEGIBLE_RE = re.compile(r"\[\[ILLEGIBLE\]\]")
+CV_BULLET_RE = re.compile(r"^\s*(?:[-•]\s*|\*\s+)")
+CV_HEADING_SEP_RE = re.compile(r"\s*(?:—|–|｜|\||·)\s*|\s+-\s+")
+CV_EDU_SEP_RE = re.compile(r"\s*(?:—|–|｜|\||·|，|,|、|\u3000)\s*|\s+-\s+|\s{2,}")
+CV_EDU_DEGREES = ("大专", "本科", "硕士", "博士")
+CV_CITY_TAIL_RE = re.compile(r"（\s*(?:" + "|".join(CV_CITIES) + r")\s*）\s*$")
+CV_SKILL_LABEL_RE = re.compile(r"^(?:技能|工具|专业技能|技术栈|tools?|skills?)\s*[:：]\s*(.+)$", re.IGNORECASE)
+
+
+def _is_cv_bullet(line: str) -> bool:
+    return bool(CV_BULLET_RE.match(line))
+
+
+def _cv_bullet_text(line: str) -> str:
+    return CV_BULLET_RE.sub("", line, count=1).strip()
+
+
+def _clean_cv_text(text: str) -> str:
+    """Drop ``[[ILLEGIBLE]]`` markers and keep the readable part.
+
+    Returns "" when too little readable text is left (a bullet that was only
+    the marker, or a stub such as "与"), so the caller skips it rather than
+    inventing wording around the gap.
+    """
+    cleaned = CV_ILLEGIBLE_RE.sub("", text)
+    cleaned = re.sub(r"\s+([，,。；;、：:])", r"\1", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ，,、；;：:")
+    if len(re.sub(r"[\W_]+", "", cleaned)) < 4:
+        return ""
+    return cleaned
+
+
+def _cv_bullet_texts(lines: list[str]) -> list[str]:
+    rows: list[str] = []
+    for line in lines:
+        if _is_cv_bullet(line):
+            text = _clean_cv_text(_cv_bullet_text(line))
+            if text:
+                rows.append(text)
+    return rows
+
+
+def _cv_join_bullets(texts: list[str]) -> str:
+    parts = [text.rstrip("。.；;") for text in texts if text.rstrip("。.；;")]
+    return ("；".join(parts) + "。") if parts else ""
+
+
+def _normalize_cv_date(value: str) -> str:
+    text = value.strip()
+    if text in ("至今", "现在", "Present", "present", "Now", "now"):
+        return "至今"
+    match = re.match(r"(\d{4})(?:\s*[./年-]\s*(\d{1,2}))?", text)
+    if not match:
+        return _clean_text(text, 20)
+    if match.group(2):
+        return f"{match.group(1)}-{int(match.group(2)):02d}"
+    return match.group(1)
+
+
+def _split_cv_date_range(text: str) -> tuple[str, str]:
+    match = CV_DATE_RANGE_RE.search(text)
+    if not match:
+        return "", ""
+    return _normalize_cv_date(match.group(1)), _normalize_cv_date(match.group(2))
+
+
+def _cv_heading_text(line: str) -> str:
+    return re.sub(r"^\s*###\s*", "", line).strip()
+
+
+def _cv_head(text: str) -> str:
+    """A heading or lead line without its date range and without empty brackets."""
+    text = text.replace("(", "（").replace(")", "）")
+    text = CV_DATE_RANGE_RE.sub("", text)
+    text = re.sub(r"（[\s，,、;；|｜]*）", "", text)
+    text = re.sub(r"（[\s，,、;；]+", "（", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip(" ，,、;；|｜—–-·\u3000")
+
+
+def _cv_heading_parts(text: str) -> list[str]:
+    return [part.strip() for part in CV_HEADING_SEP_RE.split(text) if part.strip()]
+
+
+def _cv_block_prose(body: list[str]) -> list[str]:
+    """Plain description lines in a block: skips bullets, bold titles and date lines."""
+    rows: list[str] = []
+    for line in body:
+        text = line.strip()
+        if not text or _is_cv_bullet(line) or re.fullmatch(r"\*\*.+?\*\*", text) or _split_cv_date_range(text) != ("", ""):
+            continue
+        cleaned = _clean_cv_text(text)
+        if cleaned:
+            rows.append(cleaned.rstrip("。.；;") + "。")
+    return rows
+
+
+def _cv_block_summary(body: list[str]) -> str:
+    """Prose first, then bullet points, joined into one single-line record summary."""
+    return _cv_join_bullets(_cv_block_prose(body) + _cv_bullet_texts(body))
+
+
+def _cv_body_dates(body: list[str]) -> tuple[str, str]:
+    """The first date range written on a plain (non-bullet) line of a block."""
+    for line in body:
+        text = line.strip()
+        if text and not _is_cv_bullet(line):
+            start, end = _split_cv_date_range(text)
+            if start or end:
+                return start, end
+    return "", ""
+
+
+def _cv_section_key(label: str) -> str | None:
+    folded = label.casefold()
+    for key, names in CV_SECTION_HEADINGS:
+        if any(name in folded for name in names):
+            return key
+    return None
+
+
+def _cv_sections(text: str) -> dict[str, list[str]]:
+    """Group lines under recognized ``##`` headings; unknown headings are skipped."""
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        heading = re.match(r"^\s*##\s+(.+?)\s*$", line)
+        if heading:
+            current = _cv_section_key(heading.group(1))
+            if current:
+                sections.setdefault(current, [])
+            continue
+        if current:
+            sections[current].append(line)
+    return sections
+
+
+def _cv_subsection_blocks(lines: list[str]) -> list[list[str]]:
+    """Split a section into blocks that start at each ``###`` heading."""
+    blocks: list[list[str]] = []
+    for line in lines:
+        if re.match(r"^\s*###\s+", line):
+            blocks.append([line])
+        elif blocks:
+            blocks[-1].append(line)
+    return blocks
+
+
+def _extract_cv_experiences(lines: list[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for block in _cv_subsection_blocks(lines):
+        heading = _cv_heading_text(block[0])
+        start, end = _split_cv_date_range(heading)
+        parts = _cv_heading_parts(_cv_head(heading))
+        company = parts[0] if parts else ""
+        body = block[1:]
+        bold_title = next(
+            (match.group(1).strip() for match in (re.fullmatch(r"\*\*(.+?)\*\*", line.strip()) for line in body) if match),
+            "",
+        )
+        # "### 公司 — 城市" plus a bold "**职位**" line is the common layout: the bold line is the title.
+        # A heading part is used as the title only when no bold line exists, and never when it is a city.
+        heading_title = next((part for part in parts[1:] if part not in CV_CITIES), "")
+        title = bold_title or heading_title
+        if not start and not end:
+            start, end = _cv_body_dates(body)
+        summary = _cv_block_summary(body)
+        if company or title or summary:
+            rows.append({"company": company, "title": title, "start": start, "end": end, "summary": summary})
+    return rows
+
+
+def _extract_cv_projects(lines: list[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for block in _cv_subsection_blocks(lines):
+        heading = _cv_heading_text(block[0])
+        start, end = _split_cv_date_range(heading)
+        if not start and not end:
+            # "项目名｜角色｜2025.09" style: a single date is the project's start date.
+            single = re.search(r"(\d{4}(?:\s*[./年-]\s*\d{1,2}月?)?)\s*$", heading)
+            if single:
+                start = _normalize_cv_date(single.group(1))
+                heading = heading[: single.start()]
+        parts = _cv_heading_parts(_cv_head(heading))
+        name = parts[0] if parts else ""
+        role = parts[1] if len(parts) > 1 else ""
+        body = block[1:]
+        if not start and not end:
+            start, end = _cv_body_dates(body)
+        summary = _cv_block_summary(body)
+        if name or role or summary:
+            rows.append({"name": name, "role": role, "start": start, "end": end, "summary": summary})
+    return rows
+
+
+def _parse_cv_education_line(line: str) -> dict[str, str]:
+    start, end = _split_cv_date_range(line)
+    # Parenthesized text in an education line is a city, a date, or a note: never a school or major.
+    head = re.sub(r"（[^）]*）", "", _cv_head(line))
+    head = CV_CITY_TAIL_RE.sub("", head)
+    tokens = [token.strip() for token in CV_EDU_SEP_RE.split(head) if token.strip()]
+    # A trailing degree word ("…信息系统 本科") is split off the last token when no separator precedes it.
+    degree = ""
+    if tokens:
+        for item in CV_EDU_DEGREES:
+            if tokens[-1].endswith(item) and tokens[-1] != item:
+                tokens[-1] = tokens[-1][: -len(item)].strip()
+                degree = item
+                break
+            if tokens[-1] == item:
+                tokens.pop()
+                degree = item
+                break
+    school = tokens[0] if tokens else ""
+    major = tokens[1] if len(tokens) > 1 else ""
+    if len(tokens) > 2:
+        major = " ".join(tokens[1:])
+    return {"school": school, "major": major, "degree": degree, "start": start, "end": end, "summary": ""}
+
+
+def _extract_cv_education(lines: list[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    blocks = _cv_subsection_blocks(lines)
+    if blocks:
+        for block in blocks:
+            row = _parse_cv_education_line(_cv_heading_text(block[0]))
+            if not row["start"] and not row["end"]:
+                row["start"], row["end"] = _cv_body_dates(block[1:])
+            row["summary"] = _cv_block_summary(block[1:])
+            rows.append(row)
+    else:
+        for line in lines:
+            if _is_cv_bullet(line) and CV_DATE_RANGE_RE.search(line):
+                rows.append(_parse_cv_education_line(_cv_bullet_text(line)))
+    return [row for row in rows if row["school"]]
+
+
+def _extract_cv_skills(lines: list[str]) -> list[str]:
+    tools: list[str] = []
+    for line in lines:
+        text = _cv_bullet_text(line) if _is_cv_bullet(line) else line.strip()
+        match = CV_SKILL_LABEL_RE.match(text)
+        if match:
+            tools.extend(item for item in _string_list(match.group(1)) if len(item) <= 30)
+    return tools
+
+
 def _extract_profile_from_cv(text: str) -> dict[str, Any]:
     profile = default_profile()
     basic = profile["basic"]
@@ -654,37 +929,98 @@ def _extract_profile_from_cv(text: str) -> dict[str, Any]:
     phone = re.search(r"(?<!\d)(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)", text)
     if phone:
         basic["phone"] = phone.group(0)
-    for city in ("北京", "上海", "深圳", "广州", "杭州", "成都", "武汉", "南京", "苏州", "西安", "长沙", "重庆", "天津", "合肥", "厦门", "青岛", "郑州", "济南", "大连", "宁波"):
+    for city in CV_CITIES:
         if city in text:
             basic["city"] = city
             break
-    profile["skills"]["tools"] = [term for term in SKILL_TERMS if term in text]
-    paragraphs = [
-        re.sub(r"\s+", " ", line).strip()
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith(("#", "-", "*", "|", ">"))
-    ]
-    for paragraph in paragraphs:
-        if len(paragraph) >= 20:
-            profile["summary"] = paragraph[: PROFILE_LIMITS["long"]]
-            break
+
+    sections = _cv_sections(text)
+    tools = _extract_cv_skills(sections.get("skills", []))
+    tools += [term for term in SKILL_TERMS if term in text]
+    profile["skills"]["tools"] = list(dict.fromkeys(tools))[: PROFILE_LIMITS["list"]]
+    profile["experiences"] = _extract_cv_experiences(sections.get("experiences", []))
+    profile["projects"] = _extract_cv_projects(sections.get("projects", []))
+    profile["education"] = _extract_cv_education(sections.get("education", []))
+
+    if "summary" in sections:
+        lines = sections["summary"]
+        bullets = _cv_bullet_texts(lines)
+        if bullets:
+            profile["summary"] = "\n".join(item.rstrip("。.；;") + "。" for item in bullets)
+        else:
+            paragraphs = [_clean_cv_text(line.strip()) for line in lines if line.strip() and not line.lstrip().startswith("#")]
+            profile["summary"] = "\n".join(item for item in paragraphs if item)
+    elif not sections:
+        # Unstructured resume with no recognized headings: keep the first substantial line.
+        for raw_line in text.splitlines():
+            cleaned = re.sub(r"\s+", " ", raw_line).strip()
+            if cleaned and not raw_line.lstrip().startswith(("#", "-", "*", "|", ">")) and len(cleaned) >= 20:
+                profile["summary"] = cleaned
+                break
+    profile["summary"] = profile["summary"][: PROFILE_LIMITS["long"]]
     return profile
 
 
+def _runtime_resume_files() -> list[Path]:
+    """Files in the embedded runtime's uploaded-resume directory, listed read-only."""
+    directory = offerpilot_runtime.runtime_dir("user") / "data" / "resumes"
+    try:
+        if not directory.is_dir():
+            return []
+        return [path for path in directory.iterdir() if path.is_file() and not path.name.startswith(".")]
+    except OSError:
+        return []
+
+
+def _profile_cv_source() -> tuple[Path, str] | None:
+    """The resume to read: workspace/resume.md, else the runtime's uploaded Markdown resume."""
+    if CV_PATH.is_file():
+        return CV_PATH, "workspace/resume.md"
+    markdown = [path for path in _runtime_resume_files() if path.suffix.lower() == ".md"]
+    if not markdown:
+        return None
+    preferred = [path for path in markdown if path.name == "resume.md"]
+    chosen = preferred[0] if preferred else max(markdown, key=lambda path: path.stat().st_mtime)
+    return chosen, "采集页已上传的 Markdown 简历"
+
+
+def profile_for_api(mode: str, store: Store) -> dict[str, Any]:
+    """Profile payload for the API and snapshot: public fields plus two read-only flags.
+
+    ``saved``: this mode has a profile.json written by save-profile.
+    ``cv_available``: a Markdown resume can be read for import (user mode only).
+    """
+    return {
+        **profile_public(store.profile()),
+        "saved": store.files["profile"].is_file(),
+        "cv_available": mode == "user" and _profile_cv_source() is not None,
+    }
+
+
 def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
-    """Suggest profile fields from the local workspace/resume.md; never auto-save."""
+    """Suggest profile fields from a local resume; never auto-save."""
     mode = str(payload.get("mode") or "user")
     if mode != "user":
         raise ApiError("演示模式不读取真实简历；请切换到 user 模式")
-    if not CV_PATH.is_file():
+    source = _profile_cv_source()
+    if source is None:
+        if any(path.suffix.lower() != ".md" for path in _runtime_resume_files()):
+            raise ApiError("采集页上传的简历不是 Markdown（.md）格式，暂无法自动提取；请在「个人资料」中手动填写，或上传 .md 简历", 400)
         raise ApiError("未找到 workspace/resume.md；可先在「个人资料」中手动填写", 404)
-    text = CV_PATH.read_text(encoding="utf-8-sig")
-    suggestion = _extract_profile_from_cv(text)
+    path, label = source
+    if path.stat().st_size > offerpilot_runtime.MAX_RESUME_BYTES:
+        raise ApiError("简历文件超过 5 MB 上限", 400)
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError) as exc:
+        raise ApiError(f"{label} 无法按 UTF-8 文本读取：{exc.__class__.__name__}", 400) from exc
+    suggestion = normalize_profile(_extract_profile_from_cv(text))
     store = get_store(mode)
-    store.log("读取简历建议资料", "workspace/resume.md；未自动保存")
+    store.log("读取简历建议资料", f"{label}；未自动保存")
     return {
         "ok": True,
         "profile": suggestion,
+        "source": label,
         "message": "已从本地简历提取可识别字段；请核对后再保存。",
     }
 
@@ -1048,7 +1384,7 @@ def get_store(mode: str, seed_if_empty: bool = True) -> Store:
     if mode not in Store.VALID_MODES:
         raise ApiError("数据模式只能是 demo 或 user")
     store = Store(mode)
-    if mode == "demo" and seed_if_empty and not store.jobs():
+    if mode == "demo" and seed_if_empty and not store.all_jobs():
         seed_demo(store)
     return store
 
@@ -1169,6 +1505,7 @@ def _demo_offerpilot_state(store: Store) -> dict[str, Any]:
         "task": None,
         "last_task": None,
         "resume": {"available": False, "filename": None, "size_label": None, "uploaded_at": None},
+        "pipeline": {"approved_count": 0, "awaiting_confirmation": False, "auto_submit": False},
         "mode": "demo",
         "note": "演示模式只展示虚构数据，不启动真实采集。",
     }
@@ -1189,6 +1526,18 @@ def get_offerpilot_state(mode: str = "user") -> dict[str, Any]:
     state = offerpilot_runtime.get_state()
     if not state.get("ok"):
         state.setdefault("base_url", "embedded://offerpilot")
+        state["pipeline"] = _pipeline_state(mode)
+        return state
+    # The OfferPilot config's target_cities can lag the workbench profile. The
+    # collect form prefills from these preferences, so use the workbench's
+    # job_intent.cities as the single source for the prefill.
+    intent = get_store(mode).profile().get("job_intent")
+    intent_cities = intent.get("cities") if isinstance(intent, dict) else None
+    if isinstance(intent_cities, list):
+        preferences = state.get("preferences")
+        if isinstance(preferences, dict):
+            preferences["cities"] = [str(city).strip() for city in intent_cities if str(city).strip()]
+    state["pipeline"] = _pipeline_state(mode)
     return state
 
 
@@ -1334,6 +1683,8 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     message = "岗位自动化任务已受控提交；发送仍须经过人工确认门和配置时间窗口"
     if task_mode == "collect":
         message = "采集任务已受控提交；完成后会自动导入岗位池，再到「岗位池」挑选并加入审批队列"
+    elif task_mode == "full":
+        message = "完整流程已受控提交；采集、评分、入队与招呼语会自动完成，最后停在发送确认门"
     return {"ok": True, "task": response, "message": message}
 
 
@@ -1648,26 +1999,63 @@ def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 OFFERPILOT_APPROVAL_RAW = 71.0
+OFFERPILOT_APPROVAL_SCORE = 4.0
 
 
-def _offerpilot_score(raw_score: Any) -> float | None:
+def _offerpilot_thresholds() -> tuple[float, float]:
+    """Read the two gates that must agree, each from its single source.
+
+    Returns ``(raw threshold on the scorer's 0–100 scale, workbench gate on the
+    queue's 0–5 scale)``.  The raw threshold is the runtime's
+    ``scoring.threshold``; the workbench gate is the approval queue's
+    ``score.approval_min``.  The score mapping is anchored on this pair, so a
+    job the runtime accepts always clears the queue gate as well.
+    """
+    workbench = OFFERPILOT_APPROVAL_SCORE
+    try:
+        workbench = float(approval_queue.load_config()["score"]["approval_min"])
+    except (KeyError, TypeError, ValueError):
+        pass
+    raw = OFFERPILOT_APPROVAL_RAW
+    try:
+        configured = float(offerpilot_runtime.get_score_threshold())
+    except Exception:
+        configured = 0
+    if configured > 0:
+        raw = configured
+    return raw, workbench
+
+
+def _offerpilot_scale_label(raw_threshold: float, workbench_threshold: float) -> str:
+    return f"0-100→0-5（{raw_threshold:g}→{workbench_threshold:g}）"
+
+
+def _offerpilot_score(
+    raw_score: Any,
+    raw_threshold: float = OFFERPILOT_APPROVAL_RAW,
+    workbench_threshold: float = OFFERPILOT_APPROVAL_SCORE,
+) -> float | None:
     """Map OfferPilot's 0–100 score onto the workbench's 0–5 scale.
 
-    Anchor OfferPilot's own approval threshold (71) at the workbench threshold
-    (4.0), so a job that OfferPilot considers qualified can enter the approval
-    queue after import.  Values above 88.75 are capped at 5.0.
+    Anchored on the live gate pair: the runtime's scoring threshold maps
+    exactly onto the approval queue's ``approval_min``.  Values are capped at
+    5.0.  Scores already on the 0–5 scale pass through unchanged.
     """
     if not isinstance(raw_score, (int, float)) or isinstance(raw_score, bool) or raw_score <= 0:
         return None
     value = float(raw_score)
     if value <= 5:
         return round(value, 1)
-    return min(5.0, round(value * 4.0 / OFFERPILOT_APPROVAL_RAW, 1))
+    if raw_threshold <= 0:
+        raw_threshold = OFFERPILOT_APPROVAL_RAW
+    return min(5.0, round(value * workbench_threshold / raw_threshold, 1))
 
 
 def _rescale_imported_jobs(store: Store) -> int:
     """Re-map previously imported OfferPilot scores to the anchored scale."""
-    rows = store.jobs()
+    rows = store.all_jobs()  # rewrites jobs.json: must keep soft-deleted records
+    raw_threshold, workbench_threshold = _offerpilot_thresholds()
+    label = _offerpilot_scale_label(raw_threshold, workbench_threshold)
     changed = 0
     for row in rows:
         if not row.get("offerpilot_id"):
@@ -1675,12 +2063,12 @@ def _rescale_imported_jobs(store: Store) -> int:
         raw = row.get("score_raw")
         if not isinstance(raw, (int, float)) or isinstance(raw, bool) or raw <= 5:
             continue
-        score = _offerpilot_score(raw)
+        score = _offerpilot_score(raw, raw_threshold, workbench_threshold)
         if score is None:
             continue
-        if row.get("score") != score or row.get("score_scale") != "0-100→0-5（71→4.0）":
+        if row.get("score") != score or row.get("score_scale") != label:
             row["score"] = score
-            row["score_scale"] = "0-100→0-5（71→4.0）"
+            row["score_scale"] = label
             changed += 1
     if changed:
         store.set_jobs(rows)
@@ -1689,9 +2077,12 @@ def _rescale_imported_jobs(store: Store) -> int:
 
 def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]], ids: list[str]) -> dict[str, Any]:
     """Copy selected read-only OfferPilot jobs into the workbench job pool."""
-    rows = store.jobs()
+    # all_jobs(): soft-deleted rows still count as duplicates, so they never revive.
+    rows = store.all_jobs()
     existing = {_job_fingerprint(row) for row in rows}
     by_id = {str(job.get("id")): job for job in runtime_jobs if isinstance(job, dict)}
+    raw_threshold, workbench_threshold = _offerpilot_thresholds()
+    scale_label = _offerpilot_scale_label(raw_threshold, workbench_threshold)
     added: list[str] = []
     duplicates = 0
     unscored = 0
@@ -1701,7 +2092,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
         if source is None:
             continue
         raw_score = source.get("score")
-        score = _offerpilot_score(raw_score)
+        score = _offerpilot_score(raw_score, raw_threshold, workbench_threshold)
         if score is None:
             unscored += 1
         record = {
@@ -1715,7 +2106,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
             "score": score,
             "offerpilot_id": job_id,
             "score_raw": raw_score if score is not None else None,
-            "score_scale": "0-100→0-5（71→4.0）" if score is not None else None,
+            "score_scale": scale_label if score is not None else None,
         }
         job = _normalize_job(record, index, "boss")
         fingerprint = _job_fingerprint(job)
@@ -1783,6 +2174,155 @@ def import_offerpilot_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     if missing:
         result["missing"] = missing
         result["message"] += f"；{missing} 条已不在采集结果中"
+    return result
+
+
+PIPELINE_GREET_BATCH = 10
+_last_pipeline: dict[str, Any] | None = None
+
+
+def _pipeline_state(mode: str) -> dict[str, Any]:
+    """Live pipeline status for the collect/queue views (read-only)."""
+    store = get_store(mode)
+    approved = [row for row in store.queue() if str(row.get("status") or "") == "approved"]
+    snapshot = dict(_last_pipeline) if _last_pipeline else {}
+    snapshot["approved_count"] = len(approved)
+    snapshot["awaiting_confirmation"] = bool(approved)
+    snapshot.setdefault("auto_submit", False)
+    return snapshot
+
+
+def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
+    """Automate import → enqueue → greeting, then stop at the send gate.
+
+    Everything before the final confirmation runs here, reusing the existing
+    gates: import dedupe, 30-day duplicate hold, risk block, city gate,
+    missing education/experience warning and the approval score threshold.
+    Nothing is sent; sending still needs the review popup and its confirm.
+    """
+    data_mode = str(payload.get("data_mode") or payload.get("mode") or "user")
+    if data_mode != "user":
+        raise ApiError("自动流程只处理 user 数据；演示模式不会写入岗位", 403)
+    task_id = str(payload.get("task_id") or "").strip()
+    if task_id and not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", task_id):
+        raise ApiError("任务 id 无效")
+    raw_ids = payload.get("ids")
+    if raw_ids is not None:
+        if not isinstance(raw_ids, list) or not all(isinstance(item, str) for item in raw_ids):
+            raise ApiError("ids 必须是字符串数组")
+        if len(raw_ids) > 100:
+            raise ApiError("一次最多处理 100 条")
+
+    response = offerpilot_runtime.get_jobs(limit=500)
+    if not response.get("ok"):
+        raise ApiError(str(response.get("error") or "无法读取采集结果"), 503)
+    runtime_jobs = [job for job in response.get("jobs") or [] if isinstance(job, dict)]
+    available = {str(job.get("id")): job for job in runtime_jobs}
+    if raw_ids is None:
+        selected = list(available)
+    else:
+        cleaned: list[str] = []
+        for item in raw_ids:
+            text = str(item or "").strip()
+            # Same rule as import: ids are local runtime ids, not paths or URLs.
+            if not text or len(text) > 200 or any(ord(char) < 32 for char in text):
+                raise ApiError("采集结果 id 无效")
+            if text not in cleaned:
+                cleaned.append(text)
+        selected = [job_id for job_id in cleaned if job_id in available]
+    if not selected:
+        raise ApiError("没有可处理的采集结果", 409)
+
+    store = get_store("user")
+    _rescale_imported_jobs(store)
+    imported = _import_offerpilot_records(store, runtime_jobs, selected)
+
+    selected_set = set(selected)
+    queued_ids = {str(row.get("id")) for row in store.queue()}
+    candidates = [
+        str(job.get("id"))
+        for job in store.jobs()
+        if str(job.get("offerpilot_id") or "") in selected_set
+        and str(job.get("id")) not in queued_ids
+    ]
+    queued: dict[str, Any] = {
+        "approved": [], "dropped": [], "duplicate": [], "risk_blocked": [],
+        "city_blocked": [], "incomplete": [], "unscored": [], "recent_duplicates": [],
+        "message": "没有需要入队的岗位",
+    }
+    if candidates:
+        queued = enqueue({"mode": "user", "ids": candidates})
+
+    greeting: dict[str, Any] = {
+        "requested": 0, "task": None, "already_ready": 0, "deferred": 0, "error": None,
+    }
+    jobs_by_id = {str(job.get("id")): job for job in store.jobs()}
+    approved_vendor: list[str] = []
+    for row in store.queue():
+        if str(row.get("status") or "") != "approved":
+            continue
+        vendor_id = str((jobs_by_id.get(str(row.get("id"))) or {}).get("offerpilot_id") or "").strip()
+        if vendor_id and vendor_id not in approved_vendor:
+            approved_vendor.append(vendor_id)
+    if approved_vendor:
+        try:
+            preview = offerpilot_runtime.get_greetings(approved_vendor)
+            ready = {
+                str(item.get("id"))
+                for item in preview.get("greetings") or []
+                if isinstance(item, dict) and item.get("ready")
+            }
+        except Exception:
+            ready = set()
+        pending = [vendor_id for vendor_id in approved_vendor if vendor_id not in ready]
+        greeting["already_ready"] = len(approved_vendor) - len(pending)
+        if len(pending) > PIPELINE_GREET_BATCH:
+            greeting["deferred"] = len(pending) - PIPELINE_GREET_BATCH
+            pending = pending[:PIPELINE_GREET_BATCH]
+        if pending:
+            try:
+                started = offerpilot_runtime.start_greet_task(pending)
+            except offerpilot_runtime.OfferPilotUnavailable as exc:
+                greeting["error"] = str(exc)
+            except ValueError as exc:
+                greeting["error"] = str(exc)
+            except Exception as exc:
+                greeting["error"] = f"生成招呼语失败：{type(exc).__name__}"
+            else:
+                greeting["requested"] = int(started.get("requested") or len(pending))
+                greeting["task"] = started.get("task")
+                # One activity row per batch, same shape as the manual greeting
+                # action; the automated path starts the task directly, so it
+                # must write its own summary instead of one row per job.
+                store.log("生成招呼语", f"{greeting['requested']} 条；只生成，不发送")
+
+    approved_count = len(queued.get("approved") or [])
+    message = (
+        f"自动流程已停在最终确认门：导入 {len(imported['added'])} 条，"
+        f"入队 {approved_count} 条，生成招呼语 {greeting['requested']} 条；尚未发送任何消息"
+    )
+    if greeting["error"]:
+        message += f"；招呼语暂未生成：{greeting['error']}"
+    if greeting["deferred"]:
+        message += f"；另有 {greeting['deferred']} 条待下一轮生成"
+    result = {
+        "ok": True,
+        "task_id": task_id or None,
+        "imported": {
+            "added": len(imported["added"]),
+            "duplicates": imported["duplicates"],
+            "unscored": imported["unscored"],
+            "backfilled": imported["backfilled"],
+        },
+        "queued": queued,
+        "greeting": greeting,
+        "awaiting_confirmation": True,
+        "auto_submit": False,
+        "message": message,
+    }
+    global _last_pipeline
+    _last_pipeline = {**result, "updated_at": _now()}
+    store.log("自动流程", message)
     return result
 
 
@@ -2111,7 +2651,7 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
         "activity": [{"title": _activity_title(row), **row} for row in store.activity()],
         "downloads": store.list_downloads(),
         "pipeline": pipeline_payload,
-        "profile": profile_public(profile),
+        "profile": profile_for_api(mode, store),
         "config": {
             "target_cities": target_cities,
             "excluded_terms": excluded_terms,
@@ -2148,7 +2688,7 @@ def parse_jd(payload: dict[str, Any]) -> dict[str, Any]:
     job = _normalize_job(parsed, 1, source)
     job["score"] = _score(payload)
     store = get_store(mode)
-    rows = store.jobs()
+    rows = store.all_jobs()  # keeps soft-deleted records in jobs.json
     key = _job_fingerprint(job)
     if any(_job_fingerprint(row) == key for row in rows):
         store.log("拒绝重复岗位", job["title"], False)
@@ -2168,7 +2708,7 @@ def import_jobs(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError(f"JSON 无法解析：{exc.msg}") from exc
     converted = offerpilot_adapter.convert_payload(raw)
     store = get_store(mode)
-    rows = store.jobs()
+    rows = store.all_jobs()  # keeps soft-deleted records; they count as duplicates
     existing = {_job_fingerprint(row) for row in rows}
     added: list[str] = []
     duplicates = 0
@@ -2185,7 +2725,163 @@ def import_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "count": len(converted["jobs"]), "added": added, "duplicates": duplicates, "message": f"已导入 {len(added)} 条，跳过 {duplicates} 条重复记录"}
 
 
-def _append_manual_queue(store: Store, entries: list[dict[str, Any]]) -> list[str]:
+# 30 天内同一岗位（公司、岗位名、城市指纹相同）不重复入队或发送，窗口规则与 tools/precheck.py 一致。
+RECENT_DUPLICATE_DAYS = 30
+PLACEHOLDER_COMPANY = "未填写公司"
+PLACEHOLDER_TITLE = "未填写岗位"
+# 手动加入低分/未评分岗位时的原因只能从这三项中选（前端下拉框，用户不打字）。
+MANUAL_OVERRIDE_REASONS = (
+    "值得沟通，人工判断",
+    "有内推或熟人渠道",
+    "公司或岗位我已了解",
+)
+
+
+def _clean_override_reason(value: Any) -> str:
+    """Manual adds of low or unscored jobs must carry one of the dropdown reasons."""
+    text = str(value or "").strip()
+    if text not in MANUAL_OVERRIDE_REASONS:
+        raise ApiError("手动加入低分或未评分岗位时，请从下拉框选择原因", 400)
+    return text
+
+
+def _parse_day(value: Any) -> dt.date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return dt.datetime.fromisoformat(text).date()
+    except ValueError:
+        pass
+    match = DATE_RE.search(text)
+    if not match:
+        return None
+    try:
+        return dt.date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return None
+
+
+def _dedup_fingerprint(company: Any, title: Any, city: Any) -> str:
+    """Same fingerprint rule as tools/precheck.py. Placeholder names never match each other."""
+    company_text = str(company or "").strip()
+    title_text = str(title or "").strip()
+    if not company_text or company_text == PLACEHOLDER_COMPANY:
+        return ""
+    if not title_text or title_text == PLACEHOLDER_TITLE:
+        return ""
+    return precheck.compute_fingerprint(company_text, title_text, city)
+
+
+def _recent_duplicate_index(
+    store: Store,
+    jobs_by_id: dict[str, dict[str, Any]],
+    today: dt.date,
+    include_queue: bool = True,
+) -> dict[str, dict[str, Any]]:
+    """Fingerprints already queued or delivered within the last 30 days.
+
+    Queue rows and delivery items carry only job ids, so company, title and city
+    are read from the job record. Terminal statuses (discarded, closed, etc.) are
+    skipped with the same list precheck uses. ``include_queue=False`` looks only
+    at sent deliveries, which is what confirm needs: a pending row is itself in
+    the queue and would otherwise match its own fingerprint.
+    """
+    window_start = today - dt.timedelta(days=RECENT_DUPLICATE_DAYS)
+    index: dict[str, dict[str, Any]] = {}
+
+    def remember(job_id: str, day: dt.date | None, source: str, status: str) -> None:
+        if day is None or not (window_start <= day <= today):
+            return
+        if precheck.normalize_status(status) in precheck.EXCLUDED_STATUSES:
+            return
+        job = jobs_by_id.get(job_id) or {}
+        key = _dedup_fingerprint(job.get("company"), job.get("title"), job.get("city"))
+        if not key or key in index:
+            return
+        index[key] = {"job_id": job_id, "date": day.isoformat(), "source": source, "status": status}
+
+    if include_queue:
+        for row in store.queue():
+            job_id = str(row.get("id") or "")
+            day = _parse_day(row.get("approved_at") or row.get("created_at"))
+            remember(job_id, day, "queue", str(row.get("status") or ""))
+    for batch in store.deliveries():
+        for item in batch.get("items") or []:
+            if not isinstance(item, dict) or item.get("status") != "sent":
+                continue
+            job_id = str(item.get("job_id") or "")
+            day = _parse_day(item.get("finished_at") or item.get("started_at") or batch.get("created_at"))
+            remember(job_id, day, "delivery", "sent")
+    return index
+
+
+def _split_recent_duplicates(
+    store: Store,
+    jobs_by_id: dict[str, dict[str, Any]],
+    job_ids: list[str],
+    include_queue: bool = True,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Return (ids that may proceed, duplicates with the reason they were held)."""
+    today = dt.datetime.now(dt.timezone.utc).astimezone().date()
+    index = _recent_duplicate_index(store, jobs_by_id, today, include_queue)
+    kept: list[str] = []
+    held: list[dict[str, Any]] = []
+    for job_id in job_ids:
+        job = jobs_by_id.get(job_id) or {}
+        key = _dedup_fingerprint(job.get("company"), job.get("title"), job.get("city"))
+        hit = index.get(key) if key else None
+        if hit is None:
+            kept.append(job_id)
+            continue
+        where = "已在审批队列" if hit["source"] == "queue" else "已发送过"
+        held.append({
+            "id": job_id,
+            "company": job.get("company") or "",
+            "title": job.get("title") or "",
+            "reason": f"{RECENT_DUPLICATE_DAYS} 天内{where}（{hit['date']}）",
+        })
+    return kept, held
+
+
+def _missing_intake_fields(job: dict[str, Any]) -> list[str]:
+    """Education / experience not recorded on the job: pass with a warning, never block.
+
+    The user chose 放行并提示 for these fields. The shared filter has no rule for them,
+    so the check lives here and only reports; it never guesses a value.
+    """
+    missing = []
+    if not str(job.get("education") or "").strip():
+        missing.append("学历")
+    if not str(job.get("experience") or "").strip():
+        missing.append("经验")
+    return missing
+
+
+def _job_city_reject(job: dict[str, Any], profile_cities: list[str]) -> str:
+    """Return a reject reason when the job's city is outside the profile's target cities, else "".
+
+    The shared filter (tools/filters.py) is the rule owner. Target cities come from
+    profile.json (job_intent.cities), falling back to tools/config.json only when the
+    profile has none. A missing job city passes with a warning, never a guess.
+    """
+    cfg = dict(filters.load_config())
+    if profile_cities:
+        cfg["target_cities"] = profile_cities
+    fields = {
+        "company": job.get("company") or "",
+        "title": job.get("title") or "",
+        "city": job.get("city") or "",
+        "salary_text": job.get("salary_text") or job.get("salary_label") or "",
+        "raw_text": "",
+    }
+    result = filters.apply_hard_filters(fields, cfg)
+    reasons = result["hard_filter"]["reasons"]
+    city_reasons = [item for item in reasons if item.get("field") == "city"]
+    return str(city_reasons[0]["message"]) if city_reasons else ""
+
+
+def _append_manual_queue(store: Store, entries: list[dict[str, Any]], reason: str = "") -> list[str]:
     """Queue explicitly chosen low/unscored jobs without lowering the shared gate."""
     cfg = approval_queue.load_config()
     rows = approval_queue.load_queue(store.files["queue"], cfg)
@@ -2205,6 +2901,8 @@ def _append_manual_queue(store: Store, entries: list[dict[str, Any]]) -> list[st
             "approved_at": stamp,
             "high_confidence": False,
             "manual_override": True,
+            "override_reason": reason,
+            "override_at": stamp,
         }
         key = approval_queue._fingerprint(row)
         if key in existing:
@@ -2223,10 +2921,16 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
         raise ApiError("ids 必须是字符串数组")
     allow_low = payload.get("allow_low_score") is True
+    # 手动加入低分/未评分岗位必须带原因；校验放在读写队列之前，失败时不改动任何数据。
+    override_reason = _clean_override_reason(payload.get("override_reason")) if allow_low else ""
     store = get_store(mode)
     jobs = {str(job.get("id")): job for job in store.jobs()}
+    ids, recent_duplicates = _split_recent_duplicates(store, jobs, ids)
+    profile_cities = [str(city) for city in (store.profile().get("job_intent") or {}).get("cities") or [] if str(city).strip()]
     candidates = []
     risk_blocked: list[str] = []
+    city_blocked: list[dict[str, Any]] = []
+    incomplete: list[dict[str, Any]] = []
     unscored: list[str] = []
     risk_map = _job_risk_map(list(jobs.values()))
     for job_id in ids:
@@ -2237,6 +2941,14 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         if (risk_map.get(job_id) or {}).get("blocks_queue"):
             risk_blocked.append(job_id)
             continue
+        # 城市不在 profile.json 的目标城市内：硬性拒绝，手动加入也不放行。
+        city_reason = _job_city_reject(job, profile_cities)
+        if city_reason:
+            city_blocked.append({"id": job_id, "reason": city_reason})
+            continue
+        missing = _missing_intake_fields(job)
+        if missing:
+            incomplete.append({"id": job_id, "missing": missing})
         score = _score(job)
         if score is None and not allow_low:
             # 未评分岗位需要用户明确手动加入；这里记下来，避免被静默丢弃。
@@ -2261,7 +2973,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     if allow_low:
         threshold = float(approval_queue.load_config()["score"]["approval_min"])
         low = [item for item in candidates if item["score"] is None or item["score"] < threshold]
-        manual = _append_manual_queue(store, low)
+        manual = _append_manual_queue(store, low, override_reason)
         if manual:
             result["manual"] = manual
             # 手动加入的岗位不再算作「未入队」，避免同一条记录被报告两次。
@@ -2269,8 +2981,15 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             result["count"] = len(approval_queue.load_queue(store.files["queue"]))
     result["approved"] = approved
     result["risk_blocked"] = risk_blocked
+    result["city_blocked"] = city_blocked
+    result["incomplete"] = incomplete
     result["unscored"] = unscored
-    store.log("加入审批队列", f"评分达标自动通过 {len(approved)} 条，手动加入 {len(manual)} 条；未入队 {len(result['dropped']) + len(result['duplicate'])} 条")
+    result["recent_duplicates"] = recent_duplicates
+    store.log(
+        "加入审批队列",
+        f"评分达标自动通过 {len(approved)} 条，手动加入 {len(manual)} 条（原因：{override_reason or '无'}）；"
+        f"未入队 {len(result['dropped']) + len(result['duplicate'])} 条；{RECENT_DUPLICATE_DAYS} 天内重复拦截 {len(recent_duplicates)} 条",
+    )
     message = "已进入审批队列" if (result["accepted"] or result["duplicate"]) else "没有岗位入队"
     if approved:
         message = f"{len(approved)} 条评分达标，已自动通过"
@@ -2278,8 +2997,14 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         message += f"；{len(manual)} 条评分不足，已按你的选择手动加入（标记为已通过）"
     if risk_blocked:
         message += f"；{len(risk_blocked)} 条疑似高风险岗位（收费/承诺类），已拦截不入队"
+    if city_blocked:
+        message += f"；{len(city_blocked)} 条城市不在目标城市内，已拦截不入队"
+    if incomplete:
+        message += f"；{len(incomplete)} 条缺少学历或经验字段，已放行并提示，请人工核对"
     if unscored:
         message += f"；{len(unscored)} 条未评分岗位未入队，需要你点「手动加入」"
+    if recent_duplicates:
+        message += f"；{len(recent_duplicates)} 条与 {RECENT_DUPLICATE_DAYS} 天内的记录重复，已跳过"
     return {"ok": True, **result, "message": message}
 
 
@@ -2287,16 +3012,100 @@ def confirm_queue(payload: dict[str, Any]) -> dict[str, Any]:
     """Mark pending rows approved after one explicit click.
 
     No typed phrase: the button itself is the human decision. Sending still
-    goes through the separate delivery review panel.
+    goes through the separate delivery review panel. A row whose job was already
+    sent within the last 30 days is held back and reported instead of approved.
     """
     mode = str(payload.get("mode") or "user")
     ids = payload.get("ids")
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or not ids:
         raise ApiError("请先勾选至少一条待确认岗位")
     store = get_store(mode)
-    result = approval_queue.confirm(ids, store.files["queue"])
-    store.log("人工通过待确认岗位", f"{len(result['confirmed'])} 条；auto_submit=false")
-    return {"ok": True, **result, "message": "已通过；发送前还会再让你复核一次"}
+    jobs = {str(job.get("id")): job for job in store.jobs()}
+    ids, held = _split_recent_duplicates(store, jobs, ids, include_queue=False)
+    result = approval_queue.confirm(ids, store.files["queue"]) if ids else {
+        "confirmed": [], "not_found": [], "status": "ready_for_manual_submission_only", "auto_submit": False,
+    }
+    result["recent_duplicates"] = held
+    store.log("人工通过待确认岗位", f"{len(result['confirmed'])} 条；30 天内重复拦截 {len(held)} 条；auto_submit=false")
+    message = "已通过；发送前还会再让你复核一次"
+    if held:
+        message += f"；{len(held)} 条 {RECENT_DUPLICATE_DAYS} 天内已发送过，未通过"
+    return {"ok": True, **result, "message": message}
+
+
+def _delivered_job_ids(store: Store) -> set[str]:
+    """Job ids that appear anywhere in deliveries.json (any item, any status)."""
+    sent: set[str] = set()
+    for batch in store.deliveries():
+        for item in batch.get("items") or []:
+            if isinstance(item, dict):
+                job_id = str(item.get("job_id") or "").strip()
+                if job_id:
+                    sent.add(job_id)
+    return sent
+
+
+def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
+    """Soft-delete jobs from the pool: mark ``deleted_at`` instead of removing.
+
+    Jobs are kept in jobs.json (deduplication by fingerprint on re-import
+    depends on the record still existing) and are simply hidden from every
+    reader via ``Store.jobs()``. A job that is already approved in the queue
+    or has ever appeared in a delivery batch is protected and skipped; a
+    pending queue row for a deleted job is removed along with it.
+    """
+    mode = str(payload.get("mode") or "user")
+    if mode not in Store.VALID_MODES:
+        raise ApiError("数据模式只能是 demo 或 user")
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(item, str) and item.strip() for item in ids):
+        raise ApiError("ids 必须是非空字符串列表")
+    if len(ids) > 100:
+        raise ApiError("一次最多删除 100 条")
+    safe_ids: list[str] = []
+    for item in ids:
+        text = item.strip()
+        if text not in safe_ids:
+            safe_ids.append(text)
+
+    store = get_store(mode)
+    rows = store.all_jobs()
+    by_id = {str(row.get("id")): row for row in rows}
+    queue = store.queue()
+    queue_status = {str(row.get("id")): str(row.get("status") or "") for row in queue}
+    delivered_ids = _delivered_job_ids(store)
+
+    deleted: list[str] = []
+    skipped: list[dict[str, str]] = []
+    now = _now()
+    for job_id in safe_ids:
+        row = by_id.get(job_id)
+        if row is None or row.get("deleted_at"):
+            skipped.append({"id": job_id, "reason": "not_found"})
+            continue
+        if queue_status.get(job_id) == "approved":
+            skipped.append({"id": job_id, "reason": "approved"})
+            continue
+        if job_id in delivered_ids:
+            skipped.append({"id": job_id, "reason": "delivered"})
+            continue
+        row["deleted_at"] = now
+        deleted.append(job_id)
+
+    if deleted:
+        store.set_jobs(rows)
+        deleted_set = set(deleted)
+        remaining_queue = [row for row in queue if str(row.get("id")) not in deleted_set]
+        if len(remaining_queue) != len(queue):
+            store.set_queue(remaining_queue)
+
+    protected = sum(1 for item in skipped if item["reason"] in ("approved", "delivered"))
+    missing = len(skipped) - protected
+    message = f"已删除 {len(deleted)} 条；{protected} 条因已通过或已发送未删除"
+    if missing:
+        message += f"；{missing} 条已不在岗位池中"
+    store.log("删除岗位", f"删除 {len(deleted)} 条，受保护跳过 {protected} 条，不存在 {missing} 条")
+    return {"ok": True, "deleted": len(deleted), "skipped": skipped, "message": message}
 
 
 def prepare(payload: dict[str, Any]) -> dict[str, Any]:
@@ -2646,6 +3455,7 @@ ACTIONS = {
     "import-jobs": import_jobs,
     "enqueue": enqueue,
     "confirm": confirm_queue,
+    "delete-jobs": delete_jobs,
     "prepare": prepare,
     "transition": transition,
     "parse-mail": parse_mail,
@@ -2663,6 +3473,7 @@ ACTIONS = {
     "offerpilot-greet": start_offerpilot_greet,
     "offerpilot-deliver": start_offerpilot_deliver,
     "offerpilot-import": import_offerpilot_jobs,
+    "offerpilot-automate": run_offerpilot_pipeline,
     "offerpilot-resume": upload_offerpilot_resume,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(
         str(payload.get("task_id") or ""),

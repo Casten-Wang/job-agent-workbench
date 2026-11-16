@@ -727,6 +727,19 @@ def _execute_full(task: WorkbenchTask, config: dict) -> None:
 		]
 	finally:
 		db.close()
+	if config.get("_workbench_auto_pipeline"):
+		# The workbench owns the final confirmation gate (approval queue plus a
+		# popup confirm).  Stop right after collect+score instead of waiting on
+		# this dashboard's confirmation_event: that wait would hold the browser
+		# lock and bypass the workbench queue.  Nothing is sent here.
+		task.context["waiting_confirmation"] = False
+		task.context["confirmation_complete"] = True
+		_log(
+			task,
+			f"自动流程已停在最终确认门：{len(pending_confirmation)} 个岗位评分达标，"
+			"交由工作台导入、入队并生成招呼语；未发送任何消息",
+		)
+		return
 	if not pending_confirmation:
 		task.context["waiting_confirmation"] = False
 		task.context["confirmation_complete"] = True

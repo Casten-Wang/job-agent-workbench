@@ -1,6 +1,7 @@
 """Pre-filter module - hard filtering before LLM evaluation."""
 
 import re
+import unicodedata
 from offerpilot.employment import internship_rejection
 
 from offerpilot.job_filters import matching_blocked_company, matching_deal_breaker
@@ -43,7 +44,48 @@ def quick_score(job: dict, config: dict) -> tuple[int, str]:
     if not profile.get("allow_internship", False) and _contains_internship_signal(job):
         return 0, "实习/管培岗位"
 
-    return salary_filter_result(str(job.get("salary") or ""), profile)
+    # City gate runs after every existing branch: a job that is already
+    # rejected keeps its original reason, and a job that passes all of them is
+    # additionally checked against profile.target_cities.
+    score, reason = salary_filter_result(str(job.get("salary") or ""), profile)
+    if score <= 0:
+        return score, reason
+    city_reason = city_rejection(job, profile)
+    if city_reason:
+        return 0, city_reason
+    return score, reason
+
+
+_ZERO_WIDTH_RE = re.compile("[\u200b-\u200f\u2060\ufeff]")
+
+
+def city_rejection(job: dict, profile: dict) -> str | None:
+    """Return a rejection reason when the job city is outside the target list.
+
+    A missing job city or an empty ``profile.target_cities`` passes: a missing
+    field is never a reason to guess.  Matching follows the workbench rule in
+    ``tools/filters.py`` — NFKC-normalize, casefold, and accept when any target
+    city is a substring of the job city (so 上海 matches 上海·长宁).
+    """
+    raw_targets = profile.get("target_cities")
+    if not isinstance(raw_targets, (list, tuple)):
+        return None
+    targets = [
+        normalized
+        for normalized in (_clean_city_text(item).casefold() for item in raw_targets)
+        if normalized
+    ]
+    city = _clean_city_text(job.get("city"))
+    if not targets or not city:
+        return None
+    if any(target in city.casefold() for target in targets):
+        return None
+    return f"城市不在目标城市内: {city}"
+
+
+def _clean_city_text(value: object) -> str:
+    text = unicodedata.normalize("NFKC", str(value if value is not None else ""))
+    return _ZERO_WIDTH_RE.sub("", text).strip()
 
 
 def salary_filter_result(salary: str, profile: dict) -> tuple[int, str]:
