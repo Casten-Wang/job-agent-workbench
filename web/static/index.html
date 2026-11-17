@@ -217,7 +217,7 @@
               <ul class="collect-explain">
                 <li><strong>会：</strong>在 BOSS 搜索上述关键词与城市，读取岗位卡片和详情：标题、公司、城市、薪资、经验/学历与 JD 文本。</li>
                 <li><strong>会：</strong>写入本机 <code>web/data/user/offerpilot/data/offerpilot.db</code>，任务完成后自动导入岗位池。</li>
-                <li><strong>完整流程会：</strong>自动评分、把达标岗位加入审批队列（城市、30 天重复、高风险、评分门槛照旧拦截），并为已通过岗位生成招呼语；随后停在最终确认门。</li>
+                <li><strong>完整流程会：</strong>自动评分、把符合岗位要求的岗位加入审批队列（城市、30 天重复、高风险与必备条件照旧拦截），并为已通过岗位生成招呼语；随后停在最终确认门。</li>
                 <li><strong>不会：</strong>不发送招呼语、不投递、不读取聊天记录、不上传简历；只有开启 AI 评分时才会调用你配置的模型。</li>
               </ul>
             </details>
@@ -232,7 +232,7 @@
               <div class="panel-head">
                 <div>
                   <h4 id="offerpilot-jobs-title">采集结果</h4>
-                  <p class="panel-note">任务完成后会自动导入岗位池；下面是本机岗位库的只读快照。未评分或评分低于 4.0 的岗位不能加入审批队列。</p>
+                  <p class="panel-note">任务完成后会自动导入岗位池；下面是本机岗位库的只读快照。未按岗位文档评分或必备条件明确不满足的岗位不会自动进入审批队列。</p>
                 </div>
                 <p class="panel-count" id="offerpilot-jobs-count">尚未读取</p>
               </div>
@@ -256,7 +256,7 @@
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="jobs-title">岗位池</h2>
-            <p class="view-lede">采集到的岗位会自动进入这里，并按你的简历评分。评分达到 4.0 的岗位会自动通过，进入「3 通过」。评分不足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
+            <p class="view-lede">采集到的岗位会自动进入这里，并按岗位要求与你的简历证据评分。符合要求的岗位会自动通过，进入「3 通过」；未评分或必备条件不满足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
               <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>

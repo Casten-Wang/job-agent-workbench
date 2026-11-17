@@ -2454,7 +2454,7 @@ class WorkbenchFlowTests(unittest.TestCase):
         return json.loads(completed.stdout)
 
     @staticmethod
-    def _fixture(*, intake: int, jobs: list, queue: list, threshold: float = 4.0) -> dict:
+    def _fixture(*, intake: int, jobs: list, queue: list) -> dict:
         return {
             "pipeline": {
                 "stages": [
@@ -2468,9 +2468,6 @@ class WorkbenchFlowTests(unittest.TestCase):
             },
             "jobs": jobs,
             "queue": queue,
-            "config": {
-                "score": {"approval_min": threshold, "high_threshold": 4.5, "approval_max": 4.4}
-            },
         }
 
     def test_four_stage_model_merges_six_stage_contract(self):
@@ -2492,16 +2489,16 @@ class WorkbenchFlowTests(unittest.TestCase):
         # 只有第四步有动作；前三步只读。
         self.assertEqual([stage["action"] for stage in model], [False, False, False, True])
 
-    def test_confirm_zero_explains_below_enqueue_threshold(self):
+    def test_confirm_zero_explains_no_pending_confirmation(self):
+        # 岗位评分是 0–100 的文档评分，没有「入队线」；原因只说明当前没有待确认岗位。
         jobs = [
-            {"id": "low-1", "score": 3.5},
-            {"id": "low-2", "score": 3.8},
-            {"id": "not-yet-queued", "score": 4.6},
+            {"id": "scored-1", "score": 35},
+            {"id": "scored-2", "score": 88},
         ]
         model = self._stage_model(self._fixture(intake=5, jobs=jobs, queue=[]))
         confirm = model[3]
         self.assertEqual(confirm["count"], 0)
-        self.assertEqual(confirm["reason"], "已评分 2 条，未达到入队线（当前 4.0 分）")
+        self.assertEqual(confirm["reason"], "暂时没有需要你确认的岗位")
 
     def test_confirm_zero_explains_missing_jobs(self):
         model = self._stage_model(self._fixture(intake=0, jobs=[], queue=[]))

@@ -1183,7 +1183,6 @@ function workbenchFourStages(snapshot) {
   const pipeline = snap.pipeline && typeof snap.pipeline === 'object' ? snap.pipeline : {};
   const stages = Array.isArray(pipeline.stages) ? pipeline.stages : [];
   const queue = Array.isArray(snap.queue) ? snap.queue : [];
-  const jobs = Array.isArray(snap.jobs) ? snap.jobs : [];
   const countOf = (key) => {
     const stage = stages.find((item) => item && item.key === key);
     const count = stage ? Number(stage.count) : 0;
@@ -1193,28 +1192,12 @@ function workbenchFourStages(snapshot) {
   const queued = queue.length;
   const greetings = queue.filter((row) => row && row.greeting
     && String(row.greeting.greeting || '').trim()).length;
-  // 评分达线即自动 approved；「等你确认」只数最终投递确认门上的已通过岗位。
+  // 按岗位文档评分与必备条件自动 approved；「等你确认」只数最终投递确认门上的已通过岗位。
   const confirm = queue.filter((row) => row && row.status === 'approved').length;
-  const scoreConfig = snap.config && snap.config.score && typeof snap.config.score === 'object'
-    ? snap.config.score
-    : {};
-  const threshold = Number(scoreConfig.approval_min);
-  const thresholdLabel = Number.isFinite(threshold) ? threshold.toFixed(1) : '—';
-  const queuedIds = new Set(queue.map((row) => String((row && row.id) || '')));
-  const belowLine = jobs.filter((job) => {
-    if (!job) return false;
-    const raw = job.score;
-    if (raw === null || raw === undefined || raw === '' || typeof raw === 'boolean') return false;
-    const score = Number(raw);
-    if (!Number.isFinite(score)) return false;
-    if (queuedIds.has(String(job.id || ''))) return false;
-    return Number.isFinite(threshold) && score < threshold;
-  }).length;
+  // 入队不再比较数字阈值，因此这里只解释「为什么还没有待确认岗位」。
   let reason = null;
   if (confirm === 0) {
-    if (intake === 0) reason = '还没有采集到岗位';
-    else if (belowLine > 0) reason = `已评分 ${belowLine} 条，未达到入队线（当前 ${thresholdLabel} 分）`;
-    else reason = '暂时没有需要你确认的岗位';
+    reason = intake === 0 ? '还没有采集到岗位' : '暂时没有需要你确认的岗位';
   }
   return [
     {
@@ -1233,7 +1216,7 @@ function workbenchFourStages(snapshot) {
       title: '评分入队',
       unit: '个岗位',
       count: queued,
-      description: '按评分门自动筛选，达线岗位进入审批队列。',
+      description: '按岗位要求与简历证据自动筛选，合适的岗位进入审批队列。',
       action: false,
       reason: null
     },
@@ -1743,18 +1726,15 @@ function materialsOf(job) {
 }
 /* jobs-dossier:end */
 
-// 入队线只用于界面提示「这个岗位为什么需要手动加入」；实际入队由后端按文档评分规则判定。
-function approvalMinOf(snapshot) {
-  const score = snapshot && snapshot.config && snapshot.config.score;
-  const value = score ? Number(score.approval_min) : NaN;
-  return Number.isFinite(value) ? value : null;
+// 入队不再比较数字阈值（岗位评分为 0–100 的文档评分）：
+// 只有缺少评分的岗位需要你确认后手动加入，评过分的岗位交给后端按文档规则判定。
+function jobNeedsManualEnqueue(job) {
+  return !job || typeof job.score !== 'number' || !Number.isFinite(job.score);
 }
 
 function renderJobs(snapshot) {
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
   const transitions = snapshot.transitions || {};
-  const approvalMin = approvalMinOf(snapshot);
-  const approvalMinLabel = approvalMin === null ? null : String(approvalMin);
   dom.jobsCount.textContent = `显示 ${jobs.length} 条`;
   if (dom.jobsEmptyHint) dom.jobsEmptyHint.hidden = jobs.length > 0;
 
@@ -1785,29 +1765,26 @@ function renderJobs(snapshot) {
     const riskNode = riskBadgeNode(job.risk);
 
     const actions = el('div', { className: 'row-actions jobs-actions' });
-    const scoreValue = typeof job.score === 'number' ? job.score : null;
     const queued = job.approval !== null && job.approval !== undefined;
-    const lowScore = scoreValue === null || (approvalMin !== null && scoreValue < approvalMin);
+    const needsManual = jobNeedsManualEnqueue(job);
     const enqueueButton = el('button', {
       className: 'button button-small button-quiet',
-      text: queued ? '已在审批队列' : lowScore ? '手动加入审批队列' : '加入审批队列',
+      text: queued ? '已在审批队列' : needsManual ? '手动加入审批队列' : '加入审批队列',
       attrs: { type: 'button' }
     });
     enqueueButton.disabled = queued;
     if (queued) {
       enqueueButton.title = '该岗位已在审批队列中';
       enqueueButton.setAttribute('aria-label', '已在审批队列（不可重复加入）');
-    } else if (lowScore) {
-      enqueueButton.title = approvalMinLabel === null
-        ? '未评分；点击后手动加入待确认队列'
-        : `低于入队线（当前 ${approvalMinLabel} 分）或未评分；点击后手动加入待确认队列`;
-      enqueueButton.setAttribute('aria-label', '手动加入审批队列（评分不足，需你自行判断）');
+    } else if (needsManual) {
+      enqueueButton.title = '未按岗位文档评分；点击后手动加入待确认队列';
+      enqueueButton.setAttribute('aria-label', '手动加入审批队列（该岗位尚未评分，需你自行判断）');
     } else {
       enqueueButton.title = '只加入待确认队列，不投递';
       enqueueButton.setAttribute('aria-label', '加入审批队列（只加入待确认队列，不投递）');
     }
     enqueueButton.addEventListener('click', () => {
-      enqueueJob(job, enqueueButton, lowScore);
+      enqueueJob(job, enqueueButton, needsManual);
     });
     actions.append(enqueueButton);
 
@@ -3354,7 +3331,7 @@ async function enqueueJobs(jobs, button, manual = false) {
   ids.forEach((id) => state.jobsSelection.delete(id));
   let message = data.message || '已加入待确认队列。';
   if (Array.isArray(data.dropped) && data.dropped.length) {
-    message += ` 未入队 ${data.dropped.length} 条（评分不足或缺失）。`;
+    message += ` 未入队 ${data.dropped.length} 条（未按文档评分或不符合入队规则）。`;
   }
   if (Array.isArray(data.duplicate) && data.duplicate.length) {
     message += ` 重复 ${data.duplicate.length} 条。`;
@@ -3475,7 +3452,6 @@ function renderPipelineStatus() {
 
 function renderQueue(snapshot) {
   const queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
-  const approvalMin = approvalMinOf(snapshot);
   const pending = queue.filter((row) => row.status === 'pending');
   const approved = queue.filter((row) => row.status === 'approved');
   const pendingIds = new Set(pending.map((row) => String(row.id)));
@@ -3520,9 +3496,7 @@ function renderQueue(snapshot) {
     caption: '表：待确认队列',
     columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断置信度', '核对'],
     rows: pendingRows,
-    emptyText: approvalMin === null
-      ? '待确认队列为空。可以在「岗位」表把岗位加入队列。'
-      : `待确认队列为空。可以在「岗位」表把达到入队线（当前 ${String(approvalMin)} 分）的岗位加入队列。`,
+    emptyText: '待确认队列为空。可以在「岗位」表把岗位加入队列。',
     className: 'data-table-wide'
   });
 
@@ -5092,7 +5066,6 @@ function renderBoundaries(snapshot) {
 
 function renderConfig(snapshot) {
   const config = snapshot.config && typeof snapshot.config === 'object' ? snapshot.config : {};
-  const score = config.score && typeof config.score === 'object' ? config.score : {};
   const listText = (value) => (Array.isArray(value) && value.length ? value.join('、') : '—');
   const rows = [
     ['目标城市', listText(config.target_cities)],
@@ -5101,9 +5074,7 @@ function renderConfig(snapshot) {
     ['薪资下限', config.salary_min_threshold === undefined || config.salary_min_threshold === null
       ? '—'
       : `${toInt(config.salary_min_threshold)} 元`],
-    ['审批阈值', score.approval_min === undefined
-      ? '—'
-      : `≥ ${String(score.approval_min)} 入队；≥ ${String(score.high_threshold)} 高置信`],
+    ['入队规则', '按岗位文档评分与必备条件自动筛选；不再按数字阈值入队'],
     ['弱点标签', listText(config.weakness_tags)],
     ['简历技能命中', listText(snapshot.cv_skills)]
   ];
@@ -5466,10 +5437,9 @@ function bindEvents() {
       const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
       const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
       if (!selected.length) return;
-      const approvalMin = approvalMinOf(state.snapshot || {});
-      const low = selected.some((job) => typeof job.score !== 'number'
-        || (approvalMin !== null && job.score < approvalMin));
-      enqueueJobs(selected, dom.jobsBulkEnqueue, low);
+      // 不再按分数判定；只有未评分的岗位需要手动加入。
+      const needsManual = selected.some((job) => jobNeedsManualEnqueue(job));
+      enqueueJobs(selected, dom.jobsBulkEnqueue, needsManual);
     });
   }
   if (dom.jobsBulkDelete) {

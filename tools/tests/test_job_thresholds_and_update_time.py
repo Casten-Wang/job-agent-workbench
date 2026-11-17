@@ -3,8 +3,8 @@
 
 - The queue's 判断置信度 column reads ``fit_confidence`` from the snapshot.
 - Enqueue no longer writes the ``high_threshold: 101`` override.
-- The frontend low-score marker reads ``config.score.approval_min`` instead of
-  a hard-coded 4.0.
+- Enqueue no longer compares a numeric threshold, so the frontend has no
+  low-score / 入队线 marker at all; only unscored jobs need a manual add.
 - Local write times (``created_at``/``updated_at``) never become a platform
   update time, and imported rows without a platform date have no
   ``posted_at``/``source_updated_at``.
@@ -172,44 +172,66 @@ class HighThresholdOverrideTests(unittest.TestCase):
         self.assertEqual(rows[0]["status"], "approved")
 
 
-class ApprovalMinFrontendTests(unittest.TestCase):
-    """The low-score marker reads approval_min from the snapshot, not a literal 4.0."""
+class ApprovalMinResidueTests(unittest.TestCase):
+    """入队已不再比较数字阈值，前端不应残留 4.0 / 入队线判定。"""
 
     def _source(self) -> str:
         return APP_JS.read_text(encoding="utf-8")
 
-    def test_no_hard_coded_four_point_zero_gate_remains(self) -> None:
+    def test_frontend_has_no_numeric_enqueue_threshold(self) -> None:
         source = self._source()
-        self.assertNotIn("< 4.0", source)
-        self.assertNotIn("4.0 评分门", source)
-        self.assertNotIn("评分达到 4.0", source)
+        for marker in (
+            "approvalMinOf", "approvalMin", "approval_min",
+            "入队线", "低于入队线", "未达到入队线",
+            "< 4.0", "4.0 评分门", "评分达到 4.0",
+        ):
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, source)
 
-    def test_approval_min_helper_reads_snapshot_config(self) -> None:
+    def test_manual_enqueue_is_only_for_unscored_jobs(self) -> None:
         source = self._source()
-        self.assertIn("function approvalMinOf(snapshot)", source)
-        self.assertIn("snapshot.config.score", source)
-        self.assertIn("approval_min", source)
+        self.assertIn("function jobNeedsManualEnqueue(job)", source)
+        self.assertIn("enqueueJob(job, enqueueButton, needsManual)", source)
+        self.assertIn("selected.some((job) => jobNeedsManualEnqueue(job))", source)
 
-    def test_bulk_enqueue_uses_approval_min(self) -> None:
-        self.assertIn("job.score < approvalMin", self._source())
+    def test_queue_empty_text_mentions_no_threshold(self) -> None:
+        source = self._source()
+        self.assertIn("待确认队列为空。可以在「岗位」表把岗位加入队列。", source)
+        self.assertNotIn("达到入队线", source)
 
-    def test_helper_returns_null_when_config_missing(self) -> None:
+    def test_helper_treats_only_missing_scores_as_manual(self) -> None:
         if shutil.which("node") is None:
             self.skipTest("node is not installed")
         source = self._source()
-        start = source.index("function approvalMinOf(snapshot)")
+        start = source.index("function jobNeedsManualEnqueue(job)")
         end = source.index("\n}\n", start) + 3
         script = source[start:end] + (
             "\nconsole.log(JSON.stringify(["
-            "approvalMinOf({config:{score:{approval_min:4}}}),"
-            "approvalMinOf({config:{score:{approval_min:'x'}}}),"
-            "approvalMinOf({})"
+            "jobNeedsManualEnqueue(null),"
+            "jobNeedsManualEnqueue({}),"
+            "jobNeedsManualEnqueue({score:null}),"
+            "jobNeedsManualEnqueue({score:'88'}),"
+            "jobNeedsManualEnqueue({score:0}),"
+            "jobNeedsManualEnqueue({score:88})"
             "]));\n"
         )
         result = subprocess.run(
             ["node", "-e", script], capture_output=True, text=True, timeout=20, check=True
         )
-        self.assertEqual(json.loads(result.stdout), [4, None, None])
+        self.assertEqual(json.loads(result.stdout), [True, True, True, True, False, False])
+
+
+class LegacyScoreConfigTests(unittest.TestCase):
+    """旧 0–5 分制阈值保留兼容，但必须注明已不参与工作台入队。"""
+
+    def test_legacy_thresholds_are_annotated(self) -> None:
+        config = json.loads(
+            (PROJECT_ROOT / "tools" / "config_task06.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(config["score"]["approval_min"], 4.0)
+        note = config["score"].get("_note") or ""
+        self.assertIn("不再", note)
+        self.assertIn("文档评分", note)
 
 
 class UpdateTimeSemanticsTests(unittest.TestCase):
