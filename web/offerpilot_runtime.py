@@ -44,6 +44,20 @@ _backend_base_dir: Path | None = None
 # Production leaves it None; tests point it at a temporary directory so no
 # test ever reads or writes the real ``web/data/user/hr/conversations.json``.
 _hr_store_root: Path | None = None
+# Test seam: an in-memory model configuration shared by the workbench's agent
+# features. Production leaves it None so config.yaml stays the only source.
+workbench_model = None
+
+
+def effective_ai_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Share the configured model in memory; never put its key in config.yaml."""
+    if workbench_model is None:
+        return config
+    from offerpilot.ai.credentials import get_ai_api_key
+    if get_ai_api_key(config):
+        return config
+    ai = workbench_model()
+    return {**config, "ai": {**config.get("ai", {}), **ai}} if ai else config
 
 
 class OfferPilotUnavailable(RuntimeError):
