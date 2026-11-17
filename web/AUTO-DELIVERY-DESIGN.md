@@ -168,10 +168,10 @@ not_ready → greeting_ready → confirmed → sending → sent
 
 | 接口 | 行为 |
 | --- | --- |
-| `GET /api/offerpilot/greetings?ids=a,b,c` | 只读预览：公司、岗位、招呼语、风格问题、是否已复核；最多 10 条；不返回简历或凭据 |
-| `POST /api/action` `offerpilot-greet` | 对已审批岗位启动 `greet` 任务；`{ids, regenerate?: bool}`；demo 拒绝 |
+| `GET /api/state` 的 `queue[].greeting` | 只读预览：只附在 `approved` 队列行上，含公司、岗位、招呼语、风格问题与是否可复核；单次最多 50 条；不返回简历或凭据 |
+| `POST /api/action` `offerpilot-greet` | 对已审批岗位启动 `greet` 任务；`{ids, regenerate?: bool}` |
 | `POST /api/action` `offerpilot-deliver` | `{ids, confirm: "确认发送本批 N 条", risk_acknowledged: true}`（确认语由前端在用户点击确认框后自动填入）；通过 G0–G4 后启动 `deliver` 任务（`_workbench_skip_greeting=True`） |
-| `GET /api/offerpilot/deliveries` | 返回最近批次；若最近 `deliver` 任务已结束但尚未同步，先幂等同步一次 |
+| `GET /api/state` 的 `pipeline.delivery` | 最近批次摘要（`{latest_batch, active, batches, quota}`）；若最近 `deliver` 任务已结束但尚未同步，读取 `GET /api/state` 时先幂等同步一次 |
 | `POST /api/offerpilot/tasks/<id>/stop` | 复用现有停止接口 |
 
 `offerpilot-deliver` 的校验顺序：模式 → 数量 → 审批状态 → `offerpilot_id` → 运行时岗位状态 → 招呼语 → 确认语 → 风险确认 → 窗口 → 平台锁 → 登记任务。任一步失败都不改数据。
