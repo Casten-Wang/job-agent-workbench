@@ -1388,6 +1388,13 @@ function workbenchFourStages(snapshot) {
 }
 /* workbench-four-stages:end */
 
+const PIPELINE_STATUS_LABELS = {
+  ready: '本地可用',
+  local: '本地可用',
+  connected: '已接入回报',
+  waiting: '待接入'
+};
+
 const PIPELINE_STAGE_LABELS = { send: '发送', monitor: '监控' };
 const PIPELINE_EVENT_LABELS = {
   started: '开始',
@@ -4338,8 +4345,7 @@ function hrPlatformHidden(platform) {
   return String(platform || '').toLowerCase() === '51job';
 }
 
-function sortHrConversationsByRecent(rows) {
-  const now = new Date();
+function sortHrConversationsByRecent(rows, now = new Date()) {
   return (Array.isArray(rows) ? rows : [])
     .map((row, index) => ({ row, index, time: hrMessageTime(row && row.last_message_at, now) }))
     .sort((a, b) => {

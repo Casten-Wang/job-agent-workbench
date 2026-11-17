@@ -139,7 +139,7 @@ class HrInboxOrderTests(unittest.TestCase):
             "    const time = hrMessageTime(value, now);\n"
             "    return Number.isFinite(time) ? time : null;\n"
             "  }),\n"
-            "  order: sortHrConversationsByRecent(input.rows).map((row) => row.id)\n"
+            "  order: sortHrConversationsByRecent(input.rows, now).map((row) => row.id)\n"
             "}));\n"
         )
         return _run_node(body, payload, "收件箱排序")
