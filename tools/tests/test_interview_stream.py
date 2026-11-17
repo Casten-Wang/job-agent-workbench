@@ -374,8 +374,13 @@ class InterviewStreamApiTests(unittest.TestCase):
         self.assertFalse(result["time_up"])
         self.assertEqual(result["user_status"], "ready_to_end")
         self.assertGreater(result["remaining_seconds"], 0)
-        with self.assertRaises(backend.ApiError) as ctx:
-            backend.interview_end({"mode": "user"})
+        # Stub the debrief model call to fail, so the test never depends on a local API key.
+        def _unavailable(*_args, **_kwargs):
+            raise interview_chat.DebriefGenerationError("unavailable")
+
+        with patch.object(backend, "_complete_interview_debrief", _unavailable):
+            with self.assertRaises(backend.ApiError) as ctx:
+                backend.interview_end({"mode": "user"})
         self.assertEqual(ctx.exception.status, 503)
 
     def test_half_sentence_keeps_text_and_retry_does_not_advance(self):
