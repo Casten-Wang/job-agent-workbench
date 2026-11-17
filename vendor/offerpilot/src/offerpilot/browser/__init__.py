@@ -53,12 +53,22 @@ def find_boss_tab() -> dict | None:
 
 
 def find_zhilian_tab() -> dict | None:
-    """Find a 智联招聘 tab in Chrome without opening or logging in."""
+    """Find a 智联招聘 tab in Chrome without opening or logging in.
+
+    Prefer a job-search page (``/jobs/`` or ``/sou/``) over any other
+    zhaopin.com tab such as the message center (``i.zhaopin.com/im``), which
+    can match the host but never carries the search box the preflight checks.
+    """
+    fallback: dict | None = None
     for target in get_page_targets():
         url = str(target.get("url", ""))
-        if "zhaopin.com" in url:
+        if "zhaopin.com" not in url:
+            continue
+        if "zhaopin.com/jobs/" in url or "zhaopin.com/sou/" in url:
             return target
-    return None
+        if fallback is None:
+            fallback = target
+    return fallback
 
 
 def new_tab(url: str, background: bool = False) -> str | None:

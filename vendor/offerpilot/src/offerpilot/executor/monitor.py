@@ -82,6 +82,7 @@ JS_EXTRACT_CHAT_LIST = r"""
         const nameText = item.querySelector('.name-text');
         const nameBox = item.querySelector('.name-box');
         const lastMsgEl = item.querySelector('.last-msg-text');
+        const timeEl = item.querySelector('.time, .msg-time, .message-time, [class*="time"]');
         const msgStatus = item.querySelector('.message-status');
         const unreadEl = item.querySelector('.unread-count, .badge-count, .notice-badge, [class*="unread"]');
 
@@ -109,6 +110,7 @@ JS_EXTRACT_CHAT_LIST = r"""
             company: company,
             hr_title: hrTitle,
             last_message: lastMessage,
+            last_message_at: timeEl ? timeEl.textContent.trim().substring(0, 40) : '',
             has_reply: hasReply,
             has_unread: !!unreadEl,
             is_our_message: isOurMessage,

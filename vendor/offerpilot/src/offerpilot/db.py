@@ -171,6 +171,8 @@ def _init_tables(conn: sqlite3.Connection) -> None:
     _migrate_v1_3(conn)
     _migrate_v1_4(conn)
     _migrate_v1_5(conn)
+    _migrate_scoring_fields(conn)
+    _migrate_materials(conn)
     _migrate_outsourcing(conn)
     _migrate_platform_access_events(conn)
     _init_scoring_runs(conn)
@@ -578,14 +580,26 @@ def persist_job_score_and_trace(
     score: int,
     reason: str,
     trace: dict[str, Any],
+    *,
+    coverage: float | None = None,
+    mandatory_status: str | None = None,
+    hiring_status: str | None = None,
+    mandatory_conditions: list[dict[str, Any]] | tuple[dict[str, Any], ...] | None = None,
 ) -> None:
     """Atomically persist a completed structured score and its safe explanation trace."""
     trace_json = json.dumps(trace, ensure_ascii=False, separators=(",", ":"))
+    coverage_value = trace.get("coverage") if coverage is None else coverage
+    mandatory_value = str(trace.get("mandatory_status") or "unknown") if mandatory_status is None else mandatory_status
+    hiring_value = str(trace.get("hiring_status") or "unknown") if hiring_status is None else hiring_status
+    conditions = trace.get("mandatory_conditions") if mandatory_conditions is None else mandatory_conditions
+    conditions_json = json.dumps(list(conditions or []), ensure_ascii=False, separators=(",", ":"))
     with conn:
         cursor = conn.execute(
-            "UPDATE jobs SET score = ?, score_reason = ?, updated_at = CURRENT_TIMESTAMP "
+            "UPDATE jobs SET score = ?, score_reason = ?, score_coverage = ?, "
+            "mandatory_status = ?, hiring_status = ?, mandatory_conditions = ?, "
+            "updated_at = CURRENT_TIMESTAMP "
             "WHERE id = ? AND deleted_at IS NULL",
-            (score, reason, job_id),
+            (score, reason, coverage_value, mandatory_value, hiring_value, conditions_json, job_id),
         )
         if cursor.rowcount == 0:
             raise ValueError("岗位不存在或已进入回收站，未保存评分追踪")
@@ -629,8 +643,10 @@ def persist_agent_evaluations(conn: sqlite3.Connection, evaluations: list[dict[s
             job_id = str(evaluation["job_id"])
             passed = bool(evaluation["passed"])
             status = "ready" if passed else "filtered"
+            trace = evaluation["trace"]
             cursor = conn.execute(
                 "UPDATE jobs SET score = ?, score_reason = ?, greeting = ?, status = ?, "
+                "score_coverage = ?, mandatory_status = ?, hiring_status = ?, mandatory_conditions = ?, "
                 "greeting_original = ?, greeting_optimized = NULL, greeting_style_issues = '[]', "
                 "greeting_selection = 'generated', greeting_reviewed_at = NULL, "
                 "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending' AND deleted_at IS NULL",
@@ -639,13 +655,16 @@ def persist_agent_evaluations(conn: sqlite3.Connection, evaluations: list[dict[s
                     str(evaluation["reason"]),
                     str(evaluation["greeting"]) if passed else None,
                     status,
+                    trace.get("coverage"),
+                    str(trace.get("mandatory_status") or "unknown"),
+                    str(trace.get("hiring_status") or "unknown"),
+                    json.dumps(trace.get("mandatory_conditions") or [], ensure_ascii=False, separators=(",", ":")),
                     str(evaluation["greeting"]) if passed else None,
                     job_id,
                 ),
             )
             if cursor.rowcount != 1:
                 raise ValueError("岗位状态已变化，未保存 Agent 评估")
-            trace = evaluation["trace"]
             conn.execute(
                 """
                 INSERT INTO score_traces (job_id, schema_version, trace_json)
@@ -1207,6 +1226,40 @@ def _migrate_v1_5(conn: sqlite3.Connection) -> None:
         if name not in cols:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
     conn.commit()
+
+
+def _migrate_scoring_fields(conn: sqlite3.Connection) -> None:
+    """Add coefficient-score metadata columns without rewriting existing scores."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+    additions = {
+        "score_coverage": "REAL NULL",
+        "mandatory_status": "TEXT NOT NULL DEFAULT 'unknown'",
+        "hiring_status": "TEXT NOT NULL DEFAULT 'unknown'",
+        "mandatory_conditions": "TEXT NOT NULL DEFAULT '[]'",
+    }
+    for name, definition in additions.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
+    conn.commit()
+
+
+def _migrate_materials(conn: sqlite3.Connection) -> None:
+    """Add the per-job custom application materials JSON column (non-destructive)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+    if "materials" not in cols:
+        conn.execute("ALTER TABLE jobs ADD COLUMN materials TEXT NULL")
+    conn.commit()
+
+
+def save_job_materials(conn: sqlite3.Connection, job_id: str, materials: dict[str, Any]) -> bool:
+    """Store one validated materials package. Never touches the greeting text."""
+    cursor = conn.execute(
+        "UPDATE jobs SET materials = ?, updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = ? AND deleted_at IS NULL",
+        (json.dumps(materials, ensure_ascii=False), job_id),
+    )
+    conn.commit()
+    return cursor.rowcount == 1
 
 
 def _migrate_outsourcing(conn: sqlite3.Connection) -> None:

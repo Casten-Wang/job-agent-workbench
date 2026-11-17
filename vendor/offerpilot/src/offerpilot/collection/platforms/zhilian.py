@@ -30,6 +30,7 @@ from offerpilot.browser import (
     type_text as browser_type_text,
     wait_for_load,
 )
+from offerpilot.collection import pacing
 from offerpilot.collection.base import CollectionBlockedError, CollectionError, CollectorHooks
 from offerpilot.collection.models import JobCandidate, PlatformCollectionRequest, PlatformCollectionResult
 from offerpilot.db import (
@@ -42,6 +43,7 @@ from offerpilot.db import (
     upsert_page_progress,
 )
 from offerpilot.job_filters import matching_blocked_company, matching_deal_breaker
+from offerpilot.platform_safety import PlatformSafetyStop
 from offerpilot.throttle import SendWindowChecker, should_take_day_off
 
 
@@ -454,11 +456,20 @@ class _ApiRateLimiter:
     与 51job _ApiRateLimiter 同结构：簇内间隔 + 簇间休息 + 每分钟滑动窗口上限。
     """
 
-    def __init__(self, total_requests: int | None = None, no_burst: bool = False) -> None:
+    def __init__(
+        self,
+        total_requests: int | None = None,
+        no_burst: bool = False,
+        pacing_range: tuple[float, float] | None = None,
+        per_min_limit: int | None = None,
+    ) -> None:
         self._window: list[float] = []
         self._in_burst = 0
         self._burst_size = random.randint(API_BURST_SIZE_MIN, API_BURST_SIZE_MAX)
         self._no_burst = no_burst
+        # BOSS floor: raise gaps and lower the per-minute cap; never the reverse.
+        self._pacing_range = tuple(pacing_range) if pacing_range else None
+        self._pacing_per_min = int(per_min_limit) if per_min_limit else None
         self._set_tier(total_requests)
 
     def _set_tier(self, total_requests: int | None) -> None:
@@ -475,6 +486,13 @@ class _ApiRateLimiter:
             self._gap_range = (5.0, 8.0)
             self._break_range = (90.0, 180.0)
             self._per_min_limit = 12
+        if self._pacing_range:
+            self._gap_range = (
+                max(self._gap_range[0], self._pacing_range[0]),
+                max(self._gap_range[1], self._pacing_range[1]),
+            )
+        if self._pacing_per_min:
+            self._per_min_limit = min(self._per_min_limit, self._pacing_per_min)
 
     def set_tier(self, total_requests: int) -> None:
         self._set_tier(total_requests)
@@ -803,7 +821,8 @@ class ZhilianCollector:
         self.config = config or {}
         self.safety_conn = safety_conn
         self.sleep = sleep
-        self.delay_range = delay_range
+        # Detail pacing may be slower than BOSS but never faster.
+        self.delay_range = pacing.floor_range(delay_range, self.config)
         self.uniform = uniform
         if browser is not None:
             self.browser = browser
@@ -814,6 +833,46 @@ class ZhilianCollector:
                 press_key_action=browser_press_key,
                 navigate_action=browser_navigate,
             )
+
+    # -- BOSS-aligned safety limits (daily page budgets, failure cap, cooldown) --
+    def _start_limits(self) -> None:
+        self._guard = pacing.collection_guard(self.safety_conn, self.config, self.platform)
+        self._limits = pacing.collection_limits(self.config)
+        self._page_failures = 0
+        self._limit_reason = ""
+
+    def _reserve_page(self, action: str) -> bool:
+        if self._guard is None:
+            return True
+        daily_limit = (
+            self._limits.daily_search_pages if action == "search_page"
+            else self._limits.daily_detail_pages
+        )
+        try:
+            self._guard.reserve(action, daily_limit=daily_limit)
+        except PlatformSafetyStop as exc:
+            self._limit_reason = exc.reason
+            return False
+        return True
+
+    def _shortage(self, reason: str) -> PlatformCollectionResult:
+        return PlatformCollectionResult(
+            self.platform, "completed_with_shortage", reason,
+            f"智联 采集已达安全上限：{reason}；其他平台可继续",
+        )
+
+    def _page_failed(self) -> bool:
+        self._page_failures += 1
+        return self._page_failures >= self._limits.max_consecutive_failures
+
+    def _risk_blocked(self, kind: str, message: str) -> PlatformCollectionResult:
+        minutes = self._limits.pause_minutes(random.randint)
+        if self._guard is not None:
+            self._guard.lock(kind, minutes=minutes)
+        return PlatformCollectionResult(
+            self.platform, "blocked", kind,
+            f"{message}；本轮已停止，冷却 {minutes} 分钟后可重新开始",
+        )
 
     def _passes_filters(self, candidate: JobCandidate) -> bool:
         return not self._filter_reason(candidate)
@@ -1132,7 +1191,12 @@ class ZhilianCollector:
         except Exception:
             return None
 
-        rate_limiter = _ApiRateLimiter(total_requests=API_ADAPTIVE_MEDIUM, no_burst=False)
+        rate_limiter = _ApiRateLimiter(
+            total_requests=API_ADAPTIVE_MEDIUM,
+            no_burst=False,
+            pacing_range=pacing.page_delay_range(self.config),
+            per_min_limit=pacing.per_minute_limit(self.config),
+        )
         profile = self.config.get("profile", {}) if isinstance(self.config.get("profile"), dict) else {}
         deal_breakers = profile.get("deal_breakers") or []
         jd_deal_breakers = profile.get("jd_deal_breakers") or []
@@ -1166,6 +1230,8 @@ class ZhilianCollector:
                         deal_breakers=deal_breakers, jd_deal_breakers=jd_deal_breakers,
                         blocked_companies=blocked_companies, allow_internship=allow_internship,
                     )
+                    if self._limit_reason:
+                        return self._shortage(self._limit_reason)
                     if api_failed:
                         return None
         finally:
@@ -1203,6 +1269,8 @@ class ZhilianCollector:
 
         for page in range(start_page, max_pages + 1):
             if hooks.stop_event is not None and hooks.stop_event.is_set():
+                return False
+            if not self._reserve_page("search_page"):
                 return False
             if not rate_limiter.wait_before_request(hooks.stop_event):
                 return False
@@ -1280,6 +1348,7 @@ class ZhilianCollector:
         if should_take_day_off(float(throttle_cfg.get("day_off_probability", 0.05))):
             return PlatformCollectionResult(self.platform, "completed", "day_off",
                                             "今日随机休息，跳过智联采集")
+        self._start_limits()
 
         # 词级断点续采：跳过最近 N 小时内已完成的 (city, keyword) 组合。
         collected_combos: set[tuple[str, str]] = set()
@@ -1330,6 +1399,8 @@ class ZhilianCollector:
                     for page in range(start_page, request.max_pages + 1):
                         if hooks.stop_event is not None and hooks.stop_event.is_set():
                             return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
+                        if not self._reserve_page("search_page"):
+                            return self._shortage(self._limit_reason)
                         hooks.on_event(phase="loading_list", keyword=keyword, city=city, page=page)
                         try:
                             self.browser.wait_for_load(target_id, timeout=10)
@@ -1366,7 +1437,7 @@ class ZhilianCollector:
                             if not isinstance(items, list):
                                 raise CollectionError("selector_changed", "智联列表返回格式无效")
                         except CollectionBlockedError as exc:
-                            return PlatformCollectionResult(self.platform, "blocked", exc.code, exc.message)
+                            return self._risk_blocked(exc.code, exc.message)
                         except (CollectionError, json.JSONDecodeError, TypeError) as exc:
                             code = exc.code if isinstance(exc, CollectionError) else "selector_changed"
                             message = str(exc) or "智联列表解析失败，可能是页面结构变化"
@@ -1376,6 +1447,8 @@ class ZhilianCollector:
                         for raw_item in items:
                             card_index = raw_item.get("card_index") if isinstance(raw_item, dict) else None
                             if card_index is not None:
+                                if not self._reserve_page("detail_page"):
+                                    return self._shortage(self._limit_reason)
                                 if detail_requests:
                                     delay = max(0.0, self.uniform(*self.delay_range))
                                     hooks.on_event(
@@ -1394,7 +1467,7 @@ class ZhilianCollector:
                                 if clicked.get("ok") is not True:
                                     # 卡片懒加载或列表重渲染时可能瞬时未命中，重试后再判定结构变化
                                     for _ in range(2):
-                                        self.sleep(1.5)
+                                        self.sleep(pacing.floor_seconds(1.5, self.config))
                                         self.browser.scroll(target_id, y=2600)
                                         clicked = self._parse_payload(
                                             self.browser.evaluate(target_id, _build_click_card_script(int(card_index)))
@@ -1407,16 +1480,16 @@ class ZhilianCollector:
                                     )
                                 detail_requests += 1
                                 if hooks.stop_event is not None:
-                                    if hooks.stop_event.wait(1.5):
+                                    if hooks.stop_event.wait(pacing.floor_seconds(1.5, self.config)):
                                         return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
                                 else:
-                                    self.sleep(1.5)
+                                    self.sleep(pacing.floor_seconds(1.5, self.config))
                                 try:
                                     detail = self._read_detail_with_retry(target_id, city)
                                     if detail.get("status") == "blocked":
-                                        return PlatformCollectionResult(self.platform, "blocked", "rate_limit", "智联页面出现验证或限流，已停止整个采集队列")
+                                        return self._risk_blocked("rate_limit", "智联页面出现验证或限流，已停止整个采集队列")
                                     if detail.get("status") == "login_required":
-                                        return PlatformCollectionResult(self.platform, "blocked", "login_required", "智联页面要求重新登录，已停止智联当前任务；后续平台将继续")
+                                        return self._risk_blocked("login_required", "智联页面要求重新登录，已停止智联当前任务；后续平台将继续")
                                     if detail.get("status") == "selector_changed":
                                         return PlatformCollectionResult(self.platform, "blocked", "selector_changed", "智联侧栏详情结构变化，已安全停止")
                                     base = self._candidate_from_list(detail, city, keyword)
@@ -1429,9 +1502,12 @@ class ZhilianCollector:
                                         raise CollectionError("parse_failed", "智联侧栏详情缺少职位、公司、链接或 JD")
                                 except (CollectionError, json.JSONDecodeError, TypeError, ValueError) as exc:
                                     hooks.on_parse_failed(str(exc) or "智联侧栏详情解析失败")
+                                    if self._page_failed():
+                                        return self._shortage("consecutive_page_failures")
                                     continue
                                 if not hooks.on_candidate(final):
                                     return PlatformCollectionResult(self.platform, "completed", "callback_stopped", "采集回调已停止")
+                                self._page_failures = 0
                                 continue
                             candidate = self._candidate_from_list(raw_item, city, keyword)
                             if candidate is None:
@@ -1446,6 +1522,8 @@ class ZhilianCollector:
                                 continue
                             if not hooks.on_list_candidate(candidate):
                                 continue
+                            if not self._reserve_page("detail_page"):
+                                return self._shortage(self._limit_reason)
                             if detail_requests:
                                 delay = max(0.0, self.uniform(*self.delay_range))
                                 hooks.on_event(
@@ -1465,10 +1543,14 @@ class ZhilianCollector:
                             detail_target = self.browser.new_tab(detail_initial_url, background=True)
                             if not detail_target:
                                 hooks.on_parse_failed("无法打开智联详情页")
+                                if self._page_failed():
+                                    return self._shortage("consecutive_page_failures")
                                 continue
                             if self.browser.navigate_action is not None and not self.browser.navigate_action(detail_target, candidate.url):
                                 self.browser.close_tab(detail_target)
                                 hooks.on_parse_failed("智联详情页导航失败")
+                                if self._page_failed():
+                                    return self._shortage("consecutive_page_failures")
                                 continue
                             detail_requests += 1
                             try:
@@ -1478,9 +1560,9 @@ class ZhilianCollector:
                                 self.browser.close_tab(detail_target)
                             try:
                                 if detail.get("status") == "blocked":
-                                    return PlatformCollectionResult(self.platform, "blocked", "rate_limit", "智联详情页出现验证或限流，已停止整个采集队列")
+                                    return self._risk_blocked("rate_limit", "智联详情页出现验证或限流，已停止整个采集队列")
                                 if detail.get("status") == "login_required":
-                                    return PlatformCollectionResult(self.platform, "blocked", "login_required", "智联详情页要求重新登录，已停止智联当前任务；后续平台将继续")
+                                    return self._risk_blocked("login_required", "智联详情页要求重新登录，已停止智联当前任务；后续平台将继续")
                                 if detail.get("status") == "selector_changed":
                                     return PlatformCollectionResult(self.platform, "blocked", "selector_changed", "智联详情页结构变化，已安全停止")
                                 if not detail.get("source_job_id"):
@@ -1495,12 +1577,15 @@ class ZhilianCollector:
                                 if not final.title or not final.company or not final.url or not final.jd:
                                     raise CollectionError("parse_failed", "智联详情缺少职位、公司、链接或 JD")
                             except CollectionBlockedError as exc:
-                                return PlatformCollectionResult(self.platform, "blocked", exc.code, exc.message)
+                                return self._risk_blocked(exc.code, exc.message)
                             except (CollectionError, json.JSONDecodeError, TypeError) as exc:
                                 hooks.on_parse_failed(str(exc) or "智联详情解析失败")
+                                if self._page_failed():
+                                    return self._shortage("consecutive_page_failures")
                                 continue
                             if not hooks.on_candidate(final):
                                 return PlatformCollectionResult(self.platform, "completed", "callback_stopped", "采集回调已停止")
+                            self._page_failures = 0
                         # 页级断点：每采完一页立即记录页码
                         if self.safety_conn is not None:
                             upsert_page_progress(self.safety_conn, "zhilian", city, keyword, page)

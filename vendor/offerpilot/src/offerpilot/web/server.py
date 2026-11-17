@@ -720,11 +720,8 @@ def _execute_full(task: WorkbenchTask, config: dict) -> None:
 
 	db = _get_web_db()
 	try:
-		threshold = int(config.get("scoring", {}).get("threshold", 60))
-		pending_confirmation = [
-			job for job in get_jobs_pending_confirmation(db)
-			if int(job.get("score") or 0) >= threshold
-		]
+		# 文档没有数字通过线；岗位状态已由 score_recommendation 按文档规则写入。
+		pending_confirmation = get_jobs_pending_confirmation(db)
 	finally:
 		db.close()
 	if config.get("_workbench_auto_pipeline"):
@@ -736,7 +733,7 @@ def _execute_full(task: WorkbenchTask, config: dict) -> None:
 		task.context["confirmation_complete"] = True
 		_log(
 			task,
-			f"自动流程已停在最终确认门：{len(pending_confirmation)} 个岗位评分达标，"
+			f"自动流程已停在最终确认门：{len(pending_confirmation)} 个岗位已按文档规则通过筛选，"
 			"交由工作台导入、入队并生成招呼语；未发送任何消息",
 		)
 		return
@@ -1500,7 +1497,6 @@ def api_workbench():
 	db = _get_web_db()
 	try:
 		config = load_config(CONFIG_PATH)
-		threshold = config.get("scoring", {}).get("threshold", 60)
 		daily_limit = int(config.get("throttle", {}).get("daily_limit", 30) or 30)
 		today_sent_row = db.execute(
 			"SELECT COUNT(*) AS cnt FROM history WHERE action='sent' AND date(created_at)=date('now')"
@@ -1512,8 +1508,7 @@ def api_workbench():
 			"funnel_today": get_funnel_stats(db, today=True),
 			"pending_confirmation": [
 				_serialize_job(job) for job in get_jobs_pending_confirmation(db)
-				if int(job.get("score") or 0) >= threshold
-				and platform_supports(str(job.get("source_platform") or "boss"), "deliver")
+				if platform_supports(str(job.get("source_platform") or "boss"), "deliver")
 			],
 			"pending_greetings": [
 				_serialize_job(job) for job in get_jobs_ready_to_send(db, include_pending_review=True)

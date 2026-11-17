@@ -18,6 +18,7 @@ from offerpilot.employment import internship_config_error, internship_only, inte
 from offerpilot.browser import close_tab, evaluate, navigate, new_tab, scroll, wait_for_load
 from offerpilot.cities import get_city_code
 from offerpilot.collection.city_yield import CityYieldTracker, TERMINAL_CITIES, normalize_city_policy
+from offerpilot.collection import pacing
 from offerpilot.collection.base import CollectionError, CollectorHooks
 from offerpilot.collection.models import JobCandidate, PlatformCollectionRequest, PlatformCollectionResult
 from offerpilot.collection.platforms.boss_font import (
@@ -389,25 +390,18 @@ class BossCollector:
             return PlatformCollectionResult(*args, **kwargs, city_results=city_results)
 
         collection_cfg = self.config.get("collection", {}) if isinstance(self.config.get("collection"), dict) else {}
-        delay_multiplier = _bounded_float(
-            collection_cfg.get("collection_delay_multiplier", 1.5),
-            1.5,
-            1.0,
-            5.0,
-        )
+        delay_multiplier = pacing.delay_multiplier(self.config)
         throttle = self.throttle_factory(
-            delay_min=2.0 * delay_multiplier,
-            delay_max=5.0 * delay_multiplier,
+            delay_min=pacing.BASE_PAGE_DELAY_MIN * delay_multiplier,
+            delay_max=pacing.BASE_PAGE_DELAY_MAX * delay_multiplier,
         )
         guard = PlatformAccessGuard(self.safety_conn, self.config, "collection", "boss") if self.safety_conn is not None else None
-        search_limit = _positive_int(collection_cfg.get("daily_search_page_limit", 60), 60)
-        detail_limit = _positive_int(collection_cfg.get("daily_detail_page_limit", 900), 900)
-        failure_limit = _positive_int(collection_cfg.get("max_consecutive_page_failures", 3), 3)
-        risk_pause_min = _positive_int(collection_cfg.get("risk_pause_min_minutes", 5), 5)
-        risk_pause_max = max(
-            risk_pause_min,
-            _positive_int(collection_cfg.get("risk_pause_max_minutes", 10), 10),
-        )
+        limits = pacing.collection_limits(self.config)
+        search_limit = limits.daily_search_pages
+        detail_limit = limits.daily_detail_pages
+        failure_limit = limits.max_consecutive_failures
+        risk_pause_min = limits.risk_pause_min_minutes
+        risk_pause_max = limits.risk_pause_max_minutes
         # List cards can omit the type; defer only that check until the detail JD.
         list_config = {**self.config, "platforms": {
             **self.config.get("platforms", {}), "boss": {

@@ -16,6 +16,8 @@ from offerpilot.collection.models import (
     JobCandidate,
     PlatformCollectionRequest,
     PlatformCollectionResult,
+    apply_collection_filters,
+    normalize_collection_filters,
 )
 from offerpilot.collection.platforms.boss import BossCollector, normalize_boss_search_filters
 from offerpilot.collection.platforms.job51 import Job51Collector, get_51job_city_code
@@ -52,9 +54,24 @@ def _clean_strings(values: Any) -> list[str]:
     return result
 
 
+def _normalize_platform_filters(
+    platform: str, filters: Any, log: Callable[[str], None] | None = None
+) -> dict[str, list[str]]:
+    """Normalize a platform's collection filters.
+
+    BOSS keeps its request-side filter vocabulary; the other platforms pass
+    filters through per-platform (unknown keys preserved and logged, never
+    silently dropped).
+    """
+    if platform == "boss":
+        return normalize_boss_search_filters(filters)
+    return normalize_collection_filters(filters, platform, log=log)
+
+
 def normalize_collection_options(config: dict[str, Any], raw_options: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a validated collection request while keeping legacy BOSS config compatible."""
     supplied = deepcopy(raw_options) if isinstance(raw_options, dict) else {}
+    log = config.get("_workbench_log") if callable(config.get("_workbench_log")) else None
     raw_platforms = supplied.get("platforms") if isinstance(supplied.get("platforms"), dict) else {}
     configured_platforms = config.get("platforms") if isinstance(config.get("platforms"), dict) else {}
     legacy_search = config.get("search") if isinstance(config.get("search"), dict) else {}
@@ -101,7 +118,7 @@ def normalize_collection_options(config: dict[str, Any], raw_options: dict[str, 
             } if isinstance(base.get("city_codes"), dict) else {},
             "max_pages": base.get("max_pages", 3 if platform == "boss" else 1),
             "sort": str(base.get("sort") or ("newest" if platform == "boss" else "default")),
-            "filters": normalize_boss_search_filters(base.get("filters")) if platform == "boss" else {},
+            "filters": _normalize_platform_filters(platform, base.get("filters"), log),
         }
         if platform == "boss":
             platforms[platform]["city_yield_policy"] = normalize_city_policy(base.get("city_yield_policy"))
@@ -135,7 +152,7 @@ def normalize_collection_options(config: dict[str, Any], raw_options: dict[str, 
         options["resume_run_id"] = supplied["resume_run_id"]
     if "continuous_collection" in supplied:
         options["continuous_collection"] = supplied["continuous_collection"]
-    normalized = validate_collection_options(options)
+    normalized = validate_collection_options(options, log=log)
     if "boss" in normalized["platform_order"]:
         effective = {"profile": config.get("profile", {}), "platforms": {
             "boss": {"search": {"filters": normalized["platforms"]["boss"]["filters"]}},
@@ -145,7 +162,7 @@ def normalize_collection_options(config: dict[str, Any], raw_options: dict[str, 
     return normalized
 
 
-def validate_collection_options(options: dict[str, Any]) -> dict[str, Any]:
+def validate_collection_options(options: dict[str, Any], log: Callable[[str], None] | None = None) -> dict[str, Any]:
     if not isinstance(options, dict):
         raise ValueError("采集参数必须是对象")
     order = options.get("platform_order")
@@ -231,7 +248,7 @@ def validate_collection_options(options: dict[str, Any]) -> dict[str, Any]:
             "city_codes": city_codes,
             "max_pages": max_pages,
             "sort": sort,
-            "filters": normalize_boss_search_filters(value.get("filters")) if platform == "boss" else {},
+            "filters": _normalize_platform_filters(platform, value.get("filters"), log),
         }
         if platform == "boss":
             catalog = get_city_map()
@@ -457,11 +474,13 @@ class CollectionOrchestrator:
                     states[platform]["reason_code"] = "user_stopped"
                     break
                 raw = options["platforms"][platform]
-                if platform == "boss":
+                log = self.config.get("_workbench_log")
+                if callable(log) and platform == "boss":
                     unresolved = [city for city in raw["cities"] if not raw["city_codes"].get(city)]
-                    log = self.config.get("_workbench_log")
-                    if unresolved and callable(log):
+                    if unresolved:
                         log(f"跳过未识别的 BOSS 地区：{'、'.join(unresolved)}；继续采集其他有效城市，原配置保留")
+                if callable(log) and platform == "zhilian" and str(raw.get("sort") or "default") == "newest":
+                    log("智联排序 newest 未生效：智联搜索接口未提供该排序参数，按默认排序采集")
                 request = PlatformCollectionRequest(platform=platform, **raw)
                 states[platform]["status"] = "running"
                 self._persist(states, all_new_ids, platform, status="running")
@@ -486,10 +505,49 @@ class CollectionOrchestrator:
                     states[p]["error_records"] = list(processor_ref.error_records)
                     self._emit(states, p, progress, all_new_ids, processor_ref.new_job_ids)
                 processor.emit = emit
+                # Apply per-platform collection filters at both the list stage
+                # (before a detail visit is decided) and the save stage (with
+                # detail fields merged).  BOSS filters on the request side, so
+                # it never goes through this path.  A key a platform cannot
+                # judge for a candidate is reported once per run and the
+                # candidate is kept — never dropped on a missing field.
+                unapplied_logged: set[tuple[str, str]] = set()
+
+                def _keep_filtered(candidate: JobCandidate) -> bool:
+                    if platform == "boss":
+                        return True
+                    keep, _applied, not_applied = apply_collection_filters(
+                        candidate, request.filters, platform
+                    )
+                    for key, reason in not_applied.items():
+                        marker = (platform, key)
+                        if marker not in unapplied_logged:
+                            unapplied_logged.add(marker)
+                            if callable(log):
+                                log(f"{platform} 过滤未生效：{key}（{reason}）")
+                    if not keep:
+                        processor.event(
+                            message=f"{platform} 采集过滤未命中，已过滤",
+                            increment_filtered=True,
+                            filtered_candidate=candidate,
+                        )
+                    return keep
+
+                def _inspect_filtered(candidate: JobCandidate) -> bool:
+                    return _keep_filtered(candidate) and processor.inspect(candidate)
+
+                def _save_filtered(candidate: JobCandidate) -> bool:
+                    # A False on_candidate return means "callback stopped" to the
+                    # collectors; a filter drop is handled, not a stop, so the
+                    # filtered candidate is counted and we keep the run moving.
+                    if not _keep_filtered(candidate):
+                        return True
+                    return processor.save(candidate)
+
                 hooks = CollectorHooks(
                     stop_event=self.stop_event,
-                    on_list_candidate=processor.inspect,
-                    on_candidate=processor.save,
+                    on_list_candidate=_inspect_filtered,
+                    on_candidate=_save_filtered,
                     on_parse_failed=lambda reason, p=processor: self._parse_failed(p, reason),
                     on_event=lambda p=processor, **kwargs: p.event(**kwargs),
                     can_checkpoint=lambda p=processor, baseline=prior_save_failures: p.progress.save_failed == baseline,

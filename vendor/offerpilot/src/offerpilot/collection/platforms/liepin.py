@@ -34,6 +34,7 @@ from urllib.parse import quote
 
 from offerpilot.ai.prefilter import salary_filter_result
 from offerpilot.browser import close_tab, evaluate, navigate as browser_navigate, new_tab, scroll, wait_for_load
+from offerpilot.collection import pacing
 from offerpilot.collection.base import CollectionError, CollectorHooks
 from offerpilot.collection.models import JobCandidate, PlatformCollectionRequest, PlatformCollectionResult
 from offerpilot.db import (
@@ -46,6 +47,7 @@ from offerpilot.db import (
     upsert_page_progress,
 )
 from offerpilot.job_filters import matching_blocked_company, matching_deal_breaker
+from offerpilot.platform_safety import PlatformSafetyStop
 from offerpilot.throttle import SendWindowChecker, should_take_day_off
 
 
@@ -120,11 +122,10 @@ JS_EXTRACT_LIST = r"""
     if (/滑动验证|安全验证|访问过于频繁|请完成安全验证|人机验证|网络异常/.test(pageText)) {
         return JSON.stringify({status: 'blocked', jobs: []});
     }
-    var anchors = Array.prototype.slice.call(document.querySelectorAll('a[data-nick="job-detail-job-info"]'));
-    if (!anchors.length) {
-        return JSON.stringify({status: /没有找到|暂无满足|未找到/.test(text) ? 'empty' : 'waiting', jobs: []});
-    }
     var jobs = [];
+
+    // Legacy layout: anchors carry job id + href directly.
+    var anchors = Array.prototype.slice.call(document.querySelectorAll('a[data-nick="job-detail-job-info"]'));
     for (var i = 0; i < anchors.length; i++) {
         var a = anchors[i];
         var href = (a.href || '').trim();
@@ -156,7 +157,109 @@ JS_EXTRACT_LIST = r"""
             url: href
         });
     }
-    return JSON.stringify({status: jobs.length ? 'ready' : 'selector_changed', jobs: jobs});
+
+    // Current split-view layout: cards are divs; the job id lives in data-tlg-ext.
+    if (!jobs.length) {
+        var cards = Array.prototype.slice.call(document.querySelectorAll('.job-card-pc-container'))
+            .filter(function (card) { return !!card.offsetParent; });
+        var eduPattern = /^(大专|本科|硕士|博士|学历不限|MBA|EMBA)$/;
+        for (var j = 0; j < cards.length; j++) {
+            var card = cards[j];
+            var rawExt = card.getAttribute('data-tlg-ext') || '';
+            var ext = {};
+            try { ext = JSON.parse(rawExt) || {}; } catch (e1) {
+                try { ext = JSON.parse(decodeURIComponent(rawExt)) || {}; } catch (e2) { ext = {}; }
+            }
+            var jobId = String(ext.jobId || '').trim();
+            if (!jobId) {
+                var scm = card.getAttribute('data-tlg-scm') || '';
+                var idm = scm.match(/cid=2_(\d+)/);
+                jobId = idm ? idm[1] : '';
+            }
+            var titleNode = card.querySelector('.search-job-card-name-text');
+            var jobTitle = titleNode
+                ? String(titleNode.getAttribute('title') || titleNode.innerText || '').trim()
+                : '';
+            if (!jobId || !jobTitle) continue;
+            var compNode = card.querySelector('.search-job-card-comp-name');
+            var salNode = card.querySelector('.search-job-card-salary');
+            var locNode = card.querySelector('.search-job-card-location');
+            var tags = Array.prototype.slice.call(card.querySelectorAll('.search-job-card-tag'))
+                .map(function (t) { return String(t.innerText || '').trim(); }).filter(Boolean);
+            var education = '';
+            var experience = '';
+            for (var k = 0; k < tags.length; k++) {
+                if (!education && eduPattern.test(tags[k])) education = tags[k];
+                else if (!experience && /年|应届|经验|实习|在校|个月/.test(tags[k])) experience = tags[k];
+            }
+            jobs.push({
+                source_job_id: jobId,
+                title: jobTitle,
+                company: compNode ? String(compNode.innerText || '').trim() : '',
+                salary: salNode ? String(salNode.innerText || '').replace(/\s+/g, '') : '',
+                city: locNode ? String(locNode.innerText || '').trim() : '',
+                experience: experience,
+                education: education,
+                url: 'https://www.liepin.com/job/' + jobId + '.shtml'
+            });
+        }
+    }
+
+    if (!jobs.length) {
+        return JSON.stringify({status: /没有找到|暂无满足|未找到/.test(text) ? 'empty' : 'waiting', jobs: []});
+    }
+    return JSON.stringify({status: 'ready', jobs: jobs});
+})()
+"""
+
+JS_SELECT_CARD = r"""
+(function () {
+    var jobId = "__JOB_ID__";
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.job-card-pc-container'))
+        .filter(function (card) { return !!card.offsetParent; });
+    for (var i = 0; i < cards.length; i++) {
+        var rawExt = cards[i].getAttribute('data-tlg-ext') || '';
+        var ext = {};
+        try { ext = JSON.parse(rawExt) || {}; } catch (e1) {
+            try { ext = JSON.parse(decodeURIComponent(rawExt)) || {}; } catch (e2) { ext = {}; }
+        }
+        if (String(ext.jobId || '') !== jobId) continue;
+        cards[i].click();
+        return JSON.stringify({status: 'selected'});
+    }
+    return JSON.stringify({status: 'missing'});
+})()
+"""
+
+JS_EXTRACT_SPLIT_DETAIL = r"""
+(function () {
+    var pane = document.querySelector('#search-job-detail');
+    if (!pane) return JSON.stringify({status: 'missing'});
+    var paneStatus = String(pane.getAttribute('data-status') || '');
+    if (paneStatus && paneStatus !== 'ready') {
+        return JSON.stringify({status: paneStatus === 'loading' ? 'waiting' : 'not_ready'});
+    }
+    var text = String(pane.innerText || '').trim();
+    if (!text) return JSON.stringify({status: 'waiting'});
+    var jd = '';
+    var start = text.indexOf('职位描述');
+    if (start >= 0) {
+        jd = text.slice(start + 4);
+        var stops = ['公司信息', '截止日期', '招聘人数'];
+        for (var i = 0; i < stops.length; i++) {
+            var at = jd.indexOf(stops[i]);
+            if (at >= 0) jd = jd.slice(0, at);
+        }
+        jd = jd.replace(/\s+/g, ' ').trim();
+    }
+    var titleNode = pane.querySelector('h2[title]');
+    var salaryMatch = text.match(/(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?\s*[kK](?:\s*·\s*\d+\s*薪)?|\d+(?:\.\d+)?\s*[kK](?:\s*·\s*\d+\s*薪)?|\d+(?:\s*-\s*\d+)?\s*元\/天|面议)/);
+    return JSON.stringify({
+        status: jd ? 'ready' : 'selector_changed',
+        title: titleNode ? String(titleNode.getAttribute('title') || titleNode.innerText || '').trim() : '',
+        salary: salaryMatch ? salaryMatch[0].replace(/\s+/g, '') : '',
+        jd: jd
+    });
 })()
 """
 
@@ -244,8 +347,49 @@ class LiepinCollector:
         self.browser = browser or LiepinBrowser(navigate_action=browser_navigate)
         self.sleep = sleep
         self.uniform = uniform
-        self.detail_delay_range = detail_delay_range
-        self.page_delay_range = page_delay_range
+        # Liepin stays more conservative than BOSS; only raise to BOSS's floor.
+        self.detail_delay_range = pacing.floor_range(detail_delay_range, self.config)
+        self.page_delay_range = pacing.floor_range(page_delay_range, self.config)
+
+    # -- BOSS-aligned safety limits (daily page budgets, failure cap, cooldown) --
+    def _start_limits(self) -> None:
+        self._guard = pacing.collection_guard(self.safety_conn, self.config, self.platform)
+        self._limits = pacing.collection_limits(self.config)
+        self._page_failures = 0
+        self._limit_reason = ""
+
+    def _reserve_page(self, action: str) -> bool:
+        if self._guard is None:
+            return True
+        daily_limit = (
+            self._limits.daily_search_pages if action == "search_page"
+            else self._limits.daily_detail_pages
+        )
+        try:
+            self._guard.reserve(action, daily_limit=daily_limit)
+        except PlatformSafetyStop as exc:
+            self._limit_reason = exc.reason
+            return False
+        return True
+
+    def _shortage(self, reason: str) -> PlatformCollectionResult:
+        return PlatformCollectionResult(
+            self.platform, "completed_with_shortage", reason,
+            f"猎聘 采集已达安全上限：{reason}；其他平台可继续",
+        )
+
+    def _page_failed(self) -> bool:
+        self._page_failures += 1
+        return self._page_failures >= self._limits.max_consecutive_failures
+
+    def _risk_blocked(self, kind: str, message: str) -> PlatformCollectionResult:
+        minutes = self._limits.pause_minutes(random.randint)
+        if self._guard is not None:
+            self._guard.lock(kind, minutes=minutes)
+        return PlatformCollectionResult(
+            self.platform, "blocked", kind,
+            f"{message}；本轮已停止，冷却 {minutes} 分钟后可重新开始",
+        )
 
     @staticmethod
     def build_search_url(request: PlatformCollectionRequest, city: str, keyword: str, page: int = 1) -> str:
@@ -344,6 +488,7 @@ class LiepinCollector:
         if should_take_day_off(float(throttle_cfg.get("day_off_probability", 0.05))):
             return PlatformCollectionResult(self.platform, "completed", "day_off",
                                             "今日随机休息，跳过猎聘采集")
+        self._start_limits()
 
         for city in request.cities:
             for keyword in request.keywords:
@@ -376,6 +521,8 @@ class LiepinCollector:
                     for page in range(start_page, request.max_pages + 1):
                         if hooks.stop_event is not None and hooks.stop_event.is_set():
                             return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
+                        if not self._reserve_page("search_page"):
+                            return self._shortage(self._limit_reason)
                         if page > 1:
                             detail_req = self.uniform(*self.page_delay_range)
                             hooks.on_event(phase="pacing", keyword=keyword, city=city, page=page, message=f"翻页安全间隔 {detail_req:.1f} 秒")
@@ -396,7 +543,7 @@ class LiepinCollector:
                             if attempt + 1 < RENDER_POLL_ATTEMPTS and self._wait(hooks, RENDER_POLL_INTERVAL_SECONDS):
                                 return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
                         if status == "blocked":
-                            return PlatformCollectionResult(self.platform, "blocked", "rate_limit", "猎聘出现验证或限流信号，已停止整个平台任务")
+                            return self._risk_blocked("rate_limit", "猎聘出现验证或限流信号，已停止整个平台任务")
                         if status == "empty":
                             break
                         if status == "waiting":
@@ -422,21 +569,57 @@ class LiepinCollector:
                                 continue
                             if not hooks.on_list_candidate(candidate):
                                 continue
+                            if not self._reserve_page("detail_page"):
+                                return self._shortage(self._limit_reason)
                             detail_req = self.uniform(*self.detail_delay_range)
                             hooks.on_event(phase="pacing", keyword=keyword, city=city, page=page, message=f"详情页安全间隔 {detail_req:.1f} 秒")
                             if self._wait(hooks, detail_req):
                                 return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
                             hooks.on_event(phase="loading_detail", keyword=keyword, city=city, page=page)
+
+                            # Current Liepin uses a split view: clicking a card renders
+                            # the JD in #search-job-detail on the same search page.  Use
+                            # that read-only pane first; it never opens an apply/chat dialog.
+                            selected = _payload(self.browser.evaluate(
+                                target_id, JS_SELECT_CARD.replace("__JOB_ID__", candidate.source_job_id)
+                            ))
+                            if str(selected.get("status") or "") == "selected":
+                                split: dict[str, Any] = {}
+                                split_status = "waiting"
+                                for attempt in range(RENDER_POLL_ATTEMPTS):
+                                    split = _payload(self.browser.evaluate(target_id, JS_EXTRACT_SPLIT_DETAIL))
+                                    split_status = str(split.get("status") or "selector_changed")
+                                    if split_status in {"ready", "blocked", "missing", "not_ready", "selector_changed"}:
+                                        break
+                                    if attempt + 1 < RENDER_POLL_ATTEMPTS and self._wait(hooks, RENDER_POLL_INTERVAL_SECONDS):
+                                        return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
+                                if split_status == "blocked":
+                                    return self._risk_blocked("rate_limit", "猎聘详情面板出现验证或限流，已停止整个平台任务")
+                                if split_status != "missing":
+                                    if split_status == "ready" and str(split.get("jd") or "").strip():
+                                        final = self._candidate_from_detail(split, candidate)
+                                        if not hooks.on_candidate(final):
+                                            return PlatformCollectionResult(self.platform, "completed", "callback_stopped", "采集回调已停止")
+                                        continue
+                                    hooks.on_parse_failed("猎聘详情JD不可用，仅保存列表信息")
+                                    if not hooks.on_candidate(candidate):
+                                        return PlatformCollectionResult(self.platform, "completed", "callback_stopped", "采集回调已停止")
+                                    continue
+
                             detail_initial_url = "about:blank" if self.browser.navigate_action is not None else candidate.url
                             detail_target = self.browser.new_tab(detail_initial_url, background=True)
                             if not detail_target:
                                 hooks.on_parse_failed("无法打开猎聘详情页")
                                 page_had_transient_failure = True
+                                if self._page_failed():
+                                    return self._shortage("consecutive_page_failures")
                                 continue
                             if not self._navigate(hooks, detail_target, candidate.url, "猎聘详情页"):
                                 self.browser.close_tab(detail_target)
                                 hooks.on_parse_failed("猎聘详情页导航失败")
                                 page_had_transient_failure = True
+                                if self._page_failed():
+                                    return self._shortage("consecutive_page_failures")
                                 continue
                             try:
                                 self.browser.wait_for_load(detail_target, timeout=15)
@@ -453,7 +636,7 @@ class LiepinCollector:
                             finally:
                                 self.browser.close_tab(detail_target)
                             if detail_status == "blocked":
-                                return PlatformCollectionResult(self.platform, "blocked", "rate_limit", "猎聘详情页出现验证或限流，已停止整个平台任务")
+                                return self._risk_blocked("rate_limit", "猎聘详情页出现验证或限流，已停止整个平台任务")
                             if detail_status == "offline":
                                 hooks.on_parse_failed("猎聘岗位已下线")
                                 continue

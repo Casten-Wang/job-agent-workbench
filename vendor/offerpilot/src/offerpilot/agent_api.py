@@ -34,7 +34,11 @@ def validate_agent_evaluations(value: Any, threshold: int) -> list[dict[str, Any
     if len(value) > _MAX_AGENT_EVALUATIONS:
         raise AgentRequestError(f"每次最多提交 {_MAX_AGENT_EVALUATIONS} 个岗位评估")
 
-    from offerpilot.ai.scorer import build_score_trace, validate_structured_score_payload
+    from offerpilot.ai.scorer import (
+        build_score_trace,
+        score_recommendation,
+        validate_structured_score_payload,
+    )
 
     evaluations: list[dict[str, Any]] = []
     seen_job_ids: set[str] = set()
@@ -52,7 +56,8 @@ def validate_agent_evaluations(value: Any, threshold: int) -> list[dict[str, Any
         if score_result is None:
             raise AgentRequestError("score 必须符合 OfferPilot 的完整结构化评分格式")
 
-        passed = score_result.score >= threshold
+        # 文档未定义数字门槛；threshold 参数保留给旧调用方，但不再参与判断。
+        passed = score_recommendation(score_result) == "ready"
         greeting_value = item.get("greeting")
         if passed:
             greeting = _validated_agent_greeting(greeting_value)

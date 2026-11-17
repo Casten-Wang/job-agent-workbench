@@ -35,6 +35,7 @@ from urllib.parse import quote
 
 from offerpilot.ai.prefilter import salary_filter_result
 from offerpilot.browser import close_tab, evaluate, get_page_targets, new_tab
+from offerpilot.collection import pacing
 from offerpilot.collection.base import CollectionBlockedError, CollectorHooks
 from offerpilot.collection.models import JobCandidate, PlatformCollectionRequest, PlatformCollectionResult
 from offerpilot.db import (
@@ -48,6 +49,7 @@ from offerpilot.db import (
     upsert_page_progress,
 )
 from offerpilot.job_filters import matching_blocked_company, matching_deal_breaker
+from offerpilot.platform_safety import PlatformSafetyStop
 from offerpilot.throttle import SendWindowChecker, should_take_day_off
 
 
@@ -399,11 +401,20 @@ class _ApiRateLimiter:
     间隔 + 每分钟上限，加快启动。
     """
 
-    def __init__(self, total_requests: int | None = None, no_burst: bool = False) -> None:
+    def __init__(
+        self,
+        total_requests: int | None = None,
+        no_burst: bool = False,
+        pacing_range: tuple[float, float] | None = None,
+        per_min_limit: int | None = None,
+    ) -> None:
         self._window: list[float] = []
         self._in_burst = 0
         self._burst_size = random.randint(API_BURST_SIZE_MIN, API_BURST_SIZE_MAX)
         self._no_burst = no_burst
+        # BOSS floor: raise gaps and lower the per-minute cap; never the reverse.
+        self._pacing_range = tuple(pacing_range) if pacing_range else None
+        self._pacing_per_min = int(per_min_limit) if per_min_limit else None
         self._set_tier(total_requests)
 
     def _set_tier(self, total_requests: int | None) -> None:
@@ -420,6 +431,13 @@ class _ApiRateLimiter:
             self._gap_range = (5.0, 8.0)
             self._break_range = (90.0, 180.0)
             self._per_min_limit = 12
+        if self._pacing_range:
+            self._gap_range = (
+                max(self._gap_range[0], self._pacing_range[0]),
+                max(self._gap_range[1], self._pacing_range[1]),
+            )
+        if self._pacing_per_min:
+            self._per_min_limit = min(self._per_min_limit, self._pacing_per_min)
 
     def slow_down(self) -> None:
         """Back off after the platform stops answering: double the gaps and breaks, halve the per-minute cap."""
@@ -512,6 +530,46 @@ class Job51Collector:
         self.browser = browser or Job51Browser()
         self.sleep = sleep
         self.uniform = uniform or random.SystemRandom().uniform
+
+    # -- BOSS-aligned safety limits (daily page budgets, failure cap, cooldown) --
+    def _start_limits(self) -> None:
+        self._guard = pacing.collection_guard(self.safety_conn, self.config, self.platform)
+        self._limits = pacing.collection_limits(self.config)
+        self._page_failures = 0
+        self._limit_reason = ""
+
+    def _reserve_page(self, action: str) -> bool:
+        if self._guard is None:
+            return True
+        daily_limit = (
+            self._limits.daily_search_pages if action == "search_page"
+            else self._limits.daily_detail_pages
+        )
+        try:
+            self._guard.reserve(action, daily_limit=daily_limit)
+        except PlatformSafetyStop as exc:
+            self._limit_reason = exc.reason
+            return False
+        return True
+
+    def _shortage(self, reason: str) -> PlatformCollectionResult:
+        return PlatformCollectionResult(
+            self.platform, "completed_with_shortage", reason,
+            f"51job 采集已达安全上限：{reason}；其他平台可继续",
+        )
+
+    def _page_failed(self) -> bool:
+        self._page_failures += 1
+        return self._page_failures >= self._limits.max_consecutive_failures
+
+    def _risk_blocked(self, kind: str, message: str) -> PlatformCollectionResult:
+        minutes = self._limits.pause_minutes(random.randint)
+        if self._guard is not None:
+            self._guard.lock(kind, minutes=minutes)
+        return PlatformCollectionResult(
+            self.platform, "blocked", kind,
+            f"{message}；本轮已停止，冷却 {minutes} 分钟后可重新开始",
+        )
 
     # ------------------------------------------------------------------ 工具
     def _log(self, hooks: CollectorHooks, message: str, **values: Any) -> None:
@@ -610,6 +668,7 @@ class Job51Collector:
             city=resolved_city,
             city_code=code,
             experience=experience,
+            education=degree,
             jd=(item.get("jobDescribe") or "").strip(),
             hr_name=(item.get("hrName") or "").strip(),
             hr_title=(item.get("hrPosition") or "").strip(),
@@ -660,8 +719,15 @@ class Job51Collector:
 
     def _fetch_page(self, host_target: str, kw_encoded: str, area: str, page: int) -> dict:
         """在宿主页上下文发一次 API 请求并分析返回，返回 _analyze_api_response 结果。"""
+        if not self._reserve_page("search_page"):
+            raise PlatformSafetyStop(self._limit_reason)
         js = JS_FETCH_API_PAGE.replace("__KW__", kw_encoded).replace("__AREA__", area).replace("__PAGE__", str(page))
-        raw = self.browser.evaluate(host_target, js, timeout=API_FETCH_TIMEOUT)
+        try:
+            raw = self.browser.evaluate(host_target, js, timeout=API_FETCH_TIMEOUT)
+        except Exception:
+            if self._page_failed():
+                raise PlatformSafetyStop("consecutive_page_failures")
+            raise
         # An empty answer is usually a stalled tab or a dropped CDP call, not risk control. Climb down the ladder
         # (wait, wait longer, slow the collection rhythm and wait, slow it again) before treating it as an L3 stop
         # that ends the whole platform.
@@ -733,6 +799,7 @@ class Job51Collector:
         if should_take_day_off(float(throttle_cfg.get("day_off_probability", 0.05))):
             return PlatformCollectionResult(self.platform, "completed", "day_off",
                                             "今日随机休息，跳过 51job 采集")
+        self._start_limits()
 
         profile = self.config.get("profile", {}) if isinstance(self.config.get("profile"), dict) else {}
         deal_breakers = profile.get("deal_breakers") or []
@@ -755,7 +822,12 @@ class Job51Collector:
             raise CollectionBlockedError("browser_disconnected", f"打开 51job 宿主页失败：{exc}")
 
         # ★ 全局限速器：探针/保底针/热区扫描三阶段共享同一个 60s 窗口，统一计数。
-        rate_limiter = _ApiRateLimiter(total_requests=API_ADAPTIVE_MEDIUM, no_burst=False)
+        rate_limiter = _ApiRateLimiter(
+            total_requests=API_ADAPTIVE_MEDIUM,
+            no_burst=False,
+            pacing_range=pacing.page_delay_range(self.config),
+            per_min_limit=pacing.per_minute_limit(self.config),
+        )
         self._limiter, self._hooks = rate_limiter, hooks
 
         try:
@@ -769,13 +841,20 @@ class Job51Collector:
                         self._log(hooks, f"51job {kw} 断点续采：24h 内已完成，整词跳过",
                                   phase="completed_keyword", keyword=kw, city=city)
                         continue
-                    self._collect_keyword(
-                        request, hooks, host_target, rate_limiter,
-                        city=city, area=area, kw=kw, max_pages=max_pages,
-                        deal_breakers=deal_breakers, jd_deal_breakers=jd_deal_breakers,
-                        blocked_companies=blocked_companies, allow_internship=allow_internship,
-                        salary_min=salary_min, salary_max=salary_max,
-                    )
+                    try:
+                        self._collect_keyword(
+                            request, hooks, host_target, rate_limiter,
+                            city=city, area=area, kw=kw, max_pages=max_pages,
+                            deal_breakers=deal_breakers, jd_deal_breakers=jd_deal_breakers,
+                            blocked_companies=blocked_companies, allow_internship=allow_internship,
+                            salary_min=salary_min, salary_max=salary_max,
+                        )
+                    except PlatformSafetyStop as exc:
+                        return self._shortage(exc.reason)
+                    except CollectionBlockedError as exc:
+                        return self._risk_blocked(exc.code, exc.message)
+                    if self._limit_reason:
+                        return self._shortage(self._limit_reason)
         finally:
             if owns_host_target:
                 self.browser.close_tab(host_target)
