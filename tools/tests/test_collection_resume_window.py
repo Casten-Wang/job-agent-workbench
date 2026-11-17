@@ -47,14 +47,6 @@ def _collector(module, name, config):
     return module.__dict__[name](config=config, browser=SimpleNamespace())
 
 
-class _AlwaysActiveWindow:
-    def __init__(self, *args, **kwargs) -> None:
-        pass
-
-    def is_active(self) -> bool:
-        return True
-
-
 class _Hooks:
     """CollectorHooks with captured events; never stops."""
 
@@ -119,13 +111,11 @@ class _Case(unittest.TestCase):
         )
 
     def _patch_clock(self, module) -> None:
-        for name, value in (
-            ("SendWindowChecker", _AlwaysActiveWindow),
-            ("should_take_day_off", lambda probability: False),
-        ):
-            patcher = patch.object(module, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        # Collection no longer has a time window; only the random day off is
+        # stubbed so the resume tests stay deterministic.
+        patcher = patch.object(module, "should_take_day_off", lambda probability: False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _collect(self, module, name, config, browser):
         self._patch_clock(module)

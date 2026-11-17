@@ -31,7 +31,16 @@ sys.dont_write_bytecode = True
 import backend  # noqa: E402
 import offerpilot_runtime  # noqa: E402
 import server as web_server  # noqa: E402
+from offerpilot import throttle  # noqa: E402
 from offerpilot.ai import scorer  # noqa: E402
+
+
+class _ThreeAM(datetime.datetime):
+    """A clock fixed at 03:00, once outside every old send window."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 11, 18, 3, 0, 0)
 
 
 class ScoreDateTests(unittest.TestCase):
@@ -81,6 +90,10 @@ class _FakeMonitor:
         self.closed: list[str] = []
         self.opened: list[dict] = []
         self.send_result = True
+
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
 
     def _get_monitor_chat_target(self, url, config):
         return "tab-list", False
@@ -180,7 +193,6 @@ class ConversationRuntimeTests(unittest.TestCase):
     def _green_gate(self):
         runtime = offerpilot_runtime
         return (
-            patch.object(runtime, "_send_window_open", return_value=True),
             patch.object(runtime, "_stop_requested", return_value=False),
             patch.object(runtime, "_risk_lock_reason", return_value=None),
         )
@@ -216,7 +228,7 @@ class ConversationRuntimeTests(unittest.TestCase):
         # The listing refresh already read both conversations once; serving from
         # the store must not open either of them a second time.
         self.assertEqual([item["job"]["company"] for item in self.fake.opened], ["上海邦中", "闪魂"])
-        self.assertTrue(all(item["background"] is False for item in self.fake.opened))
+        self.assertTrue(all(item["background"] is True for item in self.fake.opened))
 
     def test_send_reply_sends_exactly_one_message(self):
         result = self._prime()
@@ -261,35 +273,25 @@ class ConversationRuntimeTests(unittest.TestCase):
             )
         self.assertEqual(self.fake.sent, [])
 
-    def test_outside_send_window_is_rejected(self):
+    def test_reply_is_sent_at_three_am(self):
+        # The old implementation refused 03:00; sending is now allowed all day.
         result = self._prime()
-        with patch.object(offerpilot_runtime, "_send_window_open", return_value=False):
-            with self.assertRaises(ValueError) as ctx:
-                offerpilot_runtime.send_reply(
-                    result["conversations"][0]["id"], "您好",
-                    confirm=offerpilot_runtime.REPLY_CONFIRM_PHRASE,
-                    risk_acknowledged=True,
-                )
-        self.assertIn("发送窗口", str(ctx.exception))
-        self.assertEqual(self.fake.sent, [])
-
-    def test_real_window_checker_rejects_outside_time(self):
-        now = datetime.datetime.now()
-        minute_of_day = now.hour * 60 + now.minute
-        candidates = [("00:00", "00:01"), ("12:00", "12:01"), ("23:00", "23:01")]
-        window = next(
-            item for item in candidates
-            if not (
-                int(item[0][:2]) * 60 + int(item[0][3:])
-                <= minute_of_day
-                < int(item[1][:2]) * 60 + int(item[1][3:])
+        with patch.object(throttle, "datetime", _ThreeAM):
+            self.assertTrue(throttle.SendWindowChecker(["09:00-16:00"]).is_active())
+            sent = offerpilot_runtime.send_reply(
+                result["conversations"][0]["id"], "您好，现在方便沟通吗？",
+                confirm=offerpilot_runtime.REPLY_CONFIRM_PHRASE,
+                risk_acknowledged=True,
             )
-        )
-        self.assertFalse(offerpilot_runtime._send_window_open(
-            {"throttle": {"send_windows": [f"{window[0]}-{window[1]}"]}}
-        ))
-        # An empty config still enforces the documented 09:00–16:00 window.
-        self.assertEqual(offerpilot_runtime._send_windows({"throttle": {"send_windows": []}}), ["09:00-16:00"])
+        self.assertEqual(sent["company"], "上海邦中")
+        self.assertEqual(len(self.fake.sent), 1)
+
+    def test_reply_gate_ignores_a_legacy_send_window_at_three_am(self):
+        with patch.object(throttle, "datetime", _ThreeAM), patch.object(
+            offerpilot_runtime, "_stop_requested", return_value=False
+        ), patch.object(offerpilot_runtime, "_risk_lock_reason", return_value=None):
+            allowed, reason = offerpilot_runtime._reply_gate(self.server, self.config)
+        self.assertEqual((allowed, reason), (True, None))
 
     def test_stop_request_is_rejected(self):
         result = self._prime()
@@ -423,7 +425,7 @@ class ReplyActionTests(unittest.TestCase):
         listing_payload = {"ok": True, "available": True, "conversations": [], "count": 0}
         thread_payload = {"ok": True, "available": True, "messages": []}
         with patch.object(
-            offerpilot_runtime, "list_conversations", return_value=listing_payload
+            offerpilot_runtime, "cached_conversations", return_value=listing_payload
         ) as listing, patch.object(
             offerpilot_runtime, "get_thread", return_value=thread_payload
         ) as thread:

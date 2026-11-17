@@ -1305,7 +1305,7 @@ class DeliveryActionTests(unittest.TestCase):
         with patch.object(backend, "get_store", return_value=store), patch.object(
             backend.offerpilot_runtime,
             "start_deliver_task",
-            side_effect=ValueError("当前不在发送时间窗口内"),
+            side_effect=ValueError("发送前置检查失败：平台风险锁未解除"),
         ):
             with self.assertRaises(backend.ApiError):
                 backend.start_offerpilot_deliver({
@@ -1967,6 +1967,29 @@ class PdfCheckTests(SeededStoreTestCase):
             self.assertEqual(result["verdict"], "needs_manual_check")
             self.assertIsNone(result["all_keywords_found"])
 
+    def test_empty_keywords_do_not_turn_a_readable_pdf_into_a_failure(self):
+        raw = (
+            b"%PDF-1.4\n"
+            b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+            b"2 0 obj\n<< /Type /Pages /Count 1 >>\nendobj\n"
+            b"3 0 obj\n<< /Length 42 >>\nstream\nBT (readable resume) Tj ET\nendstream\nendobj\n"
+            b"trailer\n<< /Root 1 0 R >>\n%%EOF\n"
+        )
+        response = backend.check_pdf({
+            "mode": "user",
+            "content_base64": base64.b64encode(raw).decode("ascii"),
+            "keywords": "",
+            "filename": "readability-only.pdf",
+        })
+        result = response["result"]
+        self.assertEqual(result["text_layer"], "available")
+        self.assertIsNone(result["all_keywords_found"])
+        self.assertEqual(result["verdict"], "needs_manual_check")
+        keyword_check = next(
+            item for item in result["checks"] if item["name"] == "keyword_match"
+        )
+        self.assertEqual(keyword_check["status"], "not_run")
+
     def test_unparseable_text_layer_never_reports_pass(self):
         raw = (
             b"%PDF-1.4\n"
@@ -2160,7 +2183,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertIn("app.js", html)
         self.assertIn("styles.css", html)
         self.assertIn("offer-theme.css", html)
-        for label in ("首页", "岗位池", "审批队列", "HR 回复", "个人资料", "模拟面试", "信息推送", "定制简历", "数据与设置"):
+        for label in ("首页", "岗位池", "审批队列", "HR 回复", "个人资料", "模拟面试", "信息推送", "定制简历", "设置"):
             with self.subTest(label=label):
                 self.assertIn(label, html)
         for marker in (
@@ -2280,12 +2303,13 @@ class HttpServerTests(unittest.TestCase):
             entries,
             [
                 ("01", "首页"),
-                ("02", "岗位流水线"),
-                ("03", "个人资料"),
-                ("04", "定制简历"),
-                ("05", "模拟面试"),
-                ("06", "信息推送"),
-                ("07", "数据与设置"),
+                ("02", "对话助理"),
+                ("03", "岗位流水线"),
+                ("04", "个人资料"),
+                ("05", "定制简历"),
+                ("06", "模拟面试"),
+                ("07", "信息推送"),
+                ("08", "设置"),
             ],
         )
 
@@ -2994,6 +3018,21 @@ class OfferPilotScorerTests(unittest.TestCase):
         })
         self.assertFalse(hasattr(self.scorer, "PREFERENCE_WEIGHTS"))
         self.assertEqual(self.scorer.TOTAL_WEIGHT, 100)
+
+    def test_transferable_alias_is_normalized_without_mutating_the_payload(self):
+        payload = self._payload()
+        payload["transferable"] = {"evidence": "示例可迁移证据", "coefficient": 1.0}
+        original = json.loads(json.dumps(payload))
+        result = self.scorer.validate_structured_score_payload(payload)
+        self.assertIsNotNone(result)
+        self.assertEqual(payload, original)  # 调用方字典不会被写入别名
+        normalized = self.scorer._apply_field_aliases(dict(payload))
+        self.assertEqual(normalized["transferable_evidence"], payload["transferable"])
+        self.assertIn("transferable", normalized)
+        payload["transferable_evidence"] = {"evidence": "已有规范字段", "coefficient": 0.5}
+        kept = self.scorer._apply_field_aliases(dict(payload))
+        self.assertEqual(kept["transferable_evidence"],
+                         {"evidence": "已有规范字段", "coefficient": 0.5})
 
     def test_full_match_scores_100_with_full_coverage(self):
         result = self.scorer.validate_structured_score_payload(self._payload())

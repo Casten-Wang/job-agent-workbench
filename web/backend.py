@@ -34,6 +34,7 @@ sys.dont_write_bytecode = True
 
 import offerpilot_adapter  # noqa: E402
 import offerpilot_runtime  # noqa: E402
+import profile_import  # noqa: E402
 import mail_classifier  # noqa: E402
 import analytics  # noqa: E402
 import jd_intake  # noqa: E402
@@ -146,7 +147,7 @@ PIPELINE_STAGES = (
         "entry": "queue",
         "actions": [],
         "event_stage": "send",
-        "description": "由内嵌岗位自动化执行；工作台要求逐批确认语与风险确认，发送仍受时间窗口、日限、间隔与平台风控锁约束，结果按岗位回报。",
+        "description": "由内嵌岗位自动化执行；工作台要求逐批确认语与风险确认，发送仍受日限、间隔与平台风控锁约束（全天可发送），结果按岗位回报。",
     },
     {
         "key": "monitor",
@@ -1048,6 +1049,8 @@ def profile_for_api(mode: str, store: Store) -> dict[str, Any]:
 
 def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
     """Suggest profile fields from a local resume; never auto-save."""
+    if "filename" in payload or "content_base64" in payload:
+        return _import_profile_upload(payload)
     source = _profile_cv_source()
     if source is None:
         if any(path.suffix.lower() != ".md" for path in _runtime_resume_files()):
@@ -1067,7 +1070,47 @@ def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "profile": suggestion,
         "source": label,
+        "filename": path.name,
         "message": "已从本地简历提取可识别字段；请核对后再保存。",
+    }
+
+
+def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Uploaded PDF/DOCX/MD/TXT: parse text locally, let the resume Agent suggest fields.
+
+    Never saves and never falls back to partial local parsing when the Agent fails.
+    """
+    if str(payload.get("mode") or "user") != "user":
+        raise ApiError("仅支持 user 模式导入简历")
+    filename = _bounded_text(payload.get("filename"), "文件名", 255)
+    encoded = _bounded_text(payload.get("content_base64"), "文件内容", 7 * 1024 * 1024)
+    if not filename or not encoded:
+        raise ApiError("请选择完整的本地简历文件")
+    filename = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    try:
+        content = base64.b64decode(encoded, validate=True)
+        text = profile_import.extract_resume_text(filename, content)
+    except ValueError as exc:
+        raise ApiError(str(exc) if str(exc) else "简历文件传输失败，请重新选择文件") from exc
+    from career_user_runtime import upstream
+    try:
+        extraction = upstream("POST", "/v1/career/profile-import", {"text": text})
+    except ApiError as exc:
+        raise ApiError("简历 Agent 解析未完成，当前资料未修改；请检查模型服务后重试。", exc.status) from None
+    if not isinstance(extraction.get("profile"), dict):
+        raise ApiError("简历 Agent 返回格式异常，当前资料未修改，请重试。", 502)
+    suggestion = normalize_profile(extraction["profile"])
+    suggestion["truth_confirmed"] = False
+    get_store("user").log("读取简历建议资料", "本地文件；未自动保存")
+    return {
+        "ok": True,
+        "profile": suggestion,
+        "source": filename,
+        "source_text": text,
+        "filename": filename,
+        "warnings": extraction.get("warnings", []),
+        "generation": extraction.get("generation", {}),
+        "message": "Agent 已解析整份简历并填入资料及经历；请核对各项内容，确认真实性后保存。",
     }
 
 
@@ -1371,24 +1414,32 @@ def _offerpilot_platform(value: Any, *, allow_all: bool = False) -> str:
 
 
 def get_offerpilot_conversations(mode: str = "user", platform: Any = "boss") -> dict[str, Any]:
-    """Read chat lists read-only.
+    """Return the conversations already stored on this machine.
 
-    ``platform="all"`` aggregates the four supported platforms; a failed
-    platform keeps its error in ``errors`` without hiding the others.  The
-    default stays ``boss`` so existing callers keep their contract.
+    The page renders immediately from disk; a platform read only happens when
+    the caller starts a background sync.  ``platform="all"`` returns every
+    stored platform; the default stays ``boss`` so existing callers keep their
+    contract.  ``syncing`` and ``last_synced_at`` tell the UI whether a refresh
+    is in flight and how old the stored copy is.
     """
     platform = _offerpilot_platform(platform, allow_all=True)
     try:
-        return offerpilot_runtime.list_conversations(platform)
-    except offerpilot_runtime.OfferPilotUnavailable as exc:
-        return {
-            "ok": False,
-            "available": False,
-            "platform": platform,
-            "conversations": [],
-            "count": 0,
-            "error": str(exc),
-        }
+        return offerpilot_runtime.cached_conversations(platform)
+    except ValueError as exc:
+        raise ApiError(str(exc), 409) from exc
+
+
+def get_offerpilot_conversations_summary(mode: str = "user") -> dict[str, Any]:
+    """Counts and freshness per platform, read from local storage only."""
+    return offerpilot_runtime.conversations_summary()
+
+
+def start_offerpilot_conversations_sync(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Start one background incremental sync; never blocks the request."""
+    body = payload if isinstance(payload, dict) else {}
+    platform = _offerpilot_platform(body.get("platform", "all"), allow_all=True)
+    try:
+        return offerpilot_runtime.start_conversations_sync(platform)
     except ValueError as exc:
         raise ApiError(str(exc), 409) from exc
 
@@ -1565,7 +1616,7 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("岗位自动化任务不存在", 404) from exc
     except Exception as exc:
         raise ApiError(f"岗位自动化 启动失败：{type(exc).__name__}", 500) from exc
-    message = "岗位自动化任务已受控提交；发送仍须经过人工确认门和配置时间窗口"
+    message = "岗位自动化任务已受控提交；发送仍须经过人工确认门、每日上限与平台风控锁"
     if task_mode == "collect":
         message = "采集任务已受控提交；完成后会自动导入岗位池，再到「岗位池」挑选并加入审批队列"
     elif task_mode == "full":
@@ -1739,12 +1790,12 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     for item in batch["items"]:
         item["status"] = "sending"
     store.set_deliveries(deliveries)
-    store.log("确认发送", f"批次 {batch_id}；{len(vendor_ids)} 条；受窗口与日限约束")
+    store.log("确认发送", f"批次 {batch_id}；{len(vendor_ids)} 条；受日限与间隔约束")
     return {
         "ok": True,
         "batch": batch,
         "task": task,
-        "message": f"已提交本批 {len(vendor_ids)} 条发送；受时间窗口、每日上限与随机间隔约束",
+        "message": f"已提交本批 {len(vendor_ids)} 条发送；受每日上限与随机间隔约束",
     }
 
 
@@ -2245,7 +2296,7 @@ def pipeline_contract() -> dict[str, Any]:
             "external_api_calls": "AI 服务与招聘平台页面由岗位自动化 发起；工作台不新增远程服务",
             "loopback_only": True,
             "human_confirmation_before_delivery": True,
-            "configured_send_window_required": True,
+            "configured_send_window_required": False,
             "event_is_record_only": True,
             "separate_offerpilot_service": False,
         },
@@ -4214,6 +4265,35 @@ def generate_job_greetings(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "generated": generated, "skipped": skipped, "message": message}
 
 
+def get_ai_settings_api(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return AI settings for 08 设置. Never includes the API key."""
+    try:
+        return {"ok": True, **offerpilot_runtime.get_ai_settings()}
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+
+
+def test_ai_connection_api(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Test the saved AI settings once. A failed test is a normal result, not an HTTP error."""
+    try:
+        return offerpilot_runtime.test_ai_connection(payload)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+
+
+def save_ai_settings_api(payload: dict[str, Any]) -> dict[str, Any]:
+    """Save AI settings from 08 设置. Validation errors become 400s."""
+    try:
+        settings = offerpilot_runtime.save_ai_settings(payload)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        raise ApiError(str(exc), 400) from exc
+    store = get_store("user")
+    store.log("保存 AI 接口设置", f"服务 {settings['service']}；密钥{'已更新' if payload.get('api_key') else '未改动'}")
+    return {"ok": True, "settings": settings, "message": "AI 接口设置已保存"}
+
+
 ACTIONS = {
     "parse-jd": parse_jd,
     "import-jobs": import_jobs,
@@ -4243,6 +4323,9 @@ ACTIONS = {
     "offerpilot-start": start_offerpilot_task,
     "offerpilot-greet": start_offerpilot_greet,
     "offerpilot-deliver": start_offerpilot_deliver,
+    "get-ai-settings": get_ai_settings_api,
+    "test-ai-connection": test_ai_connection_api,
+    "save-ai-settings": save_ai_settings_api,
     "offerpilot-import": import_offerpilot_jobs,
     "offerpilot-automate": run_offerpilot_pipeline,
     "offerpilot-reply": send_offerpilot_reply,

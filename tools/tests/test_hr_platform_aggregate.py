@@ -144,10 +144,11 @@ class AggregateRuntimeTests(unittest.TestCase):
     def test_thread_platform_all_resolves_from_the_cached_list(self):
         entry = {**_row("liepin", "x"), "id": "a" * 32}
         with patch.object(runtime, "_cached_conversation", return_value=entry), patch.object(
-            runtime, "_get_platform_thread", return_value={"ok": True}
+            runtime, "_get_liepin_thread", return_value={"ok": True}
         ) as thread:
             runtime.get_thread("a" * 32, "all")
-        thread.assert_called_once_with(entry, "liepin")
+        thread.assert_called_once()
+        self.assertEqual(thread.call_args.args, (entry,))
 
     def test_thread_platform_all_still_rejects_a_mismatched_explicit_platform(self):
         entry = {**_row("zhilian", "x"), "id": "b" * 32}
@@ -174,6 +175,10 @@ class _FakeMonitor:
 
     def __init__(self) -> None:
         self.scripts: list[str] = []
+
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
 
     def _open_monitor_tab(self, url, config, *, background=True):
         return "tab"
@@ -263,7 +268,7 @@ class BackendAggregateDispatchTests(unittest.TestCase):
             "conversations": [_row("boss", "1")],
             "count": 1,
         }
-        with patch.object(runtime, "list_conversations", return_value=payload) as listing:
+        with patch.object(runtime, "cached_conversations", return_value=payload) as listing:
             result = backend.get_offerpilot_conversations("user", "all")
         listing.assert_called_once_with("all")
         self.assertEqual(result["platform"], "all")
@@ -277,7 +282,7 @@ class BackendAggregateDispatchTests(unittest.TestCase):
     def test_mode_is_ignored_for_aggregate_reads(self):
         """``mode`` is a compatibility field; "demo" still reads the local runtime."""
         payload = {"ok": True, "available": True, "platform": "all", "conversations": [], "count": 0}
-        with patch.object(runtime, "list_conversations", return_value=payload) as listing:
+        with patch.object(runtime, "cached_conversations", return_value=payload) as listing:
             result = backend.get_offerpilot_conversations("demo", "all")
         listing.assert_called_once_with("all")
         self.assertEqual(result["platform"], "all")

@@ -77,7 +77,7 @@ GET /api/pipeline?mode=user
       "external_api_calls": "AI 服务与招聘平台页面由内嵌 OfferPilot 发起；工作台不新增远程服务",
       "loopback_only": true,
       "human_confirmation_before_delivery": true,
-      "configured_send_window_required": true,
+      "configured_send_window_required": false,
       "event_is_record_only": true
     },
     "reserved_features": [
@@ -206,21 +206,30 @@ POST /api/action
 ### 3.1.1 HR 会话（只读列表 + 单条确认回复）
 
 ```http
-GET /api/offerpilot/conversations?mode=user&platform=boss
-GET /api/offerpilot/conversation?mode=user&platform=boss&id=<conversation-id>
+GET  /api/offerpilot/conversations?mode=user&platform=all
+GET  /api/offerpilot/conversations/summary?mode=user
+POST /api/offerpilot/conversations/sync
+{"platform":"all"}
+GET  /api/offerpilot/conversation?mode=user&platform=boss&id=<conversation-id>
 POST /api/action
 {"action":"offerpilot-reply","mode":"user","id":"<conversation-id>","text":"<回复>","confirm":"确认发送这条回复","risk_acknowledged":true}
 ```
 
-`platform` 可选 `boss`、`zhilian`、`51job`、`liepin`、`all`，默认 `boss`（保持旧调用语义）；其他值返回 400。工作台 HR 回复页使用 `platform=all` 聚合四个平台，每个平台单独读取、单独失败。
+`platform` 可选 `boss`、`zhilian`、`51job`、`liepin`、`all`，默认 `boss`（保持旧调用语义）；其他值返回 400。工作台 HR 回复页使用 `platform=all`。
 
-- `GET /api/offerpilot/conversations` 打开对应平台的聊天列表并解析；为刷新本机缓存，会为签名变化或尚无正文的会话打开会话页（每次最多 5 条，只读），从不写入平台。返回 `{ok, available, platform, conversations, count}`；每条会话含 `id`（不可逆哈希，不含姓名）、`platform`、`company`、`title`、`hr_name`、`hr_title`、`last_message`、`last_message_at`、`unread`、`job_id`。`job_id` 用公司与 HR 名匹配主工作台岗位池，未命中为 `null`。
-- `platform=all` 时另外返回 `platforms: [{platform, label, ok, available, count, error?}]` 与可选的 `errors: {platform: reason}`：某个平台未登录或页面不可读只让该平台为空并记录原因，其他平台照常返回；全部失败时 `available: false` 并在 `error` 汇总原因。会话按 `boss → zhilian → 51job → liepin` 顺序拼接，数目取并集。
-- BOSS 复用监测模块的会话列表解析；智联读取 `i.zhaopin.com/im` 的会话 DOM；猎聘先打开 `www.liepin.com/zhaopin/` 搜索页（不带 query 参数），「我的沟通」抽屉（`#im-basic-contact`）若已默认展开则直接读取，未展开时才点击入口，再读取联系人（旧的 `c.liepin.com` 入口只显示首页，脚本保留但不再使用）；猎聘列表结果另带只读诊断字段 `drawer_branch`（`expanded` 抽屉已展开 / `clicked_entry` 点击了已知入口 / `clicked_text_entry` 点击了文字入口 / `null` 未找到入口）与 `matched`（会话行选择器命中的节点数），用于区分「页面确实没有会话」（`count = 0` 且 `matched = 0`）与「选择器没匹配」；前程无忧没有站内聊天，HR 沟通通过微信扫码完成（已人工验证，之后不再验证）；`51job` 会话接口固定返回 `available: false` 与「前程无忧没有站内聊天，HR 沟通通过微信扫码完成，工作台不读取其消息」，不打开 `chat.51job.com`，不猜测数据。
-- `GET /api/offerpilot/conversation` 打开列表中的一条会话并按顺序读取消息，返回 `{ok, available, platform, conversation_id, company, title, messages: [{sender, text, platform}], stale, reply_allowed, reply_block_reason}`（读取失败但有旧正文时 `ok: false`、`stale: true`，并带脱敏后的 `error`）；`sender` 为 `hr` / `me` / `system`，单条文本截断到 500 字。`platform=all` 时按最近一次聚合列表中的平台打开该会话。非 BOSS 平台一律 `reply_allowed: false`。
+- `GET /api/offerpilot/conversations` **只读本机存储**，不打开页面、不请求平台，立即返回 `{ok, available, platform, conversations, count, syncing, syncing_platform, last_synced_at}`；页面先显示已有内容，再由 `POST /api/offerpilot/conversations/sync` 在后台增量刷新。每条会话统一为 `{id, platform, company, title, hr_name, hr_title, last_message, last_message_at, unread, unread_count, last_direction, has_reply, job_id, source, has_body, stale}`：`id` 为不可逆哈希（不含姓名）；`unread` 保持布尔兼容，`unread_count` 为未读条数（DOM 只知有未读时记 1）；`source` 为 `api` / `dom`；`has_body` 表示本地已有正文或已确认空会话。`job_id` 用公司与 HR 名匹配主工作台岗位池，未命中为 `null`。
+- `GET /api/offerpilot/conversations/summary` 同样只读本地存储，供首页与导航红点轮询：`{ok, total, unread_total, by_platform: {boss: {count, unread, source, last_synced_at, error?}, zhilian: {...}, liepin: {...}}, last_synced_at, syncing}`。
+- `POST /api/offerpilot/conversations/sync` 只读同步：body `{platform: "all"|"boss"|"zhilian"|"liepin"}`，立刻返回 `202 {ok, started, syncing, platform, queued}`。同步在后台单工作线程里按队列串行执行（同一平台排队/执行期间不重复入队，不同平台依次执行以守住各自频控）；`all` 依次排队 BOSS、智联、猎聘，前程无忧没有站内聊天故不排队。每个平台结束后把 `last_synced_at`、`source` 或脱敏后的 `error` 写入本机 `web/data/<mode>/hr/sync.json`，摘要据此显示。同步不发送、不回复、不点击「发送」。
+- 统一读取层（每平台一个 reader，结果形状一致）：
+  - BOSS 优先在用户已打开的聊天标签页里用同源 `fetch` 读取列表 `GET /wapi/zprelation/friend/getGeekFriendList.json?page=1` 与正文 `GET /wapi/zpchat/geek/historyMsg?...`（只这两个固定相对路径，会话标识由列表响应提供并经 `encodeURIComponent`；`credentials:'include'`，不读取、不返回、不记录 cookie/token/请求头）。已有聊天标签页直接复用且永不关闭；没有时才后台新建，读完只关闭自己新建的。接口失败（HTTP 非 200、`code != 0`、字段缺失）回退到同一标签页的会话 DOM，结果标 `source: "dom"`；接口成功标 `source: "api"`。加密会话标识只存在进程内存，不返回、不落盘。
+  - 智联优先在已登录的 `i.zhaopin.com/im` 页内同源 `GET https://cgate.zhaopin.com/imapi/imV2/getTalkList?pageNo=1&pageSize=50` 读取会话列表（`data[].staffName/companyName/jobTitle/unreadCount/text/sendTime/peerPartnerId`），成功标 `source: "api"`；历史消息没有 HTTP 接口，改调页面自身的 NIM SDK `window.imEngine.instance.getHistoryMsgs({scene:'p2p', to, limit:100, asc:false})`，发送者按 `flow`（`out`=我，`in`=对方），自定义卡片只取 `fallbackText` / `lastMessage` 文本，消息 id 用 `idServer`。不调用 `clearUnread` / `markSessionAck` / `sendMsgReceipt`。
+  - 猎聘复用用户已打开的猎聘标签页（没有时才后台新建），打开 `www.liepin.com/zhaopin/` 搜索页（不带 query 参数），「我的沟通」抽屉（`#im-basic-contact`）若已默认展开则直接读取，未展开时才点击入口。会话列表优先调用抽屉 store 的 `getContactList({sortValue: '', curPage: 0})`；store 没有该方法时，用 store 内存中的 `imId` 发同源表单 `POST https://api-c.liepin.com/api/com.liepin.im.c.contact.get-contact-list`（`sortValue/curPage/pageSize/imUserType/imApp/imId`，`imId` 来自页面、只在本机进程内存使用，不读取、不返回、不记录 cookie/token/请求头）。响应的 `data` 依次按数组、`list`、`contacts`、`records`、`rows`、`items` 取行；都不是数组时回退 DOM，不猜其他容器。列表映射 `name/company/title/unReadCnt/oppositeImId/latestMsgTime/direction/lastPayload`，方向 `"0"`=我方、`"1"`=对方；`oppositeImId` 只存进程内存供历史读取，不返回、不落盘。历史消息通过抽屉聊天 store 的只读方法 `getChatList('', oppositeImId, false)`（内部即 `chat.chat-list`）读取，消息 id 用 `msgId`；不调用 `openChat` / `refreshChat`、不调用 `readed-msg`、不点击联系人行。接口成功标 `source: "api"`，回退 DOM 时标 `source: "dom"` 并带只读诊断字段 `drawer_branch` 与 `matched`。
+  - 两个平台的接口不可用（NIM 未就绪、抽屉 store 未找到、HTTP 失败）时都回退到同一标签页或后台标签页的 DOM 读取，结果标 `source: "dom"`。前程无忧没有站内聊天，HR 沟通通过微信扫码完成；`51job` 会话接口固定返回 `available: false` 与「前程无忧没有站内聊天，HR 沟通通过微信扫码完成，工作台不读取其消息」。
+  - 全程不抢前台焦点：读取路径只以后台方式建页（`background=True`），发送回复是用户主动动作，仍可在前台完成。平台返回登录失效、验证码或频繁限制时抛风控停止，不重试、不反复回退 DOM。
+- `GET /api/offerpilot/conversation` 打开列表中的一条会话并按顺序读取消息，返回 `{ok, available, platform, conversation_id, company, title, messages: [{sender, text, time, mid?, platform}], stale, reply_allowed, reply_block_reason}`（读取失败但有旧正文时 `ok: false`、`stale: true`，并带脱敏后的 `error`）；`sender` 为 `hr` / `me` / `system`，单条文本截断到 500 字；`mid` 仅在平台提供消息 id 时出现。本地已有当前正文时不打开页面。`platform=all` 时按本地记录的平台打开该会话。非 BOSS 平台一律 `reply_allowed: false`。
 - 工作台 HR 页按后端返回的 `reply_allowed` 控制回复入口：`reply_allowed: true` 时启用输入框与「发送」，点「发送」只打开确认框，点「确认发送这条回复」后才调用 `offerpilot-reply`；`reply_allowed: false` 时输入框与「发送」禁用，并显示后端返回的 `reply_block_reason`。界面不硬编码哪些平台可以回复。
-- `offerpilot-reply` 只发送一条 BOSS 文本；非 BOSS 会话会被拒绝。依次校验：`mode=user`、文本非空且不超过 1000 字、`confirm` 精确等于「确认发送这条回复」、`risk_acknowledged` 为 `true`、处于 09:00–16:00 发送窗口、没有停止请求、没有监测或平台风险锁、`id` 出现在最近 10 分钟的会话列表内。全部通过后才复用监测模块的会话打开与输入框发送逻辑发送一次。
-- 会话正文脱敏后写入本机 `web/data/<mode>/hr/conversations.json`（user 为 `web/data/user/hr/`，demo 为 `web/data/demo/hr/`，都在 gitignore 的 `web/data/` 下，不提交）；列表每次刷新，未变会话不重开。写入前统一脱敏，电话、邮箱、微信替换为 `[联系方式已隐藏]` 后才落盘；写入用同目录临时文件加 `os.replace` 原子替换，失败时保留上一版文件。列表刷新只替换该平台自己的记录，其他平台的文件内容不动；签名（`last_message_at` 与正文前 80 字的哈希）未变且已有正文的会话不再打开会话页，签名变化或尚无正文的会话才打开，每次刷新最多补读 5 条，新消息按 `(sender, text, time)` 计数去重合并、旧消息保留。读取失败保留旧正文并把该条标为 `stale`、记录脱敏后的原因，不清空；`stale` 正文只在单条会话里带 `stale: true` 返回，下次打开会重试平台。落盘只是缓存，不作为发送依据：`offerpilot-reply` 仍只接受最近 10 分钟内存会话列表里的 `id`，`reply_allowed` 也不会因落盘而放行。活动日志只记录动作「发送 HR 回复」与公司名，不记录正文或 HR 姓名。只读读取不截图、不点击「发送」或「回复」，返回结构不含电话、邮箱、微信。
+- `offerpilot-reply` 只发送一条 BOSS 文本；非 BOSS 会话会被拒绝。依次校验：`mode=user`、文本非空且不超过 1000 字、`confirm` 精确等于「确认发送这条回复」、`risk_acknowledged` 为 `true`、没有停止请求、没有监测或平台风险锁、`id` 出现在最近 10 分钟的会话列表内。全部通过后才复用监测模块的会话打开与输入框发送逻辑发送一次。
+- 会话正文脱敏后写入本机 `web/data/<mode>/hr/conversations.json`（user 为 `web/data/user/hr/`，demo 为 `web/data/demo/hr/`，都在 gitignore 的 `web/data/` 下，不提交）；列表每次刷新，未变会话不重开。写入前统一脱敏，电话、邮箱、微信替换为 `[联系方式已隐藏]` 后才落盘；写入用同目录临时文件加 `os.replace` 原子替换，失败时保留上一版文件。列表刷新只替换该平台自己的记录，其他平台的文件内容不动；签名（`last_message_at` 与正文前 80 字的哈希）未变且已有正文或已确认空的会话不再读取，签名变化或尚无正文的会话才读取，每次刷新最多补读 30 条（未读优先），读取共用列表的同一次总时限（60 秒），超时即停。新消息优先按平台 `mid` 去重（只接收大于已存最大 `mid` 的消息），没有 `mid` 时按 `(sender, text, time)` 计数合并、旧消息保留；读取成功但消息为空的会话写入 `body_read: true`，下次不再重读。读取失败保留旧正文并把该条标为 `stale`、记录脱敏后的原因，不清空；`stale` 正文只在单条会话里带 `stale: true` 返回，下次打开会重试平台。落盘只是缓存，不作为发送依据：`offerpilot-reply` 仍只接受最近 10 分钟内存会话列表里的 `id`，`reply_allowed` 也不会因落盘而放行。活动日志只记录动作「发送 HR 回复」与公司名，不记录正文或 HR 姓名。只读读取不截图、不点击「发送」或「回复」，返回结构不含电话、邮箱、微信。
 - 只读路径不调用自动回复、跟进或简历投递流程；`auto_reply_hr_questions` 保持关闭。
 
 ### 3.1.2 岗位招呼语草稿（本地文本，只写 `greeting`）
@@ -300,4 +309,12 @@ POST /api/action
 
 ## 5. 预留功能
 
+「05 定制简历」支持确认项目材料后直接生成与保存版本，不要求面试；「06 模拟面试」既有 API 和历史会话保留；不影响六段投递流程。
+
+个人项目链路现在通过独立 `/api/career-user/...` 接入 GitHub 授权、核验、简历版本和正式面试，使用 user 引擎与独立数据库。该链路不写入 send/monitor，详见 [PERSONAL-CAREER-API](PERSONAL-CAREER-API.md)。
+
 模拟面试、信息推送、定制简历已在左侧面板预留位置，并复用本地题库、dry-run 载荷、经历变体与 ATS 预检。它们不属于六段核心流程，接入时请另开契约，不要复用 `send` / `monitor` 事件。
+
+全局 Agent 工作台使用独立 `/api/workbench-agent/...` 会话与事件，不复用六段投递事件。岗位推荐不改变审批状态，生成的招呼语不自动同步到发送器；用户仍通过原发送复核执行外部动作。`/api/state` 字段保持兼容，详见 [WORKBENCH-AGENT-API](WORKBENCH-AGENT-API.md)。
+
+2026-11-16：定制简历与模拟面试页面新增公开项目核验，使用独立同源路由接入 Python 服务。该接口不改动六段状态、审批或发送记录；接口见 [CAREER-AGENT-API](CAREER-AGENT-API.md)。原有题单与逐字稿工具继续保留，正式简历面试仍待简历版本链路完成。

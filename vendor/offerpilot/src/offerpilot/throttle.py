@@ -103,77 +103,36 @@ def validate_send_windows(windows: object) -> list[tuple[int, int, int, int]]:
 
 
 class SendWindowChecker:
-    """Checks if current time falls within configured send windows."""
+    """Kept for callers that ask whether work may run right now.
 
-    def __init__(self, windows: list[str]) -> None:
-        """Parse windows like ["09:00-12:00", "14:00-16:00"]."""
-        self._windows = validate_send_windows(windows)
+    OfferPilot no longer restricts sending or collection to a time window:
+    every hour of the day is open. ``send_windows`` values are still accepted
+    in configuration for compatibility and are validated as ``HH:MM-HH:MM``
+    strings, but they never narrow the allowed time.
+    """
+
+    def __init__(self, windows: list[str] | None = None) -> None:
+        self._windows = validate_send_windows(list(windows or []))
 
     def is_active(self) -> bool:
-        """Check if current local time is within any send window."""
-        if not self._windows:
-            return True  # No windows configured = always active
-        cur_minutes = self._current_minutes()
-        for start_h, start_m, end_h, end_m in self._windows:
-            start_minutes = start_h * 60 + start_m
-            end_minutes = end_h * 60 + end_m
-            if start_minutes <= cur_minutes < end_minutes:
-                return True
-        return False
+        """Return True at every hour; there is no send window."""
+        return True
 
     def has_valid_windows(self) -> bool:
-        """Return whether at least one configured window parsed successfully."""
+        """Return whether the legacy ``send_windows`` value was non-empty."""
         return bool(self._windows)
 
     def latest_end_time_reached(self) -> bool:
-        """Return whether local time is past the latest configured window end."""
-        if not self._windows:
-            return False
-        latest_end = max(end_h * 60 + end_m for _, _, end_h, end_m in self._windows)
-        return self._current_minutes() >= latest_end
+        """Return False: there is no daily window end."""
+        return False
 
     def latest_end_datetime(self, now: datetime | None = None) -> datetime | None:
-        """Return today's latest configured window end in local time."""
-        if not self._windows:
-            return None
-        current = now or datetime.now()
-        latest_end = max(end_h * 60 + end_m for _, _, end_h, end_m in self._windows)
-        end_hour, end_minute = divmod(latest_end, 60)
-        return current.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
+        """Return None: there is no window deadline."""
+        return None
 
     def next_window_info(self) -> str:
-        """Describe when next window opens."""
-        if not self._windows:
-            return "无窗口限制"
-        cur_minutes = self._current_minutes()
-        # Find next window start
-        for start_h, start_m, end_h, end_m in sorted(self._windows):
-            start_minutes = start_h * 60 + start_m
-            if cur_minutes < start_minutes:
-                return f"下个窗口: {start_h:02d}:{start_m:02d}"
-        # All windows have passed today
-        if self._windows:
-            first = self._windows[0]
-            return f"今日窗口已过，明日 {first[0]:02d}:{first[1]:02d} 开始"
-        return ""
-
-    @staticmethod
-    def _current_minutes() -> int:
-        now = datetime.now()
-        return now.hour * 60 + now.minute
-
-    @staticmethod
-    def _parse_time(s: str) -> tuple[int, int]:
-        """Parse 'HH:MM' to (hour, minute)."""
-        parts = s.strip().split(":")
-        if len(parts) == 2:
-            try:
-                hour, minute = int(parts[0]), int(parts[1])
-                if 0 <= hour <= 23 and 0 <= minute <= 59:
-                    return hour, minute
-            except ValueError:
-                pass
-        return -1, -1
+        """Describe the window state; it is always open."""
+        return "无窗口限制"
 
 
 class ProgressiveBackoff:

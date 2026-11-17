@@ -365,6 +365,20 @@ class AtsCheckTests(unittest.TestCase):
             self.assertFalse(report["all_keywords_found"])
             self.assertEqual(report["verdict"], "needs_manual_check")
 
+    def test_empty_keywords_checks_readability_without_reporting_failure(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="t03-ats-") as temp:
+            pdf = Path(temp) / "readability-only.pdf"
+            make_pdf(pdf, "测试数据 产品经理")
+            report = ats_check.check_pdf(pdf, "", CONFIG)
+            self.assertEqual(report["text_layer"], "available")
+            self.assertIsNone(report["all_keywords_found"])
+            self.assertEqual(report["keyword_matches"], {})
+            self.assertEqual(report["verdict"], "needs_manual_check")
+            keyword_check = next(
+                item for item in report["checks"] if item["name"] == "keyword_match"
+            )
+            self.assertEqual(keyword_check["status"], "not_run")
+
     def test_flate_text_stream_can_be_decoded(self) -> None:
         with tempfile.TemporaryDirectory(prefix="t03-ats-") as temp:
             pdf = Path(temp) / "flate.pdf"

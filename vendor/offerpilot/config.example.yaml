@@ -101,8 +101,9 @@ throttle:
   browse_before_greet: true
   browse_duration_min: 15
   browse_duration_max: 30
-  send_windows:
-    - "09:00-17:00"
+  # 已废弃：发送与采集全天可执行，不再按时间段限制。
+  # 旧配置里保留的 HH:MM-HH:MM 值会被接受但不再生效。
+  send_windows: []
   day_off_probability: 0.05
 
 ai:

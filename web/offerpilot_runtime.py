@@ -198,6 +198,26 @@ def _safe_materials(raw: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) and parsed else None
 
 
+def save_reviewed_greeting(job_id: str, text: str) -> dict[str, Any]:
+    """Store the user's reviewed greeting as the selected text; it is not sent."""
+    server = load_backend()
+    if not isinstance(text, str) or not text.strip() or len(text) > 300:
+        raise ValueError("招呼语需要为 1 至 300 字，请先修改草稿")
+    with server.job_mutation_lock, server.greeting_activity.claim(job_id, "editing") as acquired:
+        if not acquired:
+            raise ValueError("岗位正在处理，请稍后再同步")
+        db = server.get_db(server.DATA_DIR / "offerpilot.db")
+        try:
+            from offerpilot.db import select_job_greeting, update_job_status
+            row = db.execute("SELECT status FROM jobs WHERE id=? AND deleted_at IS NULL", (job_id,)).fetchone()
+            if row and row["status"] in {"pending", "scored", "new", "filtered"}:
+                update_job_status(db, job_id, "ready")
+            select_job_greeting(db, job_id, "edited", edited_greeting=text, confirmed=True)
+        finally:
+            db.close()
+    return {"ok": True, "message": "已同步你核对的招呼语，尚未发送。"}
+
+
 def get_greetings(ids: Any) -> dict[str, Any]:
     """Read greeting previews for runtime jobs (read-only, whitelisted fields)."""
     safe_ids = _clean_job_ids(ids, 50)
@@ -303,9 +323,9 @@ DELIVERY_SENT_STATUSES = frozenset(
 def start_deliver_task(ids: Any) -> dict[str, Any]:
     """Send reviewed greetings for the selected jobs.
 
-    The runtime keeps its own send window, daily quota, random interval,
-    backoff and risk lock; this wrapper only adds the workbench's approval
-    gate and never forces any of those guards.
+    The runtime keeps its own daily quota, random interval, backoff and risk
+    lock; this wrapper only adds the workbench's approval gate and never
+    forces any of those guards. Sending is allowed at any hour.
     """
     safe_ids = _clean_job_ids(ids, 10)
     server = load_backend()
@@ -315,14 +335,9 @@ def start_deliver_task(ids: Any) -> dict[str, Any]:
         query_jobs,
         update_job_status,
     )
-    from offerpilot.throttle import SendWindowChecker  # type: ignore
     from offerpilot.web.tasks import TaskAlreadyRunningError  # type: ignore
 
     config = server.load_config(server.CONFIG_PATH)
-    throttle = config.get("throttle") or {}
-    window = SendWindowChecker(throttle.get("send_windows", ["09:00-16:00"]))
-    if not window.is_active():
-        raise ValueError("当前不在发送时间窗口内；" + window.next_window_info())
 
     db = server.get_db(server.DATA_DIR / "offerpilot.db")
     try:
@@ -768,6 +783,97 @@ def stop_task(task_id: str) -> dict[str, Any]:
     return _safe_task(server.task_runner.stop(task_id)) or {}
 
 
+# --- AI settings: read without secrets, write through upstream credential split --
+
+AI_SERVICE_CHOICES = ("anthropic", "deepseek", "doubao", "custom")
+AI_MODEL_MAX_CHARS = 120
+AI_KEY_MAX_CHARS = 512
+
+
+def get_ai_settings() -> dict[str, Any]:
+    """Return the AI settings the UI may show. The API key itself is never returned."""
+    server = load_backend()
+    config = server.load_config(server.CONFIG_PATH)
+    ai = config.get("ai") if isinstance(config.get("ai"), dict) else {}
+    return {
+        "service": str(ai.get("service") or "anthropic"),
+        "provider": str(ai.get("provider") or ""),
+        "model": str(ai.get("model") or ""),
+        "base_url": str(ai.get("base_url") or ""),
+        "key_configured": bool(server.get_ai_api_key(config)),
+        "services": list(AI_SERVICE_CHOICES),
+    }
+
+
+def save_ai_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Save service, model and base URL; store a new key only when one is typed.
+
+    An empty ``api_key`` keeps the stored key. The upstream ``save_config`` moves
+    credentials into the gitignored credentials file, so ``config.yaml`` never
+    receives the key.
+    """
+    server = load_backend()
+    from offerpilot.config import (  # type: ignore
+        AI_SERVICE_PRESETS,
+        load_config,
+        save_config,
+    )
+
+    service = str(payload.get("service") or "").strip().lower()
+    if service not in AI_SERVICE_CHOICES:
+        raise ValueError("服务商只能是 Claude、DeepSeek、豆包或自定义接口")
+    model = str(payload.get("model") or "").strip()
+    if not model or len(model) > AI_MODEL_MAX_CHARS or any(ch.isspace() for ch in model):
+        raise ValueError("模型名不能为空、不能含空白，且不超过 120 个字符")
+    base_url = str(payload.get("base_url") or "").strip()
+    if base_url:
+        if len(base_url) > 300 or not re.match(r"^https?://[^\s]+$", base_url):
+            raise ValueError("Base URL 必须以 http:// 或 https:// 开头")
+    preset = AI_SERVICE_PRESETS[service]
+    if not base_url:
+        base_url = str(preset.get("base_url") or "")
+    api_key = str(payload.get("api_key") or "").strip()
+    if len(api_key) > AI_KEY_MAX_CHARS:
+        raise ValueError("API Key 过长")
+
+    config = load_config(server.CONFIG_PATH)
+    ai = config.setdefault("ai", {})
+    ai["service"] = service
+    ai["provider"] = preset["provider"]
+    ai["model"] = model
+    ai["base_url"] = base_url
+    if api_key:
+        ai["api_key"] = api_key
+    save_config(config, server.CONFIG_PATH)
+    return get_ai_settings()
+
+
+def test_ai_connection(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Send one tiny prompt through the same call path scoring/greeting use.
+
+    Tests the *saved* settings (service, model, base URL, key). Never returns
+    the key; error text is reduced to a short, key-free reason.
+    """
+    server = load_backend()
+    config = server.load_config(server.CONFIG_PATH)
+    ai = config.get("ai") if isinstance(config.get("ai"), dict) else {}
+    if not server.get_ai_api_key(config):
+        return {"ok": False, "reason": "尚未保存 API Key", "model": str(ai.get("model") or "")}
+    from offerpilot.ai.credentials import call_anthropic_text  # type: ignore
+
+    started = time.monotonic()
+    try:
+        reply = call_anthropic_text("只回复两个字：成功", config, 64, timeout=30, purpose="connection_test")
+    except Exception as exc:  # provider errors carry status text, never the key
+        text = re.sub(r"(sk-|Bearer\s+)[A-Za-z0-9._\-]+", "***", f"{type(exc).__name__}: {exc}")
+        return {"ok": False, "reason": text[:200], "model": str(ai.get("model") or "")}
+    elapsed = int((time.monotonic() - started) * 1000)
+    if not reply or not str(reply).strip():
+        return {"ok": False, "reason": "接口没有返回内容，请检查服务商、模型名与 Base URL", "model": str(ai.get("model") or "")}
+    return {"ok": True, "model": str(ai.get("model") or ""), "elapsed_ms": elapsed,
+            "reply": str(reply).strip()[:40]}
+
+
 # --- HR conversations: read-only list/thread plus one confirmed reply ---------
 #
 # Conversation text stays in this process only.  No message ever reaches
@@ -777,7 +883,6 @@ def stop_task(task_id: str) -> dict[str, Any]:
 CONVERSATIONS_TTL_SECONDS = 600
 MAX_REPLY_CHARS = 1000
 REPLY_CONFIRM_PHRASE = "确认发送这条回复"
-DEFAULT_SEND_WINDOW = "09:00-16:00"
 
 # Per-platform read budgets.  Reads stay serial (one platform at a time); the
 # budget is checked before and after each CDP call and passed down as that
@@ -1128,23 +1233,6 @@ def _conversation_id(company: Any, hr_name: Any, hr_title: Any, platform: str = 
     return hashlib.sha256(_conversation_salt + payload).hexdigest()[:32]
 
 
-def _send_windows(config: dict[str, Any]) -> list[str]:
-    """Always enforce the 09:00–16:00 window, even if config lists none."""
-    throttle = config.get("throttle") if isinstance(config.get("throttle"), dict) else {}
-    return list(throttle.get("send_windows") or [DEFAULT_SEND_WINDOW])
-
-
-def _with_send_window(config: dict[str, Any]) -> dict[str, Any]:
-    throttle = config.get("throttle") if isinstance(config.get("throttle"), dict) else {}
-    return {**config, "throttle": {**throttle, "send_windows": _send_windows(config)}}
-
-
-def _send_window_open(config: dict[str, Any]) -> bool:
-    from offerpilot.throttle import SendWindowChecker  # type: ignore
-
-    return SendWindowChecker(_send_windows(config)).is_active()
-
-
 def _stop_requested(server: Any, config: dict[str, Any]) -> bool:
     monitor = _monitor()
     if monitor.stop_requested(config):
@@ -1177,8 +1265,8 @@ def _risk_lock_reason(server: Any, config: dict[str, Any]) -> str | None:
 
 
 def _reply_gate(server: Any, config: dict[str, Any]) -> tuple[bool, str | None]:
-    if not _send_window_open(config):
-        return False, "不在发送窗口（09:00–16:00）"
+    # No time window: a reply may be sent at any hour. The daily cap, random
+    # interval, risk lock and stop request remain real limits.
     if _stop_requested(server, config):
         return False, "当前任务已请求停止"
     lock_reason = _risk_lock_reason(server, config)
@@ -1201,9 +1289,22 @@ HR_STORE_SCHEMA = 1
 HR_SIGNATURE_TEXT_CHARS = 80
 HR_MESSAGE_MAX_CHARS = 500
 HR_STORED_MESSAGES_MAX = 200
-HR_THREAD_OPENS_PER_REFRESH = 5
+# Interface reads are cheap, so one refresh may bring up to 30 bodies up to
+# date.  Reads stay serial to respect each platform's own frequency limit.
+HR_THREAD_OPENS_PER_REFRESH = 30
+
+# BOSS reads the chat list and history through the page's own same-origin XHR.
+# Only these two fixed relative paths are ever requested; ids come from the
+# list response and are URL-encoded in the expression.
+BOSS_CHAT_URL = "https://www.zhipin.com/web/geek/chat"
+BOSS_FRIEND_LIST_PATH = "/wapi/zprelation/friend/getGeekFriendList.json"
+BOSS_HISTORY_PATH = "/wapi/zpchat/geek/historyMsg"
+BOSS_BODY_TEXT_TYPE = 1
 
 _hr_store_lock = threading.RLock()
+# In-memory only: (encryptBossId, uid, securityId) per conversation id, taken
+# from the latest list read.  Never persisted, never returned to the UI.
+_boss_history_params: dict[str, dict[str, str]] = {}
 
 
 def _hr_store_modes(mode: Any = "user") -> str:
@@ -1230,6 +1331,17 @@ def _hr_signature(row: dict[str, Any]) -> str:
 
 def _hr_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _unread_count(row: dict[str, Any]) -> int:
+    """Unread messages as a number; a DOM row only knows "there is one"."""
+    try:
+        count = int(row.get("unread_count") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    if count <= 0 and row.get("has_unread", row.get("unread")):
+        return 1
+    return max(count, 0)
 
 
 def _load_hr_store(mode: Any = "user") -> dict[str, dict[str, Any]]:
@@ -1272,11 +1384,15 @@ def _save_hr_store(conversations: dict[str, dict[str, Any]], mode: Any = "user")
 
 
 def _hr_stored_message(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+    message = {
         "sender": row.get("sender") if row.get("sender") in {"hr", "me"} else "system",
         "text": _redact_contacts(row.get("text"))[:HR_MESSAGE_MAX_CHARS],
         "time": str(row.get("time") or "")[:40],
     }
+    mid = str(row.get("mid") or "")[:64]
+    if mid:
+        message["mid"] = mid
+    return message
 
 
 def _hr_merge_messages(
@@ -1295,6 +1411,11 @@ def _hr_merge_messages(
         message = _hr_stored_message(row)
         if message["text"]:
             merged.append(message)
+    prior_mids = [
+        int(message["mid"]) for message in merged
+        if str(message.get("mid") or "").isdigit()
+    ]
+    max_prior_mid = max(prior_mids) if prior_mids else None
     prior = Counter((m["sender"], m["text"], m["time"]) for m in merged)
     seen: Counter = Counter()
     for row in fresh:
@@ -1302,6 +1423,14 @@ def _hr_merge_messages(
             continue
         message = _hr_stored_message(row)
         if not message["text"]:
+            continue
+        mid = str(message.get("mid") or "")
+        if max_prior_mid is not None and mid.isdigit():
+            # The interface gives every message a monotonic id; anything at or
+            # below the stored maximum was already shown.
+            if int(mid) <= max_prior_mid:
+                continue
+            merged.append(message)
             continue
         key = (message["sender"], message["text"], message["time"])
         seen[key] += 1
@@ -1319,6 +1448,8 @@ def _hr_store_record(
     fetched_at: str | None,
     stale: bool = False,
     error: str | None = None,
+    body_read: bool = False,
+    source: str = "dom",
 ) -> dict[str, Any]:
     return {
         "platform": str(row.get("platform") or "boss"),
@@ -1331,7 +1462,12 @@ def _hr_store_record(
         "last_message_at": str(row.get("last_message_at") or "")[:40],
         "last_message": _redact_contacts(row.get("last_message"))[:200],
         "unread": bool(row.get("unread")),
+        "unread_count": _unread_count(row),
+        "last_direction": str(row.get("last_direction") or "unknown"),
+        "has_reply": bool(row.get("has_reply")),
+        "source": "api" if source == "api" else "dom",
         "messages": messages,
+        "body_read": bool(body_read),
         "signature": signature,
         "fetched_at": fetched_at,
         "stale": bool(stale),
@@ -1394,6 +1530,8 @@ def _reset_conversation_cache() -> None:
         _conversation_cache.clear()
         _conversation_listed_at_by_platform.clear()
         _conversation_listed_at = None
+    _zhilian_history_params.clear()
+    _liepin_history_params.clear()
 
 
 def _stored_entry(conversation_id: Any) -> dict[str, Any] | None:
@@ -1427,8 +1565,14 @@ def _mark_platform_stale(platform: str, reason: Any) -> None:
             pass
 
 
-def _fetch_thread_body(row: dict[str, Any], platform: str) -> dict[str, Any]:
-    """Open one conversation once and return its thread result (redacted later)."""
+def _fetch_thread_body(
+    row: dict[str, Any],
+    platform: str,
+    *,
+    boss_target: str | None = None,
+    deadline: "_ChatReadDeadline | None" = None,
+) -> dict[str, Any]:
+    """Read one conversation once and return its thread result (redacted later)."""
     entry = {
         "id": row.get("id"),
         "platform": platform,
@@ -1437,10 +1581,847 @@ def _fetch_thread_body(row: dict[str, Any], platform: str) -> dict[str, Any]:
         "hr_name": row.get("hr_name") or "",
         "hr_title": row.get("hr_title") or "",
     }
-    return _read_thread_messages(entry, platform)
+    return _read_thread_messages(
+        entry, platform, boss_target=boss_target, deadline=deadline,
+    )
 
 
-def _refresh_platform_store(items: list[dict[str, Any]], platform: str) -> None:
+# --- BOSS same-origin interface reads ----------------------------------------
+#
+# The list and history endpoints are read inside the already logged-in BOSS
+# chat tab with ``fetch``.  No new page is opened when the user already has a
+# chat tab; a tab opened only for this read stays in the background and is
+# closed afterwards.  Only the two fixed relative paths below are requested.
+# Cookies and headers are never read, returned or logged: ``credentials:
+# 'include'`` lets the page attach its own session, and we only receive JSON.
+
+
+def _boss_js_string(value: Any) -> str:
+    """Embed a value as a JS string literal; callers URL-encode it in-page."""
+    return json.dumps(str(value or ""), ensure_ascii=False)
+
+
+def _boss_list_expression() -> str:
+    """Fixed expression: list request, HTTP status and JSON body only."""
+    return f"""
+(async () => {{
+    try {{
+        const response = await fetch('{BOSS_FRIEND_LIST_PATH}?page=1', {{
+            method: 'GET',
+            credentials: 'include',
+            headers: {{'X-Requested-With': 'XMLHttpRequest'}},
+        }});
+        let body = null;
+        try {{ body = await response.json(); }} catch (err) {{ body = null; }}
+        return JSON.stringify({{http: response.status, body: body}});
+    }} catch (err) {{
+        return JSON.stringify({{http: 0, error: String((err && err.message) || err)}});
+    }}
+}})()
+"""
+
+
+def _boss_history_expression(params: dict[str, str]) -> str:
+    """Fixed expression: history request for one conversation, ids encoded."""
+    boss_id = _boss_js_string(params.get("boss_id"))
+    group_id = _boss_js_string(params.get("group_id"))
+    security_id = _boss_js_string(params.get("security_id"))
+    return f"""
+(async () => {{
+    try {{
+        const url = '{BOSS_HISTORY_PATH}?bossId=' + encodeURIComponent({boss_id})
+            + '&groupId=' + encodeURIComponent({group_id})
+            + '&securityId=' + encodeURIComponent({security_id})
+            + '&maxMsgId=0&c=20&page=1';
+        const response = await fetch(url, {{
+            method: 'GET',
+            credentials: 'include',
+            headers: {{'X-Requested-With': 'XMLHttpRequest'}},
+        }});
+        let body = null;
+        try {{ body = await response.json(); }} catch (err) {{ body = null; }}
+        return JSON.stringify({{http: response.status, body: body}});
+    }} catch (err) {{
+        return JSON.stringify({{http: 0, error: String((err && err.message) || err)}});
+    }}
+}})()
+"""
+
+
+def _boss_api_response(raw: Any) -> tuple[int, dict[str, Any] | None, str]:
+    """Split the expression's answer into (http status, JSON body, error text)."""
+    payload = _json_object(raw)
+    if not isinstance(payload, dict):
+        return 0, None, "接口返回无法解析"
+    try:
+        status = int(payload.get("http") or 0)
+    except (TypeError, ValueError):
+        status = 0
+    body = payload.get("body")
+    error = str(payload.get("error") or "")
+    return status, body if isinstance(body, dict) else None, error
+
+
+def _boss_raise_api_risk(status: int, body: dict[str, Any] | None, error: str) -> None:
+    """Map login/risk answers to the monitor's risk stop; never retry here."""
+    text = " ".join(
+        str(value or "")
+        for value in (
+            error,
+            (body or {}).get("message"),
+            (body or {}).get("msg"),
+        )
+    )
+    kind = None
+    if status in {401, 403} or re.search(r"登录|未登录|login", text, re.IGNORECASE):
+        kind = "blocked"
+    elif re.search(r"验证|captcha|滑块|安全校验|security", text, re.IGNORECASE):
+        kind = "captcha"
+    elif re.search(r"频繁|限制|拦截|异常|blocked|rate", text, re.IGNORECASE):
+        kind = "rate_limit"
+    if kind is None:
+        return
+    risk_cls = getattr(_monitor(), "MonitorRiskDetected", None)
+    if risk_cls is not None:
+        raise risk_cls(kind)
+    raise OfferPilotUnavailable("平台出现验证码或风控拦截，已停止读取；请人工处理后重试")
+
+
+def _boss_result_rows(status: int, body: dict[str, Any] | None) -> list[dict[str, Any]] | None:
+    """Return the interface rows, or None when the caller should fall back."""
+    if status != 200 or body is None:
+        _boss_raise_api_risk(status, body, "")
+        return None
+    try:
+        code = int(body.get("code"))
+    except (TypeError, ValueError):
+        _boss_raise_api_risk(status, body, "")
+        return None
+    if code != 0:
+        _boss_raise_api_risk(status, body, "")
+        return None
+    zp_data = body.get("zpData")
+    rows = zp_data.get("result") if isinstance(zp_data, dict) else None
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else None
+
+
+def _boss_ms_label(value: Any) -> str:
+    """Render a millisecond timestamp as ``MM-DD HH:MM`` (empty if unusable)."""
+    try:
+        stamp = int(value)
+    except (TypeError, ValueError):
+        return ""
+    if stamp <= 0:
+        return ""
+    try:
+        moment = _dt.datetime.fromtimestamp(stamp / 1000)
+    except (OverflowError, OSError, ValueError):
+        return ""
+    return moment.strftime("%m-%d %H:%M")
+
+
+def _boss_last_direction(row: dict[str, Any]) -> str:
+    info = row.get("lastMessageInfo") if isinstance(row.get("lastMessageInfo"), dict) else {}
+    from_id = str(info.get("fromId") or "")
+    group_id = str(row.get("uid") or "")
+    if not from_id:
+        return "unknown"
+    return "hr" if group_id and from_id == group_id else "me"
+
+
+def _boss_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Map interface rows to the same fields the DOM list parser produces."""
+    mapped: list[dict[str, Any]] = []
+    for row in rows:
+        info = row.get("lastMessageInfo") if isinstance(row.get("lastMessageInfo"), dict) else {}
+        direction = _boss_last_direction(row)
+        last_at = _boss_ms_label(row.get("lastTS")) or str(row.get("lastTime") or "").strip()
+        params = {
+            "boss_id": str(row.get("encryptBossId") or "").strip(),
+            "group_id": str(row.get("uid") or "").strip(),
+            "security_id": str(row.get("securityId") or "").strip(),
+        }
+        try:
+            unread_count = int(row.get("unreadMsgCount") or 0)
+        except (TypeError, ValueError):
+            unread_count = 0
+        mapped.append({
+            "hr_name": str(row.get("name") or "").strip(),
+            "company": str(row.get("brandName") or "").strip(),
+            "hr_title": str(row.get("title") or "").strip(),
+            "last_message": str(info.get("showText") or row.get("lastMsg") or "").strip(),
+            "last_message_at": last_at[:40],
+            "has_unread": bool(row.get("unreadMsgCount")),
+            "unread_count": max(unread_count, 0),
+            "last_direction": direction,
+            "has_reply": direction == "hr",
+            "is_our_message": direction == "me",
+            "_boss_params": params if params["boss_id"] else None,
+        })
+    return mapped
+
+
+def _boss_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = False) -> list[dict[str, Any]]:
+    """Build the workbench's read-only conversation items for BOSS."""
+    jobs = _store_jobs()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        company = str(row.get("company") or "").strip()
+        hr_name = str(row.get("hr_name") or "").strip()
+        hr_title = str(row.get("hr_title") or "").strip()
+        job = _match_conversation_job(row, jobs)
+        conversation_id = _conversation_id(company, hr_name, hr_title)
+        items.append({
+            "id": conversation_id,
+            "platform": "boss",
+            "company": company,
+            "title": str((job or {}).get("title") or hr_title),
+            "hr_name": hr_name,
+            "hr_title": hr_title,
+            "last_message": _redact_contacts(row.get("last_message"))[:200],
+            "last_message_at": str(row.get("last_message_at") or "")[:40],
+            "unread": bool(row.get("has_unread")),
+            "unread_count": _unread_count(row),
+            "last_direction": str(row.get("last_direction") or "unknown"),
+            "has_reply": bool(row.get("has_reply")),
+            "job_id": str((job or {}).get("id") or "") or None,
+        })
+        params = row.get("_boss_params")
+        if with_params and isinstance(params, dict) and params.get("boss_id"):
+            _boss_history_params[conversation_id] = dict(params)
+    return items
+
+
+def _boss_page_targets(monitor: Any) -> list[dict[str, Any]]:
+    getter = getattr(monitor, "get_page_targets", None)
+    if not callable(getter):
+        try:
+            from offerpilot.browser import get_page_targets as getter  # type: ignore
+        except Exception:
+            return []
+    try:
+        targets = getter()
+    except Exception:
+        return []
+    return [target for target in targets if isinstance(target, dict)] if isinstance(targets, list) else []
+
+
+def _is_boss_chat_url(value: Any) -> bool:
+    url = str(value or "")
+    return "zhipin.com/web/geek/chat" in url
+
+
+def _acquire_boss_tab(
+    monitor: Any, config: dict[str, Any], deadline: "_ChatReadDeadline",
+) -> tuple[str | None, bool]:
+    """Return (tab id, owned) for the BOSS chat page.
+
+    The user's own logged-in chat tab is reused as it is and never closed.  If
+    no chat tab exists, one is opened in the background and reported as owned,
+    so only that tab is closed when the read ends.
+    """
+    for target in _boss_page_targets(monitor):
+        if _is_boss_chat_url(target.get("url")):
+            target_id = str(target.get("targetId") or "").strip()
+            if target_id:
+                return target_id, False
+    chat_url = str((config.get("monitor") or {}).get("chat_url") or BOSS_CHAT_URL)
+    opener = getattr(monitor, "_open_monitor_tab", None)
+    if callable(opener):
+        target_id = opener(chat_url, config, background=True)
+    else:  # older browser doubles only expose the combined helper
+        getter = getattr(monitor, "_get_monitor_chat_target", None)
+        target_id = getter(chat_url, config)[0] if callable(getter) else None
+    if not target_id:
+        return None, False
+    if not _wait_for_chat_page(monitor, str(target_id), config, deadline, timeout=10):
+        monitor.close_tab(str(target_id))
+        raise OfferPilotUnavailable("BOSS 聊天页未加载完成")
+    return str(target_id), True
+
+
+def _boss_history_messages(
+    status: int,
+    body: dict[str, Any] | None,
+    group_id: str,
+) -> list[dict[str, Any]] | None:
+    """Map the history answer to stored messages; None means "use fallback"."""
+    if status != 200 or body is None:
+        _boss_raise_api_risk(status, body, "")
+        return None
+    try:
+        code = int(body.get("code"))
+    except (TypeError, ValueError):
+        _boss_raise_api_risk(status, body, "")
+        return None
+    if code != 0:
+        _boss_raise_api_risk(status, body, "")
+        return None
+    zp_data = body.get("zpData")
+    rows = zp_data.get("messages") if isinstance(zp_data, dict) else None
+    if not isinstance(rows, list):
+        return None
+    messages: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        sender_info = row.get("from") if isinstance(row.get("from"), dict) else {}
+        body_info = row.get("body") if isinstance(row.get("body"), dict) else {}
+        try:
+            body_type = int(body_info.get("type", row.get("bodyType")))
+        except (TypeError, ValueError):
+            body_type = None
+        if body_type == BOSS_BODY_TEXT_TYPE:
+            sender = "hr" if str(sender_info.get("uid") or "") == group_id else "me"
+            text = body_info.get("text")
+        else:
+            # Cards, job links and system notices are never HR or our words.
+            sender = "system"
+            text = body_info.get("headTitle") or body_info.get("text") or "系统消息"
+        messages.append({
+            "sender": sender,
+            "text": _redact_contacts(text)[:HR_MESSAGE_MAX_CHARS],
+            "time": _boss_ms_label(row.get("time")),
+            "mid": str(row.get("mid") or "")[:64],
+        })
+    return messages
+
+
+# --- Zhilian / Liepin interface reads ----------------------------------------
+#
+# Zhilian's list is a same-origin GET; its history lives in the page's NIM
+# SDK instance (no HTTP history endpoint).  Liepin's contact list and history
+# are read through the drawer's own store methods, which call the read-only
+# ``contact.get-contact-list`` and ``chat.chat-list`` endpoints; the list
+# expression falls back to that same-origin form POST when the store exposes
+# no contact method.  It never calls ``openChat``/``refreshChat``/``readed-msg``
+# and so never marks a conversation read.  Any failure falls back to the
+# existing DOM readers.
+#
+# Ids and the page's own store stay in memory only: never returned to the UI,
+# never logged, never written to disk.
+
+ZHILIAN_LIST_URL = "https://cgate.zhaopin.com/imapi/imV2/getTalkList"
+_zhilian_history_params: dict[str, dict[str, str]] = {}
+_liepin_history_params: dict[str, dict[str, str]] = {}
+
+_CHAT_TAB_URL_FRAGMENTS = {
+    "boss": ("zhipin.com/web/geek/chat",),
+    "zhilian": ("zhaopin.com/im",),
+    "liepin": ("liepin.com",),
+}
+
+
+def _zhilian_list_expression() -> str:
+    """Fixed expression: the talk list GET, status and JSON body only."""
+    return f"""
+(async () => {{
+    try {{
+        const response = await fetch('{ZHILIAN_LIST_URL}?pageNo=1&pageSize=50', {{
+            method: 'GET',
+            credentials: 'include',
+            headers: {{'X-Requested-With': 'XMLHttpRequest'}},
+        }});
+        let body = null;
+        try {{ body = await response.json(); }} catch (err) {{ body = null; }}
+        return JSON.stringify({{http: response.status, body: body}});
+    }} catch (err) {{
+        return JSON.stringify({{http: 0, error: String((err && err.message) || err)}});
+    }}
+}})()
+"""
+
+
+def _zhilian_history_expression(params: dict[str, str]) -> str:
+    """Fixed expression: the page's own NIM SDK, newest 100 messages."""
+    peer_id = _boss_js_string(params.get("peer_id"))
+    return f"""
+(async () => {{
+    try {{
+        const engine = window.imEngine;
+        const instance = engine && (engine.instance || (engine.getHistoryMsgs ? engine : null));
+        if (!instance || !instance.getHistoryMsgs) {{
+            return JSON.stringify({{available: false, reason: 'NIM 未就绪'}});
+        }}
+        const to = {peer_id};
+        const result = await new Promise((resolve) => {{
+            try {{
+                instance.getHistoryMsgs({{
+                    scene: 'p2p', to: to, beginTime: 0, endTime: 0,
+                    lastMsgId: '0', limit: 100, asc: false,
+                    done: (err, obj) => {{
+                        if (err) {{ resolve({{error: String((err && err.message) || err)}}); return; }}
+                        resolve({{msgs: (obj && obj.msgs) || []}});
+                    }},
+                }});
+            }} catch (err) {{
+                resolve({{error: String((err && err.message) || err)}});
+            }}
+        }});
+        return JSON.stringify(result);
+    }} catch (err) {{
+        return JSON.stringify({{error: String((err && err.message) || err)}});
+    }}
+}})()
+"""
+
+
+def _zhilian_resolve_rows(raw: Any) -> list[dict[str, Any]] | None:
+    """The list answer's rows, or None to fall back to the DOM."""
+    payload = _json_object(raw)
+    if not isinstance(payload, dict) or payload.get("error"):
+        return None
+    body = payload.get("body")
+    if not isinstance(body, dict):
+        return None
+    data = body.get("data")
+    if isinstance(data, dict):
+        data = data.get("list")
+    if not isinstance(data, list):
+        return None
+    return [row for row in data if isinstance(row, dict)]
+
+
+def _zhilian_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapped: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            unread_count = int(row.get("unreadCount") or 0)
+        except (TypeError, ValueError):
+            unread_count = 0
+        last_at = _boss_ms_label(row.get("sendTime"))
+        mapped.append({
+            "hr_name": str(row.get("staffName") or "").strip(),
+            "company": str(row.get("companyName") or "").strip(),
+            "hr_title": str(row.get("jobTitle") or "").strip(),
+            "last_message": str(row.get("text") or row.get("lastSentence") or "").strip(),
+            "last_message_at": last_at,
+            "has_unread": unread_count > 0,
+            "unread_count": max(unread_count, 0),
+            "last_direction": "unknown",
+            "has_reply": False,
+            "_zhilian_params": {
+                "peer_id": str(row.get("peerPartnerId") or "").strip(),
+            },
+        })
+    return mapped
+
+
+def _zhilian_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = False) -> list[dict[str, Any]]:
+    jobs = _store_jobs()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        company = str(row.get("company") or "").strip()
+        hr_name = str(row.get("hr_name") or "").strip()
+        hr_title = str(row.get("hr_title") or "").strip()
+        job = _match_conversation_job(row, jobs)
+        conversation_id = _conversation_id(company, hr_name, hr_title, "zhilian")
+        items.append({
+            "id": conversation_id,
+            "platform": "zhilian",
+            "company": company,
+            "title": str((job or {}).get("title") or hr_title),
+            "hr_name": hr_name,
+            "hr_title": hr_title,
+            "last_message": _redact_contacts(row.get("last_message"))[:200],
+            "last_message_at": str(row.get("last_message_at") or "")[:40],
+            "unread": bool(row.get("has_unread")),
+            "unread_count": _unread_count(row),
+            "last_direction": str(row.get("last_direction") or "unknown"),
+            "has_reply": bool(row.get("has_reply")),
+            "job_id": str((job or {}).get("id") or "") or None,
+        })
+        params = row.get("_zhilian_params")
+        if with_params and isinstance(params, dict) and params.get("peer_id"):
+            _zhilian_history_params[conversation_id] = dict(params)
+    return items
+
+
+def _zhilian_custom_text(message: dict[str, Any]) -> str:
+    """A custom card carries its text as JSON; keep only a safe fallback."""
+    raw = message.get("content") or message.get("custom")
+    data = _json_object(raw) if isinstance(raw, str) else None
+    if isinstance(data, dict):
+        for key in ("fallbackText", "text"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        last = data.get("lastMessage")
+        if isinstance(last, dict):
+            for key in ("receiverText", "senderText"):
+                value = last.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return "系统消息"
+
+
+def _zhilian_history_messages(raw: Any) -> list[dict[str, Any]] | None:
+    """Map NIM history, or None when the caller should use the DOM fallback."""
+    payload = _json_object(raw)
+    if not isinstance(payload, dict) or payload.get("error"):
+        return None
+    rows = payload.get("msgs")
+    if not isinstance(rows, list):
+        return None
+    messages: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        flow = str(row.get("flow") or "")
+        if flow in {"in", "out"}:
+            sender = "me" if flow == "out" else "hr"
+        else:
+            sender = "system"
+        text = row.get("text")
+        if not isinstance(text, str) or not text.strip():
+            text = _zhilian_custom_text(row)
+        messages.append({
+            "sender": sender,
+            "text": _redact_contacts(text)[:HR_MESSAGE_MAX_CHARS],
+            "time": _boss_ms_label(row.get("time")),
+            "mid": str(row.get("idServer") or "")[:64],
+        })
+    messages.sort(key=lambda message: message.get("time") or "")
+    return messages
+
+
+def _liepin_list_expression() -> str:
+    """Fixed expression: the drawer's contact list, read-only.
+
+    The page's own store method is preferred when it exists; otherwise the
+    same-origin form POST is sent with the store's in-memory ``imId``.  Only
+    status and body leave the page; no id, cookie or header is returned.
+    """
+    return r"""
+(async () => {
+    const fiberKey = (el) => {
+        for (const key of Object.keys(el || {})) {
+            if (key.indexOf('__reactFiber$') === 0) return key;
+        }
+        return null;
+    };
+    const storeFrom = (node) => {
+        for (const value of [node.stateNode, node.memoizedProps, node.pendingProps]) {
+            if (value && value.getChatList && value.options && value.options.imId) return value;
+            if (value && value.store && value.store.getChatList && value.store.options && value.store.options.imId) return value.store;
+        }
+        return null;
+    };
+    const findStore = (start) => {
+        let node = start;
+        for (let depth = 0; node && depth < 200; depth += 1) {
+            const store = storeFrom(node);
+            if (store) return store;
+            node = node.return;
+        }
+        return null;
+    };
+    const contactRows = (value) => {
+        if (!value) return null;
+        if (Array.isArray(value)) return value;
+        const data = value.data;
+        if (Array.isArray(data)) return data;
+        if (data) {
+            for (const key of ['list', 'contacts', 'records', 'rows', 'items']) {
+                if (Array.isArray(data[key])) return data[key];
+            }
+        }
+        return null;
+    };
+    try {
+        const items = Array.from(document.querySelectorAll('.im-ui-contact-list-item'));
+        let store = null;
+        for (const el of items) {
+            const key = fiberKey(el);
+            if (!key) continue;
+            store = findStore(el[key]);
+            if (store) break;
+        }
+        if (!store) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
+        let rows = null;
+        if (store.getContactList) {
+            try {
+                rows = contactRows(await Promise.resolve(store.getContactList({sortValue: '', curPage: 0})));
+            } catch (err) {
+                rows = null;
+            }
+        }
+        if (rows === null) {
+            const imId = String((store.options && store.options.imId) || '');
+            if (!imId) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
+            const form = new URLSearchParams({
+                sortValue: '', curPage: '0', pageSize: '50',
+                imUserType: '0', imApp: '1', imId: imId,
+            });
+            const response = await fetch('https://api-c.liepin.com/api/com.liepin.im.c.contact.get-contact-list', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'fscpClientId': '11156',
+                    'fscpVersion': '1.0.0',
+                },
+                body: form.toString(),
+            });
+            let answer = null;
+            try { answer = await response.json(); } catch (err) { answer = null; }
+            rows = contactRows(answer);
+            if (rows === null) return JSON.stringify({available: false, reason: '会话列表读取失败'});
+        }
+        return JSON.stringify({available: true, rows: rows});
+    } catch (err) {
+        return JSON.stringify({available: false, reason: '会话列表读取失败'});
+    }
+})()
+"""
+
+
+def _liepin_api_rows(raw: Any) -> list[dict[str, Any]] | None:
+    """The contact list's rows, or None to fall back to the DOM."""
+    payload = _json_object(raw)
+    if not isinstance(payload, dict) or payload.get("available") is False:
+        return None
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        return None
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _liepin_payload_text(row: dict[str, Any]) -> str:
+    """The last message's text from the row or its JSON payload."""
+    for key in ("lastPayload", "payload"):
+        raw = row.get(key)
+        data = _json_object(raw) if isinstance(raw, str) else None
+        bodies = data.get("bodies") if isinstance(data, dict) else None
+        if isinstance(bodies, list) and bodies and isinstance(bodies[0], dict):
+            body = bodies[0]
+            for field in ("msg", "url", "filename"):
+                value = body.get(field)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    for key in ("lastMessage", "text", "msg"):
+        value = row.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _liepin_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapped: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            unread_count = int(row.get("unReadCnt") or row.get("unreadCount") or 0)
+        except (TypeError, ValueError):
+            unread_count = 0
+        direction = str(row.get("direction") or "")
+        last_at = _boss_ms_label(
+            row.get("latestMsgTime") or row.get("msgTime") or row.get("time"),
+        )
+        mapped.append({
+            "hr_name": str(row.get("name") or row.get("staffName") or "").strip(),
+            "company": str(row.get("company") or row.get("companyName") or "").strip(),
+            "hr_title": str(row.get("title") or row.get("jobTitle") or "").strip(),
+            "last_message": _liepin_payload_text(row),
+            "last_message_at": last_at,
+            "has_unread": unread_count > 0,
+            "unread_count": max(unread_count, 0),
+            "last_direction": "me" if direction == "0" else ("hr" if direction == "1" else "unknown"),
+            "has_reply": direction == "1",
+            "_liepin_params": {
+                "opposite_im_id": str(row.get("oppositeImId") or "").strip(),
+            },
+        })
+    return mapped
+
+
+def _liepin_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = False) -> list[dict[str, Any]]:
+    jobs = _store_jobs()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        company = str(row.get("company") or "").strip()
+        hr_name = str(row.get("hr_name") or "").strip()
+        hr_title = str(row.get("hr_title") or "").strip()
+        job = _match_conversation_job(row, jobs)
+        conversation_id = _conversation_id(company, hr_name, hr_title, "liepin")
+        items.append({
+            "id": conversation_id,
+            "platform": "liepin",
+            "company": company,
+            "title": str((job or {}).get("title") or hr_title),
+            "hr_name": hr_name,
+            "hr_title": hr_title,
+            "last_message": _redact_contacts(row.get("last_message"))[:200],
+            "last_message_at": str(row.get("last_message_at") or "")[:40],
+            "unread": bool(row.get("has_unread")),
+            "unread_count": _unread_count(row),
+            "last_direction": str(row.get("last_direction") or "unknown"),
+            "has_reply": bool(row.get("has_reply")),
+            "job_id": str((job or {}).get("id") or "") or None,
+        })
+        params = row.get("_liepin_params")
+        if with_params and isinstance(params, dict) and params.get("opposite_im_id"):
+            _liepin_history_params[conversation_id] = dict(params)
+    return items
+
+
+def _liepin_history_expression(entry: dict[str, Any], params: dict[str, Any] | None = None) -> str:
+    """Fixed expression: the drawer's own store, read-only chat-list call."""
+    script = r"""
+(async () => {
+    const hrName = __HR_NAME__;
+    const company = __COMPANY__;
+    const wanted = __OPPOSITE_ID__;
+    const fiberKey = (el) => {
+        for (const key of Object.keys(el || {})) {
+            if (key.indexOf('__reactFiber$') === 0) return key;
+        }
+        return null;
+    };
+    const storeFrom = (node) => {
+        for (const value of [node.stateNode, node.memoizedProps, node.pendingProps]) {
+            if (value && value.getChatList && value.options && value.options.imId) return value;
+            if (value && value.store && value.store.getChatList && value.store.options && value.store.options.imId) return value.store;
+        }
+        return null;
+    };
+    const findStore = (start) => {
+        let node = start;
+        for (let depth = 0; node && depth < 200; depth += 1) {
+            const store = storeFrom(node);
+            if (store) return store;
+            node = node.return;
+        }
+        return null;
+    };
+    try {
+        const items = Array.from(document.querySelectorAll('.im-ui-contact-list-item'));
+        let contact = null;
+        let store = null;
+        for (const el of items) {
+            const key = fiberKey(el);
+            if (!key) continue;
+            let node = el[key];
+            let candidate = null;
+            for (let depth = 0; node && depth < 8; depth += 1) {
+                const props = node.memoizedProps;
+                if (props && props.contact && props.contact.oppositeImId) { candidate = props.contact; break; }
+                node = node.return;
+            }
+            if (!candidate) continue;
+            if (wanted && String(candidate.oppositeImId || '') === wanted) {
+                contact = candidate; store = findStore(el[key]); break;
+            }
+            const name = String(candidate.name || '').trim();
+            const org = String(candidate.company || '').trim();
+            if (name === hrName && (!company || org === company)) { contact = candidate; store = findStore(el[key]); break; }
+        }
+        if (!contact || !store) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
+        const result = await new Promise((resolve) => {
+            try {
+                Promise.resolve(store.getChatList('', contact.oppositeImId, false))
+                    .then((value) => resolve(value || {}))
+                    .catch((err) => resolve({error: String((err && err.message) || err)}));
+            } catch (err) {
+                resolve({error: String((err && err.message) || err)});
+            }
+        });
+        if (result && result.error) return JSON.stringify({available: false, reason: '聊天记录读取失败'});
+        return JSON.stringify({available: true, rows: (result && result.list) || []});
+    } catch (err) {
+        return JSON.stringify({available: false, reason: String((err && err.message) || err)});
+    }
+})()
+"""
+    script = script.replace("__HR_NAME__", json.dumps(entry.get("hr_name") or "", ensure_ascii=False))
+    script = script.replace("__COMPANY__", json.dumps(entry.get("company") or "", ensure_ascii=False))
+    script = script.replace(
+        "__OPPOSITE_ID__",
+        json.dumps(str((params or {}).get("opposite_im_id") or ""), ensure_ascii=False),
+    )
+    return script
+
+
+def _liepin_message_text(row: dict[str, Any]) -> str:
+    text = row.get("msg")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    payload = _json_object(row.get("payload")) if isinstance(row.get("payload"), str) else None
+    bodies = payload.get("bodies") if isinstance(payload, dict) else None
+    if isinstance(bodies, list) and bodies and isinstance(bodies[0], dict):
+        body = bodies[0]
+        for key in ("msg", "url", "filename"):
+            value = body.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return "系统消息"
+
+
+def _liepin_history_messages(raw: Any) -> list[dict[str, Any]] | None:
+    """Map the chat store's mapped list; direction "0" is our side."""
+    payload = _json_object(raw)
+    if not isinstance(payload, dict) or payload.get("available") is False:
+        return None
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        return None
+    messages: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        direction = str(row.get("direction") or "")
+        if direction == "0":
+            sender = "me"
+        elif direction == "1":
+            sender = "hr"
+        else:
+            sender = "system"
+        messages.append({
+            "sender": sender,
+            "text": _redact_contacts(_liepin_message_text(row))[:HR_MESSAGE_MAX_CHARS],
+            "time": _boss_ms_label(row.get("msgTime")),
+            "mid": str(row.get("msgId") or "")[:64],
+        })
+    messages.sort(key=lambda message: message.get("time") or "")
+    return messages
+
+
+def _find_chat_tab(monitor: Any, platform: str) -> str | None:
+    """The user's already-open tab for this platform, if any."""
+    fragments = _CHAT_TAB_URL_FRAGMENTS.get(platform, ())
+    for target in _boss_page_targets(monitor):
+        url = str(target.get("url") or "")
+        if any(fragment in url for fragment in fragments):
+            target_id = str(target.get("targetId") or "").strip()
+            if target_id:
+                return target_id
+    return None
+
+
+def _acquire_chat_tab(
+    monitor: Any,
+    config: dict[str, Any],
+    deadline: "_ChatReadDeadline",
+    platform: str,
+) -> tuple[str | None, bool]:
+    """Reuse the user's own chat tab, else open one in the background."""
+    existing = _find_chat_tab(monitor, platform)
+    if existing:
+        return existing, False
+    target_id = _open_platform_tab(PLATFORM_CHAT_URLS[platform], config, deadline)
+    return (target_id, True) if target_id else (None, False)
+
+
+def _refresh_platform_store(
+    items: list[dict[str, Any]],
+    platform: str,
+    *,
+    boss_target: str | None = None,
+    deadline: "_ChatReadDeadline | None" = None,
+    source: str = "dom",
+) -> None:
     """Refresh one platform's stored conversations after a list read.
 
     The listing already happened.  A conversation whose signature is unchanged
@@ -1457,7 +2438,10 @@ def _refresh_platform_store(items: list[dict[str, Any]], platform: str) -> None:
         row for row in items
         if not (
             (store.get(_hr_store_key(row)) or {}).get("signature") == signature_by_key[_hr_store_key(row)]
-            and (store.get(_hr_store_key(row)) or {}).get("messages")
+            and (
+                (store.get(_hr_store_key(row)) or {}).get("messages")
+                or (store.get(_hr_store_key(row)) or {}).get("body_read")
+            )
         )
     ]
     # Unread first; the sort is stable, so the platform's own list order holds otherwise.
@@ -1467,8 +2451,12 @@ def _refresh_platform_store(items: list[dict[str, Any]], platform: str) -> None:
     for row in candidates[:HR_THREAD_OPENS_PER_REFRESH]:
         key = _hr_store_key(row)
         try:
-            read = _fetch_thread_body(row, platform)
+            read = _fetch_thread_body(
+                row, platform, boss_target=boss_target, deadline=deadline,
+            )
         except Exception as exc:
+            if isinstance(exc, ChatReadTimeout):
+                break  # the shared read budget is gone; do not keep hitting the page
             if str(exc) == "当前任务已请求停止，不能读取会话":
                 break
             errors_by_key[key] = _redact_contacts(f"{type(exc).__name__}: {exc}")[:300]
@@ -1502,14 +2490,18 @@ def _refresh_platform_store(items: list[dict[str, Any]], platform: str) -> None:
                     messages=_hr_merge_messages(previous.get("messages") or [], fresh),
                     signature=signature,
                     fetched_at=_hr_now(),
+                    body_read=True,
+                    source=source,
                 )
-            elif same_signature and previous.get("messages"):
-                # Unchanged and already has a body: nothing to open, nothing to change.
+            elif same_signature and (previous.get("messages") or previous.get("body_read")):
+                # Unchanged and already read: nothing to open, nothing to change.
                 store[key] = _hr_store_record(
                     row,
                     messages=previous.get("messages") or [],
                     signature=signature,
                     fetched_at=previous.get("fetched_at"),
+                    body_read=bool(previous.get("body_read")),
+                    source=source,
                 )
             else:
                 # Failed read, or skipped by the refresh cap.  Keep the old signature so
@@ -1522,6 +2514,8 @@ def _refresh_platform_store(items: list[dict[str, Any]], platform: str) -> None:
                     fetched_at=previous.get("fetched_at"),
                     stale=failed or (bool(previous.get("messages")) and not same_signature),
                     error=errors_by_key.get(key),
+                    body_read=bool(previous.get("body_read")),
+                    source=source,
                 )
         try:
             _save_hr_store(store)
@@ -1529,10 +2523,20 @@ def _refresh_platform_store(items: list[dict[str, Any]], platform: str) -> None:
             pass
 
 
-def _read_thread_messages(entry: dict[str, Any], platform: str) -> dict[str, Any]:
-    """Read one conversation live (the single page-open path for a body)."""
+def _read_thread_messages(
+    entry: dict[str, Any],
+    platform: str,
+    *,
+    boss_target: str | None = None,
+    deadline: "_ChatReadDeadline | None" = None,
+) -> dict[str, Any]:
+    """Read one conversation live (interface first, DOM as the fallback)."""
     if platform == "boss":
-        return _get_boss_thread(entry)
+        return _get_boss_thread(entry, target_id=boss_target, deadline=deadline)
+    if platform == "zhilian":
+        return _get_zhilian_thread(entry, deadline=deadline)
+    if platform == "liepin":
+        return _get_liepin_thread(entry, deadline=deadline)
     return _get_platform_thread(entry, platform)
 
 
@@ -1543,17 +2547,20 @@ def _thread_response(
     *,
     stale: bool,
     error: str | None,
+    source: str | None = None,
 ) -> dict[str, Any]:
     """Assemble a thread response; reply permission is never granted from disk."""
     if platform == "boss":
         try:
             server = load_backend()
-            config = _with_send_window(_runtime_config(server))
+            config = _runtime_config(server)
             allowed, reason = _reply_gate(server, config)
         except Exception:
             allowed, reason = False, "回复前检查失败，请稍后重试"
     else:
         allowed, reason = False, "只读模式：当前平台不发送回复"
+    if stale:
+        allowed, reason = False, "会话内容尚未刷新（旧缓存），暂不能发送回复"
     response: dict[str, Any] = {
         "ok": not stale,
         "available": True,
@@ -1566,6 +2573,8 @@ def _thread_response(
         "reply_allowed": allowed,
         "reply_block_reason": None if allowed else reason,
     }
+    if source:
+        response["source"] = "api" if source == "api" else "dom"
     if error:
         response["error"] = _redact_contacts(error)[:300]
     return response
@@ -1578,33 +2587,44 @@ def _store_response(row: dict[str, Any], platform: str, *, stale: bool, error: s
         _stored_thread_messages(row, platform),
         stale=stale,
         error=error,
+        source=row.get("source"),
     )
 
 
 def _stored_thread_messages(row: dict[str, Any], platform: str) -> list[dict[str, Any]]:
-    return [
-        {
-            "sender": message.get("sender") if message.get("sender") in {"hr", "me"} else "system",
-            "text": _redact_contacts(message.get("text"))[:HR_MESSAGE_MAX_CHARS],
-            "time": str(message.get("time") or "")[:40],
+    messages: list[dict[str, Any]] = []
+    for stored in row.get("messages") or []:
+        if not isinstance(stored, dict):
+            continue
+        message = {
+            "sender": stored.get("sender") if stored.get("sender") in {"hr", "me"} else "system",
+            "text": _redact_contacts(stored.get("text"))[:HR_MESSAGE_MAX_CHARS],
+            "time": str(stored.get("time") or "")[:40],
             "platform": platform,
         }
-        for message in (row.get("messages") or [])
-        if isinstance(message, dict)
-    ]
+        mid = str(stored.get("mid") or "")[:64]
+        if mid:
+            message["mid"] = mid
+        messages.append(message)
+    return messages
 
 
 def _live_thread_messages(thread: dict[str, Any], platform: str) -> list[dict[str, Any]]:
-    return [
-        {
+    messages: list[dict[str, Any]] = []
+    for row in thread.get("messages") or []:
+        if not isinstance(row, dict):
+            continue
+        message = {
             "sender": row.get("sender") if row.get("sender") in {"hr", "me"} else "system",
             "text": _redact_contacts(row.get("text"))[:HR_MESSAGE_MAX_CHARS],
             "time": str(row.get("time") or "")[:40],
             "platform": platform,
         }
-        for row in (thread.get("messages") or [])
-        if isinstance(row, dict)
-    ]
+        mid = str(row.get("mid") or "")[:64]
+        if mid:
+            message["mid"] = mid
+        messages.append(message)
+    return messages
 
 
 def _stored_body_for(entry: dict[str, Any], platform: str) -> dict[str, Any] | None:
@@ -1618,7 +2638,9 @@ def _stored_body_for(entry: dict[str, Any], platform: str) -> dict[str, Any] | N
     key = _hr_store_key({**entry, "platform": platform})
     with _hr_store_lock:
         record = _load_hr_store().get(key) or {}
-    if not record or record.get("stale") or not record.get("messages"):
+    if not record or record.get("stale"):
+        return None
+    if not (record.get("messages") or record.get("body_read")):
         return None
     return record
 
@@ -1644,6 +2666,7 @@ def _merge_live_thread(
             messages=merged,
             signature=signature or str(record.get("signature") or ""),
             fetched_at=_hr_now(),
+            body_read=True,
         )
         try:
             _save_hr_store(store)
@@ -1695,6 +2718,9 @@ def _conversation_items(platform: str, rows: list[Any]) -> list[dict[str, Any]]:
             "last_message": _redact_contacts(row.get("last_message"))[:200],
             "last_message_at": str(row.get("last_message_at") or "")[:40],
             "unread": bool(row.get("has_unread")),
+            "unread_count": _unread_count(row),
+            "last_direction": str(row.get("last_direction") or "unknown"),
+            "has_reply": bool(row.get("has_reply")),
             "job_id": str((job or {}).get("id") or "") or None,
         })
     return items
@@ -1798,70 +2824,180 @@ def _list_platform_conversations_within(
             "count": 0,
             "error": "前程无忧没有站内聊天，HR 沟通通过微信扫码完成，工作台不读取其消息",
         }
-    target_id = _open_platform_tab(PLATFORM_CHAT_URLS[platform], config, deadline)
+    if platform == "zhilian":
+        return _list_zhilian_conversations_within(deadline)
+    if platform == "liepin":
+        return _list_liepin_conversations_within(deadline)
+    raise OfferPilotUnavailable(f"{label}暂不支持站内会话读取")
+
+
+def _list_liepin_conversations_within(deadline: "_ChatReadDeadline") -> dict[str, Any]:
+    """Liepin list: the drawer's contact list first, the chat DOM as fallback."""
+    server = load_backend()
+    monitor = _monitor()
+    config = _runtime_config(server)
+    label = PLATFORM_CHAT_LABELS["liepin"]
+    if _stop_requested(server, config):
+        raise ValueError("当前任务已请求停止，不能读取会话")
+    target_id, owned = _acquire_chat_tab(monitor, config, deadline, "liepin")
     if not target_id:
         raise OfferPilotUnavailable(f"无法打开{label}聊天页面，请检查登录状态")
+    source = "api"
     drawer_branch: str | None = None
+    payload: dict[str, Any] | None = None
     try:
-        if platform == "liepin":
+        monitor._inspect_monitor_page(target_id, config)
+        deadline.check()
+        opened: dict[str, Any] | None = None
+        try:
             opened = _json_object(
                 _chat_evaluate(monitor, target_id, JS_LIEPIN_ENSURE_DRAWER_WWW, deadline)
             )
-            drawer_branch = str((opened or {}).get("branch") or "") or None
-            if not opened or not opened.get("available"):
-                error_text = str((opened or {}).get("reason") or f"无法打开{label}聊天面板")
-                _mark_platform_stale(platform, error_text)
+        except ChatReadTimeout:
+            raise
+        except Exception:
+            opened = None
+        drawer_branch = str((opened or {}).get("branch") or "") or None
+        if not opened or not opened.get("available"):
+            error_text = str((opened or {}).get("reason") or f"无法打开{label}聊天面板")
+            _mark_platform_stale("liepin", error_text)
+            return {
+                "ok": False,
+                "available": False,
+                "platform": "liepin",
+                "conversations": [],
+                "count": 0,
+                "source": source,
+                "error": error_text,
+            }
+        deadline.check()
+        if monitor._wait_or_stop(config, 3):
+            raise ValueError("当前任务已请求停止，不能读取会话")
+        rows: list[dict[str, Any]] | None = None
+        try:
+            raw = _chat_evaluate(monitor, target_id, _liepin_list_expression(), deadline)
+            api_rows = _liepin_api_rows(raw)
+            if api_rows is not None:
+                rows = _liepin_rows_from_api(api_rows)
+        except ChatReadTimeout:
+            raise
+        except Exception:
+            rows = None
+        if rows is None:
+            source = "dom"
+            payload = _json_object(
+                _chat_evaluate(monitor, target_id, JS_LIEPIN_CHAT_LIST, deadline)
+            )
+            if payload is None:
+                raise OfferPilotUnavailable(f"{label}聊天列表解析失败，请稍后重试")
+            if payload.get("available") is False:
+                error_text = str(payload.get("reason") or f"{label}聊天列表不可读")
+                _mark_platform_stale("liepin", error_text)
                 return {
                     "ok": False,
                     "available": False,
-                    "platform": platform,
+                    "platform": "liepin",
                     "conversations": [],
                     "count": 0,
+                    "source": source,
                     "error": error_text,
                 }
-            deadline.check()
-            if monitor._wait_or_stop(config, 3):
-                raise ValueError("当前任务已请求停止，不能读取会话")
+            rows = [row for row in (payload.get("rows") or []) if isinstance(row, dict)]
+        if source == "api":
+            _liepin_history_params.clear()
+            items = _liepin_conversation_items(rows, with_params=True)
         else:
-            deadline.check()
-            if monitor._wait_or_stop(config, 2):
-                raise ValueError("当前任务已请求停止，不能读取会话")
-        script = JS_ZHILIAN_CHAT_LIST if platform == "zhilian" else JS_LIEPIN_CHAT_LIST
-        payload = _json_object(_chat_evaluate(monitor, target_id, script, deadline))
+            items = _conversation_items("liepin", rows)
+        _remember_conversations(items, "liepin")
+        _refresh_platform_store(
+            items, "liepin", deadline=deadline, source=source,
+        )
     finally:
-        monitor.close_tab(target_id)
-    if payload is None:
-        raise OfferPilotUnavailable(f"{label}聊天列表解析失败，请稍后重试")
-    if payload.get("available") is False:
-        error_text = str(payload.get("reason") or f"{label}聊天列表不可读")
-        _mark_platform_stale(platform, error_text)
-        return {
-            "ok": False,
-            "available": False,
-            "platform": platform,
-            "conversations": [],
-            "count": 0,
-            "error": error_text,
-        }
-    rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
-    items = _conversation_items(platform, rows)
-    _remember_conversations(items, platform)
-    _refresh_platform_store(items, platform)
+        if owned:
+            monitor.close_tab(target_id)
     result: dict[str, Any] = {
         "ok": True,
         "available": True,
-        "platform": platform,
+        "platform": "liepin",
         "conversations": items,
         "count": len(items),
+        "source": source,
     }
-    if platform == "liepin":
+    if source == "dom":
         # Diagnostics only: which drawer branch ran, and how many row nodes the
         # selector matched.  count=0 with matched=0 means the page showed no rows
         # to the selector; count=0 with matched>0 would mean rows failed to parse.
         result["drawer_branch"] = drawer_branch
-        matched = payload.get("matched")
+        matched = (payload or {}).get("matched")
         result["matched"] = int(matched) if isinstance(matched, int) else None
     return result
+
+
+def _list_zhilian_conversations_within(deadline: "_ChatReadDeadline") -> dict[str, Any]:
+    """Zhilian list: same-origin interface first, the chat DOM as fallback."""
+    server = load_backend()
+    monitor = _monitor()
+    config = _runtime_config(server)
+    label = PLATFORM_CHAT_LABELS["zhilian"]
+    if _stop_requested(server, config):
+        raise ValueError("当前任务已请求停止，不能读取会话")
+    target_id, owned = _acquire_chat_tab(monitor, config, deadline, "zhilian")
+    if not target_id:
+        raise OfferPilotUnavailable(f"无法打开{label}聊天页面，请检查登录状态")
+    source = "api"
+    try:
+        monitor._inspect_monitor_page(target_id, config)
+        deadline.check()
+        rows: list[dict[str, Any]] | None = None
+        try:
+            raw = _chat_evaluate(monitor, target_id, _zhilian_list_expression(), deadline)
+            api_rows = _zhilian_resolve_rows(raw)
+            if api_rows is not None:
+                rows = _zhilian_rows_from_api(api_rows)
+        except ChatReadTimeout:
+            raise
+        except Exception:
+            rows = None
+        if rows is None:
+            source = "dom"
+            payload = _json_object(
+                _chat_evaluate(monitor, target_id, JS_ZHILIAN_CHAT_LIST, deadline)
+            )
+            if payload is None:
+                raise OfferPilotUnavailable(f"{label}聊天列表解析失败，请稍后重试")
+            if payload.get("available") is False:
+                error_text = str(payload.get("reason") or f"{label}聊天列表不可读")
+                _mark_platform_stale("zhilian", error_text)
+                return {
+                    "ok": False,
+                    "available": False,
+                    "platform": "zhilian",
+                    "conversations": [],
+                    "count": 0,
+                    "source": source,
+                    "error": error_text,
+                }
+            rows = [row for row in (payload.get("rows") or []) if isinstance(row, dict)]
+        if source == "api":
+            _zhilian_history_params.clear()
+            items = _zhilian_conversation_items(rows, with_params=True)
+        else:
+            items = _conversation_items("zhilian", rows)
+        _remember_conversations(items, "zhilian")
+        _refresh_platform_store(
+            items, "zhilian", deadline=deadline, source=source,
+        )
+    finally:
+        if owned:
+            monitor.close_tab(target_id)
+    return {
+        "ok": True,
+        "available": True,
+        "platform": "zhilian",
+        "conversations": items,
+        "count": len(items),
+        "source": source,
+    }
 
 
 def list_conversations(platform: Any = "boss") -> dict[str, Any]:
@@ -1986,6 +3122,7 @@ def _list_all_conversations() -> dict[str, Any]:
             "ok": bool(result.get("ok")) and available,
             "available": available,
             "count": int(result.get("count") or 0) if available else 0,
+            "source": result.get("source") if available else None,
         }
         if error_text:
             entry["error"] = error_text
@@ -2030,57 +3167,377 @@ def _list_boss_conversations_within(deadline: "_ChatReadDeadline") -> dict[str, 
     config = _runtime_config(server)
     if _stop_requested(server, config):
         raise ValueError("当前任务已请求停止，不能读取会话")
-    chat_url = str((config.get("monitor") or {}).get("chat_url") or "https://www.zhipin.com/web/geek/chat")
-    target_id, _reused = monitor._get_monitor_chat_target(chat_url, config)
+    _boss_history_params.clear()
+    target_id, owned = _acquire_boss_tab(monitor, config, deadline)
     if not target_id:
         raise OfferPilotUnavailable("无法打开聊天列表页，请检查浏览器与 BOSS 登录状态")
-    raw = None
+    source = "api"
     try:
-        deadline.check()
-        if monitor._wait_or_stop(config, 3) or not _wait_for_chat_page(
-            monitor, target_id, config, deadline, timeout=10,
-        ):
-            raise OfferPilotUnavailable("聊天列表页未加载完成")
         deadline.check()
         monitor._inspect_monitor_page(target_id, config)
-        raw = _chat_evaluate(monitor, target_id, monitor.JS_EXTRACT_CHAT_LIST, deadline)
-    finally:
-        monitor.close_tab(target_id)
-
-    try:
-        rows = json.loads(raw) if isinstance(raw, str) else raw
-    except (json.JSONDecodeError, TypeError):
+        deadline.check()
         rows = None
-    if not isinstance(rows, list):
-        # Chat reads never feed the shared monitor failure counter: one
-        # platform's unreadable list must not move another platform's (or the
-        # next collection run's) consecutive-failure count toward a risk lock.
-        raise OfferPilotUnavailable("聊天列表解析失败，请稍后重试")
+        raw = None
+        try:
+            raw = _chat_evaluate(monitor, target_id, _boss_list_expression(), deadline)
+        except ChatReadTimeout:
+            raise
+        except Exception:
+            rows = None
+        if raw is not None:
+            status, body, error = _boss_api_response(raw)
+            if error:
+                _boss_raise_api_risk(status, body, error)
+            else:
+                api_rows = _boss_result_rows(status, body)
+                if api_rows is not None:
+                    rows = _boss_rows_from_api(api_rows)
+        if rows is None:
+            # Interface unavailable (non-zero code, HTTP error, unparsable
+            # answer): the list DOM in the same tab is the fallback.
+            source = "dom"
+            deadline.check()
+            raw = _chat_evaluate(monitor, target_id, monitor.JS_EXTRACT_CHAT_LIST, deadline)
+            try:
+                dom_rows = json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                dom_rows = None
+            if not isinstance(dom_rows, list):
+                # Chat reads never feed the shared monitor failure counter: one
+                # platform's unreadable list must not move another platform's (or
+                # the next collection run's) consecutive-failure count toward a risk lock.
+                raise OfferPilotUnavailable("聊天列表解析失败，请稍后重试")
+            rows = [row for row in dom_rows if isinstance(row, dict)]
+        items = _boss_conversation_items(rows, with_params=source == "api")
+        _remember_conversations(items, "boss")
+        _refresh_platform_store(
+            items, "boss",
+            boss_target=target_id if source == "api" else None,
+            deadline=deadline,
+            source=source,
+        )
+    finally:
+        if owned:
+            # Only a tab this read opened is closed; the user's own tab stays.
+            monitor.close_tab(target_id)
+    return {
+        "ok": True,
+        "available": True,
+        "platform": "boss",
+        "conversations": items,
+        "count": len(items),
+        "source": source,
+    }
 
-    jobs = _store_jobs()
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        company = str(row.get("company") or "").strip()
-        hr_name = str(row.get("hr_name") or "").strip()
-        hr_title = str(row.get("hr_title") or "").strip()
-        job = _match_conversation_job(row, jobs)
-        items.append({
-            "id": _conversation_id(company, hr_name, hr_title),
-            "platform": "boss",
-            "company": company,
-            "title": str((job or {}).get("title") or ""),
-            "hr_name": hr_name,
-            "hr_title": hr_title,
-            "last_message": _redact_contacts(row.get("last_message"))[:200],
-            "last_message_at": str(row.get("last_message_at") or "")[:40],
-            "unread": bool(row.get("has_unread")),
-            "job_id": str((job or {}).get("id") or "") or None,
-        })
-    _remember_conversations(items, "boss")
-    _refresh_platform_store(items, "boss")
-    return {"ok": True, "available": True, "conversations": items, "count": len(items)}
+
+# --- Cached reads, summary and background sync ------------------------------
+#
+# The page shows what is already on disk immediately.  A sync is an explicit
+# background action: it performs the platform reads and refreshes the store,
+# while ``cached_conversations`` and ``conversations_summary`` never touch a
+# browser or the network.
+
+HR_SYNC_META_RELATIVE = Path("hr") / "sync.json"
+SYNC_PLATFORMS = ("boss", "zhilian", "liepin")
+
+_sync_state_lock = threading.Lock()
+_sync_state: dict[str, Any] = {
+    "syncing": False,
+    "platform": None,
+    "started_at": None,
+    "finished_at": None,
+    "error": None,
+}
+# One worker drains a small queue: different platforms are serviced in turn
+# (serial browser use, one platform's frequency limit at a time), while a
+# platform already waiting is never queued twice.
+_sync_queue: list[str] = []
+_sync_queued: set[str] = set()
+_sync_worker: threading.Thread | None = None
+
+
+def _hr_sync_meta_path(mode: Any = "user") -> Path:
+    return _hr_store_path(mode).parent / Path(HR_SYNC_META_RELATIVE.name)
+
+
+def _load_sync_meta() -> dict[str, dict[str, Any]]:
+    path = _hr_sync_meta_path()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    rows = payload.get("platforms") if isinstance(payload, dict) else None
+    if not isinstance(rows, dict):
+        return {}
+    return {
+        str(key): dict(value)
+        for key, value in rows.items()
+        if isinstance(value, dict)
+    }
+
+
+def _save_sync_meta(platforms: dict[str, dict[str, Any]]) -> None:
+    path = _hr_sync_meta_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp_name = tempfile.mkstemp(prefix=".sync-", dir=str(path.parent))
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            json.dump({"platforms": platforms}, stream, ensure_ascii=False, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _sync_snapshot() -> dict[str, Any]:
+    with _sync_state_lock:
+        return dict(_sync_state)
+
+
+def conversations_summary() -> dict[str, Any]:
+    """Counts and freshness per platform, read from local storage only."""
+    with _hr_store_lock:
+        store = _load_hr_store()
+        meta = _load_sync_meta()
+    state = _sync_snapshot()
+    by_platform: dict[str, dict[str, Any]] = {}
+    total = 0
+    unread_total = 0
+    stamps: list[str] = []
+    for platform in SYNC_PLATFORMS:
+        records = [
+            record for record in store.values()
+            if str(record.get("platform") or "") == platform
+        ]
+        unread = 0
+        for record in records:
+            try:
+                count = int(record.get("unread_count") or 0)
+            except (TypeError, ValueError):
+                count = 0
+            if count <= 0 and record.get("unread"):
+                count = 1
+            unread += max(count, 0)
+        info = meta.get(platform) or {}
+        source = info.get("source")
+        if not source:
+            seen_sources = {str(record.get("source") or "") for record in records} - {""}
+            source = seen_sources.pop() if len(seen_sources) == 1 else None
+        entry: dict[str, Any] = {
+            "count": len(records),
+            "unread": unread,
+            "source": source,
+            "last_synced_at": info.get("last_synced_at"),
+        }
+        if info.get("error"):
+            entry["error"] = _redact_contacts(info["error"])[:300]
+        by_platform[platform] = entry
+        total += len(records)
+        unread_total += unread
+        if entry["last_synced_at"]:
+            stamps.append(str(entry["last_synced_at"]))
+    return {
+        "ok": True,
+        "total": total,
+        "unread_total": unread_total,
+        "by_platform": by_platform,
+        "last_synced_at": max(stamps) if stamps else None,
+        "syncing": bool(state.get("syncing")),
+    }
+
+
+def _cached_conversation_item(record: dict[str, Any]) -> dict[str, Any]:
+    unread_count = record.get("unread_count")
+    try:
+        unread_count = int(unread_count or 0)
+    except (TypeError, ValueError):
+        unread_count = 0
+    if unread_count <= 0 and record.get("unread"):
+        unread_count = 1
+    return {
+        "id": str(record.get("id") or ""),
+        "platform": str(record.get("platform") or "boss"),
+        "company": str(record.get("company") or ""),
+        "title": str(record.get("title") or ""),
+        "hr_name": str(record.get("hr_name") or ""),
+        "hr_title": str(record.get("hr_title") or ""),
+        "last_message": str(record.get("last_message") or "")[:200],
+        "last_message_at": str(record.get("last_message_at") or "")[:40],
+        "unread": bool(record.get("unread")),
+        "unread_count": unread_count,
+        "last_direction": str(record.get("last_direction") or "unknown"),
+        "has_reply": bool(record.get("has_reply")),
+        "job_id": record.get("job_id") or None,
+        "stale": bool(record.get("stale")),
+        "source": "api" if record.get("source") == "api" else "dom",
+        "has_body": bool(record.get("messages") or record.get("body_read")),
+    }
+
+
+def cached_conversations(platform: Any = "all") -> dict[str, Any]:
+    """Serve the stored conversation list without reading any platform."""
+    requested = str(platform or "all").strip().lower()
+    if requested != "all":
+        requested = _chat_platform(requested)
+        if requested == "51job":
+            return {
+                "ok": False,
+                "available": False,
+                "platform": requested,
+                "conversations": [],
+                "count": 0,
+                "syncing": False,
+                "last_synced_at": None,
+                "error": "前程无忧没有站内聊天，HR 沟通通过微信扫码完成，工作台不读取其消息",
+            }
+    with _hr_store_lock:
+        store = _load_hr_store()
+        meta = _load_sync_meta()
+    records = [
+        record for record in store.values()
+        if requested == "all" or str(record.get("platform") or "") == requested
+    ]
+    items = [_cached_conversation_item(record) for record in records]
+    items.sort(key=lambda item: item.get("last_message_at") or "", reverse=True)
+    stamps = [
+        str((meta.get(name) or {}).get("last_synced_at") or "")
+        for name in (SYNC_PLATFORMS if requested == "all" else (requested,))
+    ]
+    stamps = [stamp for stamp in stamps if stamp]
+    state = _sync_snapshot()
+    return {
+        "ok": True,
+        "available": True,
+        "platform": requested,
+        "conversations": items,
+        "count": len(items),
+        "syncing": bool(state.get("syncing")),
+        "syncing_platform": state.get("platform") if state.get("syncing") else None,
+        "last_synced_at": max(stamps) if stamps else None,
+    }
+
+
+def _run_conversations_sync(platform: str) -> dict[str, str]:
+    """Read one platform and record its freshness; the worker owns the state."""
+    sources: dict[str, str] = {}
+    errors: dict[str, str] = {}
+    try:
+        if platform == "all":
+            result = list_all_conversations()
+            entries = result.get("platforms") or []
+            for entry in entries:
+                name = str(entry.get("platform") or "")
+                if name not in SYNC_PLATFORMS:
+                    continue
+                if entry.get("available"):
+                    sources[name] = str(entry.get("source") or "dom")
+                else:
+                    errors[name] = str(entry.get("error") or "无法读取该平台会话")
+            if not entries and result.get("error"):
+                errors["all"] = str(result.get("error"))
+        else:
+            result = list_conversations(platform)
+            if result.get("ok") and result.get("available"):
+                sources[platform] = str(result.get("source") or "dom")
+            else:
+                errors[platform] = str(result.get("error") or "无法读取该平台会话")
+    except Exception as exc:  # one platform's failure never stops the queue
+        errors[platform] = _redact_contacts(f"{type(exc).__name__}: {exc}")[:300]
+    finished = _hr_now()
+    try:
+        with _hr_store_lock:
+            meta = _load_sync_meta()
+            for name, source in sources.items():
+                meta[name] = {
+                    "last_synced_at": finished,
+                    "source": source,
+                    "error": None,
+                }
+            for name, error in errors.items():
+                current = meta.get(name) or {}
+                meta[name] = {
+                    "last_synced_at": current.get("last_synced_at"),
+                    "source": current.get("source"),
+                    "error": _redact_contacts(error)[:300],
+                }
+            _save_sync_meta(meta)
+    except OSError:
+        pass
+    with _sync_state_lock:
+        _sync_state["finished_at"] = finished
+        if errors:
+            _sync_state["error"] = errors
+    return errors
+
+
+def _drain_sync_queue() -> None:
+    """Serial worker: one platform at a time, no duplicate queue entries."""
+    global _sync_worker
+    while True:
+        with _sync_state_lock:
+            if not _sync_queue:
+                _sync_queued.clear()
+                _sync_worker = None
+                _sync_state.update(syncing=False, platform=None)
+                return
+            platform = _sync_queue.pop(0)
+            _sync_state["platform"] = platform
+        try:
+            _run_conversations_sync(platform)
+        except Exception as exc:
+            with _sync_state_lock:
+                _sync_state["error"] = {
+                    platform: _redact_contacts(f"{type(exc).__name__}: {exc}")[:300]
+                }
+        finally:
+            with _sync_state_lock:
+                _sync_queued.discard(platform)
+
+
+def start_conversations_sync(platform: Any = "all") -> dict[str, Any]:
+    """Queue one platform (or all) for a background incremental refresh."""
+    global _sync_worker
+    requested = str(platform or "all").strip().lower()
+    if requested != "all":
+        requested = _chat_platform(requested)
+        if requested == "51job":
+            return {
+                "ok": False,
+                "started": False,
+                "syncing": False,
+                "platform": requested,
+                "error": "前程无忧没有站内聊天，HR 沟通通过微信扫码完成",
+            }
+    targets = list(SYNC_PLATFORMS) if requested == "all" else [requested]
+    with _sync_state_lock:
+        was_syncing = bool(_sync_state.get("syncing"))
+        added = [name for name in targets if name not in _sync_queued]
+        for name in added:
+            _sync_queue.append(name)
+            _sync_queued.add(name)
+        if added:
+            _sync_state.update(syncing=True, error=None)
+            if not was_syncing:
+                _sync_state["started_at"] = _hr_now()
+            if _sync_worker is None or not _sync_worker.is_alive():
+                _sync_worker = threading.Thread(
+                    target=_drain_sync_queue,
+                    name="hr-conversations-sync",
+                    daemon=True,
+                )
+                _sync_worker.start()
+        return {
+            "ok": True,
+            "started": bool(added),
+            "syncing": True,
+            "platform": requested,
+            "queued": list(_sync_queue),
+        }
 
 
 def get_thread(conversation_id: Any, platform: Any = "boss") -> dict[str, Any]:
@@ -2290,21 +3747,25 @@ def _get_platform_thread_within(
     }
 
 
-def _get_boss_thread(entry: dict[str, Any]) -> dict[str, Any]:
-    server = load_backend()
+def _read_boss_thread_dom(
+    entry: dict[str, Any],
+    config: dict[str, Any],
+    deadline: "_ChatReadDeadline | None" = None,
+) -> list[dict[str, Any]]:
+    """Fallback: read the conversation DOM in a background tab we then close."""
     monitor = _monitor()
-    config = _with_send_window(_runtime_config(server))
+    deadline = deadline or _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    deadline.check()
     target_id = monitor._open_conversation_from_chat_list(
         {"hr_name": entry.get("hr_name") or "", "company": entry.get("company") or ""},
         config,
-        background=False,
+        background=True,
     )
     if not target_id:
         raise OfferPilotUnavailable("无法打开该会话，请重新读取会话列表")
-    raw = None
     try:
         monitor._inspect_monitor_page(target_id, config)
-        raw = monitor.evaluate(target_id, monitor.JS_EXTRACT_CONVERSATION)
+        raw = _chat_evaluate(monitor, target_id, monitor.JS_EXTRACT_CONVERSATION, deadline)
     finally:
         monitor.close_tab(target_id)
     try:
@@ -2320,14 +3781,143 @@ def _get_boss_thread(entry: dict[str, Any]) -> dict[str, Any]:
         sender = row.get("sender") if row.get("sender") in {"hr", "me"} else "system"
         messages.append({
             "sender": sender,
-            "text": _redact_contacts(row.get("text"))[:500],
+            "text": _redact_contacts(row.get("text"))[:HR_MESSAGE_MAX_CHARS],
             "platform": "boss",
         })
+    return messages
+
+
+def _platform_dom_thread(
+    entry: dict[str, Any], platform: str, deadline: "_ChatReadDeadline",
+) -> dict[str, Any]:
+    thread = _get_platform_thread_within(entry, platform, deadline)
+    thread.setdefault("source", "dom")
+    return thread
+
+
+def _get_zhilian_thread(
+    entry: dict[str, Any],
+    *,
+    deadline: "_ChatReadDeadline | None" = None,
+) -> dict[str, Any]:
+    """Read Zhilian history through the page's NIM SDK; DOM is the fallback."""
+    server = load_backend()
+    monitor = _monitor()
+    config = _runtime_config(server)
+    deadline = deadline or _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    if _stop_requested(server, config):
+        raise ValueError("当前任务已请求停止，不能读取会话")
+    params = _zhilian_history_params.get(str(entry.get("id") or ""))
+    messages: list[dict[str, Any]] | None = None
+    if params:
+        tab, owned = _acquire_chat_tab(monitor, config, deadline, "zhilian")
+        try:
+            if tab:
+                monitor._inspect_monitor_page(tab, config)
+                deadline.check()
+                raw = _chat_evaluate(
+                    monitor, tab, _zhilian_history_expression(params), deadline,
+                )
+                messages = _zhilian_history_messages(raw)
+        except ChatReadTimeout:
+            raise
+        except Exception:
+            messages = None
+        finally:
+            if owned and tab:
+                monitor.close_tab(tab)
+    if messages is None:
+        return _platform_dom_thread(entry, "zhilian", deadline)
+    return _thread_response(
+        entry, "zhilian", messages, stale=False, error=None, source="api",
+    )
+
+
+def _get_liepin_thread(
+    entry: dict[str, Any],
+    *,
+    deadline: "_ChatReadDeadline | None" = None,
+) -> dict[str, Any]:
+    """Read Liepin history through the drawer's chat store; DOM as fallback."""
+    server = load_backend()
+    monitor = _monitor()
+    config = _runtime_config(server)
+    deadline = deadline or _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    if _stop_requested(server, config):
+        raise ValueError("当前任务已请求停止，不能读取会话")
+    messages: list[dict[str, Any]] | None = None
+    params = _liepin_history_params.get(str(entry.get("id") or ""))
+    # Only the user's existing drawer page is used for the interface read: a
+    # tab opened just for this attempt would be a second tab when the store is
+    # missing and the DOM fallback opens its own.
+    tab = _find_chat_tab(monitor, "liepin")
+    try:
+        if tab:
+            monitor._inspect_monitor_page(tab, config)
+            opened = _json_object(
+                _chat_evaluate(monitor, tab, JS_LIEPIN_ENSURE_DRAWER_WWW, deadline)
+            )
+            if opened and opened.get("available"):
+                deadline.check()
+                raw = _chat_evaluate(
+                    monitor, tab, _liepin_history_expression(entry, params), deadline,
+                )
+                messages = _liepin_history_messages(raw)
+    except ChatReadTimeout:
+        raise
+    except Exception:
+        messages = None
+    if messages is None:
+        return _platform_dom_thread(entry, "liepin", deadline)
+    return _thread_response(
+        entry, "liepin", messages, stale=False, error=None, source="api",
+    )
+
+
+def _get_boss_thread(
+    entry: dict[str, Any],
+    *,
+    target_id: str | None = None,
+    deadline: "_ChatReadDeadline | None" = None,
+) -> dict[str, Any]:
+    server = load_backend()
+    monitor = _monitor()
+    config = _runtime_config(server)
+    deadline = deadline or _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    params = _boss_history_params.get(str(entry.get("id") or ""))
+    source = "api"
+    messages: list[dict[str, Any]] | None = None
+    if params:
+        tab = target_id
+        owned = False
+        if not tab:
+            tab, owned = _acquire_boss_tab(monitor, config, deadline)
+            if not tab:
+                raise OfferPilotUnavailable("无法打开 BOSS 聊天页，请重新读取会话列表")
+        try:
+            deadline.check()
+            monitor._inspect_monitor_page(tab, config)
+            deadline.check()
+            raw = _chat_evaluate(monitor, tab, _boss_history_expression(params), deadline)
+            status, body, error = _boss_api_response(raw)
+            if error:
+                _boss_raise_api_risk(status, body, error)
+            else:
+                messages = _boss_history_messages(
+                    status, body, str(params.get("group_id") or ""),
+                )
+        finally:
+            if owned and tab:
+                monitor.close_tab(tab)
+    if messages is None:
+        source = "dom"
+        messages = _read_boss_thread_dom(entry, config, deadline)
     allowed, reason = _reply_gate(server, config)
     return {
         "ok": True,
         "available": True,
         "platform": "boss",
+        "source": source,
         "conversation_id": entry["id"],
         "company": entry.get("company") or "",
         "title": entry.get("title") or "",
@@ -2347,7 +3937,7 @@ def send_reply(
     """Send exactly one HR reply after every guard passes.
 
     Guards run in a fixed order: text, confirmation phrase, risk
-    acknowledgement, send window, stop request, risk locks, and finally the
+    acknowledgement, any-hour sending, stop request, risk locks, and finally the
     conversation must come from the most recent list (10 minutes).  No other
     function in this module or in the workbench calls ``_send_message_in_chat``.
     """
@@ -2362,9 +3952,7 @@ def send_reply(
         raise ValueError("发送前必须确认风险提示")
 
     server = load_backend()
-    config = _with_send_window(_runtime_config(server))
-    if not _send_window_open(config):
-        raise ValueError("不在发送窗口（09:00–16:00）")
+    config = _runtime_config(server)
     if _stop_requested(server, config):
         raise ValueError("当前任务已请求停止")
     lock_reason = _risk_lock_reason(server, config)

@@ -650,6 +650,21 @@ def _structured_score_result(result: dict, *, reviewed: bool = False) -> ScoreRe
     )
 
 
+# 部分模型会把 transferable_evidence 简写为 transferable（issue #107）；
+# 解析前按别名归一，避免有效评分被误判为字段缺失。旧 trace 仍按原字段读取。
+FIELD_ALIASES = {
+    "transferable": "transferable_evidence",
+}
+
+
+def _apply_field_aliases(result: dict) -> dict:
+    """Normalize common model-side field shortenings without overwriting canonical fields."""
+    for alias, canonical in FIELD_ALIASES.items():
+        if alias in result and canonical not in result:
+            result[canonical] = result[alias]
+    return result
+
+
 def _validated_score_result(text: str) -> ScoreResult | None:
     """Accept only complete structured evidence scores."""
     result = _parse_score_response(text)
@@ -660,7 +675,7 @@ def validate_structured_score_payload(value: object, *, reviewed: bool = False) 
     """Validate a structured score supplied by a local Agent or an AI provider."""
     if not isinstance(value, dict):
         return None
-    return _structured_score_result(dict(value), reviewed=reviewed)
+    return _structured_score_result(_apply_field_aliases(dict(value)), reviewed=reviewed)
 
 
 def _score_validation_failure_reason(text: str | None) -> str:
@@ -670,6 +685,7 @@ def _score_validation_failure_reason(text: str | None) -> str:
     result = _parse_score_response(text)
     if not isinstance(result, dict):
         return "AI 返回内容无法解析为 JSON"
+    result = _apply_field_aliases(result)
     dimensions = result.get("dimensions")
     if not isinstance(dimensions, dict):
         return "AI 评分 JSON 缺少字段: dimensions"

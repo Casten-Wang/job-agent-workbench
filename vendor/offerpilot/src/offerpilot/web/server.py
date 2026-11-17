@@ -962,14 +962,14 @@ def _execute_deliver_batch(task: WorkbenchTask, config: dict) -> None:
 		if selected_job_ids and ready_count < len(selected_job_ids):
 			missing_count = len(selected_job_ids) - ready_count
 			# 生成失败的岗位保留为待生成且无招呼语文本，本就不会进入发送；其余岗位继续走
-			# 现有人工确认、发送窗口与风控规则（#101 回归：不再因部分失败放弃整个批次）。
+			# 现有人工确认、每日上限与风控规则（#101 回归：不再因部分失败放弃整个批次）。
 			_log(
 				task,
 				f"{missing_count} 个岗位未生成招呼语，已保留为待生成，请在 BOSS 中手动填写；"
 				"其余岗位继续进入发送流程。",
 			)
 	_log(task, "发送招呼语")
-	# The workbench must obey the same send window and day-off guard as the CLI.
+	# The workbench must obey the same daily cap, interval and day-off guard as the CLI.
 	# ``force`` remains an explicit CLI-only override and is never implied by a
 	# browser button click. Both generation and delivery pin the runtime database
 	# so a non-CWD base dir can never split reads/writes across two SQLite files.

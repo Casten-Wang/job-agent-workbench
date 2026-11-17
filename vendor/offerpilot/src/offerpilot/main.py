@@ -67,7 +67,7 @@ def _prompt_setup(port: int = 8686) -> None:
     console.print("[dim]  • 简历路径、期望薪资、一票否决词[/dim]")
     console.print("[dim]  • 搜索关键词、目标城市[/dim]")
     console.print("[dim]  • AI 评分阈值、发送频率限制[/dim]")
-    console.print("[dim]  • 发送时间窗口、每日上限[/dim]")
+    console.print("[dim]  • 每日上限、随机间隔与平台风控锁[/dim]")
     console.print()
     console.print("[dim]如需跳过，可手动创建 config.yaml（参考 config.example.yaml）[/dim]")
     console.print()

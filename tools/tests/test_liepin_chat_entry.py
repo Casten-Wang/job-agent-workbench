@@ -297,6 +297,11 @@ class _FakeLiepinMonitor:
         self.entry_clicks = 0
         self.document_after_click: _Node | None = None
 
+    def get_page_targets(self):
+        # The test browser has no pre-existing tabs: never let the real
+        # browser module leak a user tab into the reader.
+        return []
+
     def _open_monitor_tab(self, url, config, *, background=True):
         self.urls.append(url)
         return "tab-liepin"
@@ -328,6 +333,10 @@ class _FakeLiepinMonitor:
                 if self.document_after_click is not None:
                     self.document = self.document_after_click  # the click renders the drawer
             return json.dumps(result, ensure_ascii=False)
+        if "contact.get-contact-list" in script:
+            # This fixture only models the DOM; the interface read reports
+            # unavailable so the reader exercises its documented fallback.
+            return json.dumps({"available": False, "reason": "接口不可用"}, ensure_ascii=False)
         if script == offerpilot_runtime.JS_LIEPIN_CHAT_LIST:
             return json.dumps(_list_rows(self.document), ensure_ascii=False)
         if script == offerpilot_runtime.JS_LIEPIN_THREAD:
@@ -501,8 +510,7 @@ class DrawerStateTests(_LiepinFixtureCase):
                 listing = offerpilot_runtime.list_liepin_conversations()
                 if listing["conversations"]:
                     row = listing["conversations"][0]
-                    with patch.object(offerpilot_runtime, "_send_window_open", return_value=True):
-                        thread = offerpilot_runtime.get_thread(row["id"], "liepin")
+                    thread = offerpilot_runtime.get_thread(row["id"], "liepin")
                     self.assertFalse(thread["reply_allowed"])
                 else:
                     self.assertFalse(listing["ok"])
@@ -512,8 +520,7 @@ class ThreadReadingTests(_LiepinFixtureCase):
     def _first_thread(self):
         listing = offerpilot_runtime.list_liepin_conversations()
         row = listing["conversations"][0]
-        with patch.object(offerpilot_runtime, "_send_window_open", return_value=True):
-            return row, offerpilot_runtime.get_thread(row["id"], "liepin")
+        return row, offerpilot_runtime.get_thread(row["id"], "liepin")
 
     def test_reads_the_three_messages_with_senders(self):
         row, thread = self._first_thread()

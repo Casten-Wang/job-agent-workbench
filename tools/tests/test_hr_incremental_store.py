@@ -76,6 +76,10 @@ class _StoreMonitor:
     def _get_monitor_chat_target(self, url, config):
         return "tab-list", False
 
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
+
     def _open_monitor_tab(self, url, config, *, background=True):
         return "tab-list"
 
@@ -339,22 +343,20 @@ class SendGateTests(_StoreCase):
         runtime.list_conversations("boss")
         conversation_id = self._store()[self._key_for("示例招聘官")]["id"]
         runtime._reset_conversation_cache()  # the in-memory listing is gone
-        with patch.object(runtime, "_send_window_open", return_value=True):
-            with self.assertRaises(ValueError) as ctx:
-                runtime.send_reply(
-                    conversation_id, "您好",
-                    confirm=runtime.REPLY_CONFIRM_PHRASE,
-                    risk_acknowledged=True,
-                )
+        with self.assertRaises(ValueError) as ctx:
+            runtime.send_reply(
+                conversation_id, "您好",
+                confirm=runtime.REPLY_CONFIRM_PHRASE,
+                risk_acknowledged=True,
+            )
         self.assertIn("会话列表", str(ctx.exception))
 
-    def test_stored_thread_read_reports_reply_disabled_outside_window(self):
+    def test_stored_thread_read_reports_reply_enabled_without_a_time_window(self):
         self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "你好"}]
         listing = runtime.list_conversations("boss")
-        with patch.object(runtime, "_send_window_open", return_value=False):
-            thread = runtime.get_thread(listing["conversations"][0]["id"], "boss")
-        self.assertFalse(thread["reply_allowed"])
-        self.assertIn("发送窗口", thread["reply_block_reason"])
+        thread = runtime.get_thread(listing["conversations"][0]["id"], "boss")
+        self.assertTrue(thread["reply_allowed"])
+        self.assertIsNone(thread["reply_block_reason"])
 
 
 if __name__ == "__main__":

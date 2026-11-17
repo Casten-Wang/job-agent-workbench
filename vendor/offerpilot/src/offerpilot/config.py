@@ -159,7 +159,7 @@ DEFAULTS: dict[str, Any] = {
         "browse_before_greet": True,
         "browse_duration_min": 15,
         "browse_duration_max": 30,
-        "send_windows": ["09:00-16:00"],
+        "send_windows": [],
         "day_off_probability": 0.05,
     },
     "ai": {
@@ -267,7 +267,11 @@ def save_config(config: dict[str, Any], config_path: Path | None = None) -> None
 
 
 def validate_config_send_windows(config: dict[str, Any]) -> None:
-    """Reject invalid windows before persisting settings or starting a task."""
+    """Validate the legacy ``send_windows`` shape before persisting settings.
+
+    The value no longer limits when work may run; it is validated only so a
+    malformed legacy file fails loudly instead of being silently ignored.
+    """
     from offerpilot.throttle import validate_send_windows
 
     throttle = config.get("throttle", {})

@@ -62,6 +62,7 @@ const OFFERPILOT_CAPABILITY_LABELS = {
 };
 const HUB_FOR_VIEW = {
   workbench: 'workbench',
+  agent: 'agent',
   collect: 'find',
   jobs: 'find',
   queue: 'find',
@@ -151,6 +152,7 @@ const state = {
   queueDeliveryReturnFocus: null,
   queueGreetingWatch: null,
   profileDirty: false,
+  profileImportBusy: false,
   profileAutoPrefillTried: false,
   profilePrefillCount: 0,
   hrConversations: [],
@@ -172,6 +174,20 @@ const state = {
   hrReplyBusy: false,
   hrReplyReturnFocus: null,
   hrSeq: 0,
+  // HR 会话页：本地列表即时显示，平台增量同步静默在后台跑。
+  hrSummary: null,
+  hrSummaryLoading: false,
+  hrPlatformSummary: {},
+  hrUnreadTotal: 0,
+  hrLastSyncedAt: '',
+  hrSyncSupported: null,
+  hrSyncing: false,
+  hrSyncBaseline: '',
+  hrSyncTriggeredAt: 0,
+  hrPollTimer: null,
+  hrPollBusy: false,
+  hrMobilePane: 'list',
+  hrThreadRenderedKey: '',
   interviewChat: {
     session: null,
     internal: null,
@@ -297,6 +313,10 @@ const dom = {
   profileMeter: document.getElementById('profile-meter'),
   profileBadge: document.getElementById('profile-completeness-badge'),
   profileImport: document.getElementById('profile-import'),
+  profileImportFile: document.getElementById('profile-import-file'),
+  profileImportPreview: document.getElementById('profile-import-preview'),
+  profileImportText: document.getElementById('profile-import-text'),
+  profileDrop: document.getElementById('profile-resume-drop'),
   profileSave: document.getElementById('profile-save'),
   profileResult: document.getElementById('profile-result'),
   profileDraftBanner: document.getElementById('profile-draft-banner'),
@@ -338,7 +358,14 @@ const dom = {
   mailList: document.getElementById('mail-list'),
   mailActionResult: document.getElementById('mail-action-result'),
   hrRefresh: document.getElementById('hr-refresh'),
+  hrSyncStatus: document.getElementById('hr-sync-status'),
+  hrSyncText: document.getElementById('hr-sync-text'),
   hrStatus: document.getElementById('hr-status'),
+  hrLayout: document.getElementById('hr-layout'),
+  hrThreadView: document.getElementById('hr-thread'),
+  hrMobileBack: document.getElementById('hr-mobile-back'),
+  hrPlatformStatus: document.getElementById('hr-platform-status'),
+  hrNavUnread: document.getElementById('hr-nav-unread'),
   hrSearch: document.getElementById('hr-search'),
   hrFilterButtons: Array.from(document.querySelectorAll('[data-hr-filter]')),
   hrPlatformSelect: document.getElementById('hr-platform'),
@@ -420,6 +447,15 @@ const dom = {
   webReportButton: document.getElementById('web-report-button'),
   exportButton: document.getElementById('export-button'),
   opsResult: document.getElementById('ops-result'),
+  aiSettingsForm: document.getElementById('ai-settings-form'),
+  aiSettingsService: document.getElementById('ai-settings-service'),
+  aiSettingsModel: document.getElementById('ai-settings-model'),
+  aiSettingsBaseUrl: document.getElementById('ai-settings-base-url'),
+  aiSettingsKey: document.getElementById('ai-settings-key'),
+  aiSettingsSave: document.getElementById('ai-settings-save'),
+  aiSettingsTest: document.getElementById('ai-settings-test'),
+  aiSettingsBadge: document.getElementById('ai-settings-badge'),
+  aiSettingsResult: document.getElementById('ai-settings-result'),
   dryRunForm: document.getElementById('dry-run-form'),
   dryJobId: document.getElementById('dry-job-id'),
   dryCompany: document.getElementById('dry-company'),
@@ -815,6 +851,7 @@ function showView(name) {
   }
   if (name === 'mail') {
     ensureHrConversationsLoaded();
+    hrEnterPage();
   }
 }
 
@@ -2715,16 +2752,135 @@ async function saveProfileForm(event) {
   await loadState();
 }
 
-async function importProfileFromCv() {
-  if (state.profileDirty && !window.confirm('导入会覆盖当前未保存的修改，继续吗？')) return;
-  const data = await runAction(dom.profileImport, () => postAction('import-profile-cv'));
-  if (!data) return;
-  populateProfileForm(data.profile);
-  state.profileDirty = true;
-  state.profilePrefillCount = profileCountPrefilled(data.profile);
-  renderProfile(data.profile);
-  showInline(dom.profileResult, data.message || '已填入建议字段，请核对后保存。', 'ok');
-  setStatus(data.message || '已填入建议字段，请核对后保存。', 'ok');
+function chooseProfileCv() {
+  if (state.profileImportBusy || !dom.profileImportFile) return;
+  dom.profileImportFile.value = '';
+  dom.profileImportFile.click();
+}
+
+async function importProfileFromCv(file) {
+  if (!file || !file.name || state.profileImportBusy) return;
+  if (!/\.(pdf|docx|md|txt)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
+    showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD 或 TXT 文件，最大 5 MB。', 'error');
+    return;
+  }
+  if (state.profileDirty && !window.confirm('Agent 会更新识别到的资料及教育、工作和项目经历；未识别的资料保留。继续吗？')) return;
+  state.profileImportBusy = true;
+  dom.profileImport.disabled = true;
+  dom.profileImport.setAttribute('aria-busy', 'true');
+  dom.profileDrop.setAttribute('aria-disabled', 'true');
+  dom.profileSave.disabled = true;
+  dom.profileImportPreview.hidden = true;
+  dom.profileImportText.textContent = '';
+  try {
+    showInline(dom.profileResult, '正在读取简历文件…', 'info');
+    const contentBase64 = await readFileAsBase64(file);
+    showInline(dom.profileResult, 'Agent 正在解析整份简历及教育、工作、项目经历，请稍候…', 'info');
+    const data = await postAction('import-profile-cv', { filename: file.name, content_base64: contentBase64 });
+    if (data.ok === false) throw new Error(data.message || '简历导入失败，请重新选择。');
+    const profile = collectProfileForm();
+    const suggested = data.profile || {};
+    Object.entries(suggested.basic || {}).forEach(([key, value]) => {
+      if (value) profile.basic[key] = value;
+    });
+    profile.skills.tools = [...new Set([...profile.skills.tools, ...(suggested.skills?.tools || [])])];
+    profile.skills.strengths = [...new Set([...profile.skills.strengths, ...(suggested.skills?.strengths || [])])];
+    ['education', 'experiences', 'projects'].forEach((key) => {
+      if (suggested[key]?.length) profile[key] = suggested[key];
+    });
+    ['titles', 'cities', 'availability'].forEach((key) => {
+      if (suggested.job_intent?.[key]?.length) profile.job_intent[key] = suggested.job_intent[key];
+    });
+    if (suggested.summary) profile.summary = suggested.summary;
+    profile.truth_confirmed = false;
+    populateProfileForm(profile);
+    state.profileDirty = true;
+    state.profilePrefillCount = profileCountPrefilled(profile);
+    renderProfile(profile);
+    dom.profileImportText.textContent = data.source_text || '';
+    dom.profileImportPreview.hidden = !data.source_text;
+    const counts = `教育 ${suggested.education?.length || 0} 条 · 工作/实习 ${suggested.experiences?.length || 0} 条 · 项目 ${suggested.projects?.length || 0} 条。`;
+    showInline(dom.profileResult, [data.message, counts, ...(data.warnings || [])].join('\n'), data.warnings?.length ? 'warn' : 'ok');
+    setStatus('简历已解析，请核对并确认真实性后保存。', 'ok');
+  } catch (error) {
+    showInline(dom.profileResult, friendlyError(error), 'error');
+    setStatus(friendlyError(error), 'error');
+  } finally {
+    state.profileImportBusy = false;
+    dom.profileImport.disabled = false;
+    dom.profileImport.removeAttribute('aria-busy');
+    dom.profileDrop.setAttribute('aria-disabled', 'false');
+    dom.profileSave.disabled = false;
+  }
+}
+
+/* Drag-and-drop for resume inputs: profile import, collect scoring resume, ATS PDF check. */
+function bindResumeDrops() {
+  const zones = [
+    ['profile-resume-drop', dom.profileImportFile, () => state.profileImportBusy],
+    ['collect-resume-drop', dom.collectResumeFile, () => Boolean(dom.collectResumeUpload && dom.collectResumeUpload.disabled)],
+    ['ats-resume-drop', dom.atsFile, () => Boolean(dom.atsSubmit && dom.atsSubmit.disabled)]
+  ];
+  const hasFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files');
+  zones.forEach(([id, input, disabled]) => {
+    const zone = document.getElementById(id);
+    if (!zone || !input) return;
+    const status = zone.querySelector('.resume-drop-status');
+    const say = (text) => { if (status) status.textContent = text; };
+    input.addEventListener('change', () => {
+      if (input.files[0]) say(`已选择：${input.files[0].name}`);
+    });
+    zone.addEventListener('dragover', (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = disabled() ? 'none' : 'copy';
+      zone.classList.toggle('is-dragging', !disabled());
+    });
+    zone.addEventListener('dragleave', (event) => {
+      if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-dragging');
+    });
+    zone.addEventListener('drop', (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      zone.classList.remove('is-dragging');
+      if (disabled()) {
+        say('正在处理文件，请稍候再拖入。');
+        return;
+      }
+      const files = event.dataTransfer.files;
+      if (files.length !== 1) {
+        say('请一次拖入一份简历文件。');
+        return;
+      }
+      const file = files[0];
+      const suffixes = input.accept.split(',').filter((value) => value.startsWith('.'));
+      if (!suffixes.some((suffix) => file.name.toLowerCase().endsWith(suffix)) || !file.size || file.size > 5 * 1024 * 1024) {
+        say(`请选择非空的 ${suffixes.join(' / ')} 文件，最大 5 MB。`);
+        return;
+      }
+      const selected = new DataTransfer();
+      selected.items.add(file);
+      input.files = selected.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+  ['dragover', 'drop'].forEach((type) => document.addEventListener(type, (event) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    if (type === 'drop' && !event.target.closest('.resume-dropzone')) setStatus('请将简历拖入对应的简历导入区域。', 'warn');
+  }));
+  if (dom.profileDrop) {
+    dom.profileDrop.addEventListener('click', chooseProfileCv);
+    dom.profileDrop.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        chooseProfileCv();
+      }
+    });
+  }
+  if (dom.profileImportFile) {
+    dom.profileImportFile.addEventListener('change', () => importProfileFromCv(dom.profileImportFile.files[0]));
+  }
 }
 
 /* OfferPilot bridge: status, controlled start/stop, read-only job snapshot */
@@ -4097,7 +4253,7 @@ async function startQueueDelivery(button) {
   state.queueDeliveryBatchId = String((data.batch && data.batch.batch_id) || '') || null;
   state.queueApprovedSelection.clear();
   updateQueueApprovedSelectionUI();
-  setStatus(data.message || '已提交发送；受窗口与日限约束。', 'ok');
+  setStatus(data.message || '已提交发送；受每日上限与随机间隔约束。', 'ok');
   await refreshOfferPilot();
   renderDeliveryProgress(state.snapshot);
   updateDeliveryStartState();
@@ -4359,6 +4515,291 @@ function sortHrConversationsByRecent(rows, now = new Date()) {
 }
 /* hr-inbox:end */
 
+/* HR 会话页：摘要 / 同步状态 / 未读角标
+   本地存储优先：列表和对话先显示已有内容，平台的增量同步只静默在后台跑。 */
+
+const HR_VISIBLE_PLATFORMS = ['boss', 'zhilian', 'liepin'];
+const HR_SUMMARY_URL = '/api/offerpilot/conversations/summary';
+const HR_SYNC_URL = '/api/offerpilot/conversations/sync';
+const HR_POLL_INTERVAL = 60000;
+const HR_SYNC_POLL_INTERVAL = 2500;
+const HR_SYNC_TIMEOUT = 45000;
+const HR_ENTER_SYNC_THROTTLE = 20000;
+
+function hrPad(value) {
+  return String(value).padStart(2, '0');
+}
+
+function hrClockLabel(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    const fallback = text.match(/(\d{1,2}):(\d{2})/);
+    return fallback ? `${hrPad(fallback[1])}:${fallback[2]}` : '';
+  }
+  const clock = `${hrPad(date.getHours())}:${hrPad(date.getMinutes())}`;
+  const now = new Date();
+  return date.toDateString() === now.toDateString()
+    ? clock
+    : `${date.getMonth() + 1}-${date.getDate()} ${clock}`;
+}
+
+function hrConversationTimeLabel(value) {
+  const stamp = hrMessageTime(value);
+  if (!Number.isFinite(stamp)) return '';
+  const date = new Date(stamp);
+  const now = new Date();
+  const clock = `${hrPad(date.getHours())}:${hrPad(date.getMinutes())}`;
+  if (date.toDateString() === now.toDateString()) return clock;
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${date.getMonth() + 1}-${date.getDate()} ${clock}`;
+  }
+  return `${date.getFullYear()}-${hrPad(date.getMonth() + 1)}-${hrPad(date.getDate())}`;
+}
+
+function hrMessageStamp(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const compact = hrConversationTimeLabel(text);
+  if (compact) return compact;
+  const full = formatDateTime(text);
+  return full === '—' ? '' : full;
+}
+
+function hrUnreadFromConversations() {
+  return (Array.isArray(state.hrConversations) ? state.hrConversations : [])
+    .filter((row) => row && row.unread && !hrPlatformHidden(row.platform))
+    .length;
+}
+
+function hrSetNavUnread(count) {
+  const total = Math.max(0, toInt(count));
+  state.hrUnreadTotal = total;
+  if (!dom.hrNavUnread) return;
+  dom.hrNavUnread.hidden = total === 0;
+  dom.hrNavUnread.textContent = total > 99 ? '99+' : String(total);
+  dom.hrNavUnread.setAttribute('aria-label', total ? `${total} 条未读 HR 消息` : '没有未读 HR 消息');
+}
+
+function hrRenderSyncStatus() {
+  if (!dom.hrSyncStatus) return;
+  const clock = hrClockLabel(state.hrLastSyncedAt);
+  let text = '尚未同步';
+  let status = 'idle';
+  if (state.hrSyncing) {
+    text = clock ? `上次同步 ${clock} · 正在同步` : '正在同步…';
+    status = 'syncing';
+  } else if (clock) {
+    text = `上次同步 ${clock} · 已是最新`;
+    status = 'ok';
+  }
+  dom.hrSyncStatus.dataset.state = status;
+  dom.hrSyncStatus.setAttribute('aria-label', text);
+  if (dom.hrSyncText) dom.hrSyncText.textContent = text;
+}
+
+function hrSetMobilePane(pane) {
+  state.hrMobilePane = pane === 'thread' ? 'thread' : 'list';
+  if (dom.hrLayout) dom.hrLayout.dataset.hrPane = state.hrMobilePane;
+}
+
+function hrOnMailView() {
+  const view = document.getElementById('view-mail');
+  return Boolean(view && !view.hidden);
+}
+
+function hrPageVisible() {
+  return document.visibilityState !== 'hidden';
+}
+
+// 新接口可能还没落到本机后端；404/405 时安静退回旧的会话列表接口。
+async function hrRequestJson(url, options = {}) {
+  const response = await fetch(url, options);
+  if (response.status === 404 || response.status === 405) {
+    const error = new Error(`本机后端还没有这个接口（HTTP ${response.status}）。`);
+    error.missing = true;
+    throw error;
+  }
+  return parseResponse(response);
+}
+
+function hrPlatformStatusRows() {
+  const summary = state.hrPlatformSummary && typeof state.hrPlatformSummary === 'object'
+    ? state.hrPlatformSummary
+    : {};
+  const counts = {};
+  state.hrConversations.forEach((row) => {
+    if (!row || hrPlatformHidden(row.platform)) return;
+    const key = String(row.platform || 'boss');
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return HR_VISIBLE_PLATFORMS.map((platform) => {
+    const entry = summary[platform] && typeof summary[platform] === 'object' ? summary[platform] : null;
+    return {
+      platform,
+      count: entry && entry.count !== undefined ? toInt(entry.count) : (counts[platform] || 0),
+      unread: entry && entry.unread !== undefined ? toInt(entry.unread) : 0,
+      source: String((entry && entry.source) || ''),
+      clock: hrClockLabel(entry && entry.last_synced_at),
+      error: String((entry && entry.error) || state.hrPlatformErrors[platform] || '')
+    };
+  });
+}
+
+// 每个平台一行：成功显示同步时间与来源，失败只标这一行，不影响其他平台。
+function renderHrPlatformStatus(unavailable) {
+  if (!dom.hrPlatformStatus) return;
+  clear(dom.hrPlatformStatus);
+  dom.hrPlatformStatus.hidden = Boolean(unavailable);
+  if (unavailable) return;
+  const rows = hrPlatformStatusRows();
+  dom.hrPlatformStatus.hidden = !rows.length;
+  rows.forEach((row) => {
+    const node = el('div', { className: `hr-platform-row${row.error ? ' is-error' : ''}` });
+    node.append(el('span', { className: 'hr-platform-row-name' }, [
+      el('span', { className: 'hr-platform-dot', attrs: { 'aria-hidden': 'true' } }),
+      el('span', { text: channelLabel(row.platform) })
+    ]));
+    const sourceLabel = row.source === 'api' ? '接口' : row.source === 'dom' ? '页面' : '';
+    const detailText = row.error
+      ? row.error
+      : [
+        `${row.count} 个会话`,
+        row.unread ? `${row.unread} 未读` : '',
+        row.clock ? `已同步 ${row.clock}` : '',
+        sourceLabel
+      ].filter(Boolean).join(' · ');
+    const detail = el('span', { className: 'hr-platform-row-detail', text: detailText });
+    if (row.error) detail.setAttribute('title', row.error);
+    node.append(detail);
+    dom.hrPlatformStatus.append(node);
+  });
+}
+
+async function hrLoadSummary() {
+  if (state.hrSummaryLoading) return;
+  state.hrSummaryLoading = true;
+  const mode = state.mode;
+  try {
+    const data = await hrRequestJson(`${HR_SUMMARY_URL}?mode=${encodeURIComponent(mode)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    if (state.mode !== mode) return;
+    state.hrSyncSupported = true;
+    state.hrSummary = data && typeof data === 'object' ? data : {};
+    state.hrPlatformSummary = state.hrSummary.by_platform && typeof state.hrSummary.by_platform === 'object'
+      ? state.hrSummary.by_platform
+      : {};
+    if (state.hrSummary.last_synced_at) {
+      state.hrLastSyncedAt = String(state.hrSummary.last_synced_at);
+    }
+    hrSetNavUnread(toInt(state.hrSummary.unread_total));
+    hrRenderSyncStatus();
+    renderHrPlatformStatus(state.hrAvailable === false);
+  } catch (error) {
+    if (state.mode !== mode) return;
+    if (error && error.missing) {
+      state.hrSyncSupported = false;
+      state.hrPlatformSummary = {};
+      hrSetNavUnread(hrUnreadFromConversations());
+      renderHrPlatformStatus(state.hrAvailable === false);
+    }
+  } finally {
+    state.hrSummaryLoading = false;
+  }
+}
+
+function hrSleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+// 同步是后台任务：POST 只负责启动，随后轮询摘要里的 last_synced_at 判断完成。
+async function hrTriggerSync() {
+  if (state.hrSyncing || state.hrSyncSupported === false) return;
+  state.hrSyncing = true;
+  state.hrSyncBaseline = state.hrLastSyncedAt;
+  hrRenderSyncStatus();
+  const results = await Promise.all(HR_VISIBLE_PLATFORMS.map(async (platform) => {
+    try {
+      await hrRequestJson(HR_SYNC_URL, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform })
+      });
+      return { platform, missing: false };
+    } catch (error) {
+      return { platform, missing: Boolean(error && error.missing) };
+    }
+  }));
+  if (results.some((row) => row.missing)) {
+    state.hrSyncSupported = false;
+    state.hrSyncing = false;
+    hrRenderSyncStatus();
+    renderHrPlatformStatus(state.hrAvailable === false);
+    return;
+  }
+  const startedAt = Date.now();
+  let finished = false;
+  while (Date.now() - startedAt < HR_SYNC_TIMEOUT) {
+    await hrSleep(HR_SYNC_POLL_INTERVAL);
+    await hrLoadSummary();
+    if (state.hrSyncSupported === false) break;
+    if (state.hrLastSyncedAt && state.hrLastSyncedAt !== state.hrSyncBaseline) {
+      finished = true;
+      break;
+    }
+  }
+  await loadHrConversations({ quiet: true });
+  await hrLoadSummary();
+  if (finished && state.hrSelectedId) await loadHrThread(state.hrSelectedId, { quiet: true });
+  state.hrSyncing = false;
+  hrRenderSyncStatus();
+  renderHrPlatformStatus(state.hrAvailable === false);
+}
+
+// 进入 HR 页：先显示本地已有会话，再静默触发一次增量同步。
+function hrEnterPage() {
+  hrSetMobilePane('list');
+  // 摘要和本地列表并行读取；两者都回来后再决定是否启动同步。
+  const summary = hrLoadSummary();
+  Promise.resolve(ensureHrConversationsLoaded()).then(() => summary).then(() => {
+    const now = Date.now();
+    if (now - state.hrSyncTriggeredAt < HR_ENTER_SYNC_THROTTLE) return;
+    state.hrSyncTriggeredAt = now;
+    hrTriggerSync();
+  });
+}
+
+async function hrPollTick() {
+  if (!hrPageVisible() || state.hrPollBusy) return;
+  state.hrPollBusy = true;
+  try {
+    await hrLoadSummary();
+    if (!hrOnMailView()) return;
+    if (state.hrSyncSupported !== false) {
+      await hrTriggerSync();
+    } else {
+      await loadHrConversations({ quiet: true, refreshThread: true });
+    }
+  } finally {
+    state.hrPollBusy = false;
+  }
+}
+
+function hrStartPolling() {
+  if (state.hrPollTimer) return;
+  state.hrPollTimer = window.setInterval(hrPollTick, HR_POLL_INTERVAL);
+  document.addEventListener('visibilitychange', () => {
+    if (!hrPageVisible()) return;
+    hrLoadSummary();
+    if (hrOnMailView()) hrPollTick();
+  });
+  hrLoadSummary();
+}
+
 function filteredHrConversations() {
   const query = state.hrSearch.trim().toLowerCase();
   return state.hrConversations.filter((conversation) => {
@@ -4434,13 +4875,18 @@ function renderHrConversations() {
       `${state.hrReason || 'HR 会话暂不可用。'} 请先在本机 Chrome 登录各招聘平台（BOSS / 智联 / 猎聘）、打开调试端口，再点「刷新会话」。`,
       false
     );
-  } else if (state.hrConversationsLoading) {
+  } else if (state.hrConversationsLoading && !state.hrConversations.length) {
     showHrStatus('正在读取本机会话…', true);
   } else {
     hideHrStatus();
   }
   renderHrPlatformErrors(unavailable);
-  if (dom.hrRefresh) dom.hrRefresh.disabled = state.hrConversationsLoading;
+  renderHrPlatformStatus(unavailable);
+  hrRenderSyncStatus();
+  if (state.hrSyncSupported === false) {
+    hrSetNavUnread(unavailable ? 0 : hrUnreadFromConversations());
+  }
+  if (dom.hrRefresh) dom.hrRefresh.disabled = state.hrConversationsLoading || state.hrSyncing;
   if (dom.hrPlatformSelect && dom.hrPlatformSelect.value !== state.hrPlatform) {
     dom.hrPlatformSelect.value = state.hrPlatform;
   }
@@ -4463,14 +4909,24 @@ function renderHrConversations() {
     let emptyText = '暂无 HR 会话。';
     if (unavailable) emptyText = '会话不可用。';
     else if (state.hrConversations.length) emptyText = '没有匹配的会话。';
-    dom.hrConversationList.append(el('p', { className: 'hr-empty', text: emptyText }));
+    else if (state.hrConversationsLoading) emptyText = '正在读取本机会话…';
+    const empty = el('div', { className: 'hr-empty-block' });
+    empty.append(el('p', { className: 'hr-empty', text: emptyText }));
+    if (!unavailable && !state.hrConversations.length && !state.hrConversationsLoading) {
+      empty.append(el('p', {
+        className: 'hr-empty-hint',
+        text: '进入这一页会自动在后台同步一次；也可以点「刷新会话」立即读取。'
+      }));
+    }
+    dom.hrConversationList.append(empty);
   } else {
     conversations.forEach((conversation) => {
       const id = String(conversation.id || '');
       const active = id === state.hrSelectedId;
-      const top = el('span', { className: 'hr-conversation-top' }, [
-        el('strong', { className: 'hr-conversation-hr', text: String(conversation.hr_name || 'HR') })
-      ]);
+      const unread = Boolean(conversation.unread);
+      const top = el('span', { className: 'hr-conversation-top' });
+      if (unread) top.append(el('span', { className: 'hr-unread-dot', attrs: { 'aria-hidden': 'true' } }));
+      top.append(el('strong', { className: 'hr-conversation-hr', text: String(conversation.hr_name || 'HR') }));
       const tags = el('span', { className: 'hr-conversation-tags' });
       if (conversation.platform) {
         tags.append(el('span', {
@@ -4478,15 +4934,15 @@ function renderHrConversations() {
           text: channelLabel(conversation.platform)
         }));
       }
-      if (conversation.unread) tags.append(badge('未读', 'good', '•'));
+      if (unread) tags.append(badge('未读', 'good', '•'));
       if (tags.childNodes.length) top.append(tags);
       const platformLabel = channelLabel(conversation.platform);
       const item = el('button', {
-        className: `hr-conversation${active ? ' is-active' : ''}`,
+        className: `hr-conversation${active ? ' is-active' : ''}${unread ? ' is-unread' : ''}`,
         attrs: {
           type: 'button',
           'aria-current': active ? 'true' : 'false',
-          'aria-label': `${conversation.hr_name || 'HR'}，${conversation.company || '未填写公司'}，${conversation.title || '未填写岗位'}，${platformLabel}${conversation.unread ? '，未读' : ''}`
+          'aria-label': `${conversation.hr_name || 'HR'}，${conversation.company || '未填写公司'}，${conversation.title || '未填写岗位'}，${platformLabel}${unread ? '，未读' : ''}`
         }
       }, [
         top,
@@ -4494,14 +4950,16 @@ function renderHrConversations() {
           className: 'hr-conversation-sub',
           text: [conversation.hr_title, conversation.company, conversation.title].filter(Boolean).join(' · ') || '—'
         }),
-        el('span', {
-          className: 'hr-conversation-last',
-          text: String(conversation.last_message || '暂无消息')
-        }),
-        el('span', {
-          className: 'hr-conversation-time',
-          text: formatDateTime(conversation.last_message_at)
-        })
+        el('span', { className: 'hr-conversation-bottom' }, [
+          el('span', {
+            className: 'hr-conversation-last',
+            text: String(conversation.last_message || '暂无消息')
+          }),
+          el('span', {
+            className: 'hr-conversation-time',
+            text: hrConversationTimeLabel(conversation.last_message_at)
+          })
+        ])
       ]);
       item.addEventListener('click', () => selectHrConversation(id));
       dom.hrConversationList.append(item);
@@ -4510,14 +4968,64 @@ function renderHrConversations() {
   renderHrThread();
 }
 
+function hrConversationScore(conversation) {
+  const direct = conversation && (conversation.score !== undefined
+    ? conversation.score
+    : conversation.job_score !== undefined
+      ? conversation.job_score
+      : conversation.match_score);
+  if (direct !== undefined && direct !== null && direct !== '' && Number.isFinite(Number(direct))) {
+    return Number(direct);
+  }
+  const jobId = String((conversation && conversation.job_id) || '');
+  if (!jobId) return null;
+  const jobs = state.snapshot && Array.isArray(state.snapshot.jobs) ? state.snapshot.jobs : [];
+  const job = jobs.find((row) => String((row && row.id) || '') === jobId);
+  const score = job ? job.score : undefined;
+  if (score === undefined || score === null || score === '') return null;
+  return Number.isFinite(Number(score)) ? Number(score) : null;
+}
+
+function renderHrJobCard(conversation) {
+  if (!dom.hrDetailJob) return;
+  clear(dom.hrDetailJob);
+  if (!conversation || !conversation.job_id) {
+    dom.hrDetailJob.append(el('span', { className: 'hr-muted', text: '未关联岗位' }));
+    return;
+  }
+  const score = hrConversationScore(conversation);
+  const body = el('div', { className: 'hr-job-card-body' });
+  body.append(el('span', { className: 'hr-job-card-label', text: '关联岗位' }));
+  body.append(el('strong', {
+    className: 'hr-job-card-title',
+    text: [conversation.company, conversation.title].filter(Boolean).join(' · ') || '已关联岗位'
+  }));
+  body.append(el('span', {
+    className: 'hr-job-card-score',
+    text: score === null ? '未评分' : `匹配 ${formatScore(score)}`
+  }));
+  const jobButton = el('button', {
+    className: 'button button-quiet button-small',
+    attrs: { type: 'button' },
+    text: '查看岗位'
+  });
+  jobButton.addEventListener('click', () => jumpToHrJob(conversation));
+  dom.hrDetailJob.append(el('div', { className: 'hr-job-card' }, [body, jobButton]));
+}
+
 function renderHrThread() {
   if (!dom.hrMessages) return;
   const conversation = state.hrThread && state.hrThread.conversation
     ? state.hrThread.conversation
     : hrConversationById(state.hrSelectedId);
+  // 后台刷新只追加内容：用户正往上翻时不跳回底部。
+  const viewport = dom.hrMessages;
+  const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 32;
+  const previousTop = viewport.scrollTop;
   clear(dom.hrMessages);
   clear(dom.hrDetailJob);
   if (!conversation) {
+    state.hrThreadRenderedKey = '';
     dom.hrDetailTitle.textContent = '选择一个 HR 会话';
     dom.hrDetailMeta.textContent = '';
     if (dom.hrReplyInput) dom.hrReplyInput.value = '';
@@ -4528,33 +5036,22 @@ function renderHrThread() {
       dom.hrReplyBlockReason.hidden = true;
       dom.hrReplyBlockReason.textContent = '';
     }
-    dom.hrMessages.append(el('p', {
-      className: 'hr-empty',
-      text: '从左侧选择一位 HR，查看完整对话。'
-    }));
+    dom.hrDetailJob.append(el('span', { className: 'hr-muted', text: '未关联岗位' }));
+    dom.hrMessages.append(el('div', { className: 'hr-empty-block' }, [
+      el('p', { className: 'hr-empty', text: '从左侧选择一位 HR，查看完整对话。' })
+    ]));
     return;
   }
+  const key = String(conversation.id || '');
   dom.hrDetailTitle.textContent = String(conversation.hr_name || 'HR');
   dom.hrDetailMeta.textContent = [
     conversation.platform ? channelLabel(conversation.platform) : '',
-    conversation.hr_title,
-    conversation.company,
-    conversation.title
+    conversation.hr_title
   ].filter(Boolean).join(' · ');
-  if (conversation.job_id) {
-    const jobButton = el('button', {
-      className: 'button button-quiet button-small',
-      attrs: { type: 'button' },
-      text: '查看岗位'
-    });
-    jobButton.addEventListener('click', () => jumpToHrJob(conversation));
-    dom.hrDetailJob.append(jobButton);
-  } else {
-    dom.hrDetailJob.append(el('span', { className: 'hr-muted', text: '未关联岗位' }));
-  }
+  renderHrJobCard(conversation);
 
   const thread = state.hrThread && state.hrThread.conversation
-    && String(state.hrThread.conversation.id) === String(conversation.id)
+    && String(state.hrThread.conversation.id) === key
     ? state.hrThread
     : null;
   const messages = thread && Array.isArray(thread.messages) ? thread.messages : [];
@@ -4582,17 +5079,25 @@ function renderHrThread() {
     messages.forEach((message) => {
       const sender = String((message && message.sender) || 'system');
       const kind = sender === 'hr' ? 'hr' : sender === 'me' ? 'me' : 'system';
-      const bubble = el('article', { className: `hr-message hr-message-${kind}` });
+      const bubble = el('article', {
+        className: `hr-message hr-message-${kind}`,
+        attrs: { 'data-sender': kind }
+      });
       const who = kind === 'hr' ? (conversation.hr_name || 'HR') : kind === 'me' ? '我' : '系统';
-      const stamp = formatDateTime(message && message.time);
+      const stamp = hrMessageStamp(message && message.time);
       bubble.append(el('p', {
         className: 'hr-message-meta',
-        text: stamp && stamp !== '—' ? `${who} · ${stamp}` : who
+        text: kind === 'system' ? (stamp || who) : (stamp ? `${who} · ${stamp}` : who)
       }));
       bubble.append(el('p', { className: 'hr-message-text', text: String((message && message.text) || '') }));
       dom.hrMessages.append(bubble);
     });
-    dom.hrMessages.scrollTop = dom.hrMessages.scrollHeight;
+  }
+  if (viewport) {
+    const switching = state.hrThreadRenderedKey !== key;
+    state.hrThreadRenderedKey = key;
+    if (switching || atBottom) viewport.scrollTop = viewport.scrollHeight;
+    else viewport.scrollTop = previousTop;
   }
 
   const allowed = Boolean(thread && thread.reply_allowed);
@@ -4604,7 +5109,7 @@ function renderHrThread() {
       : (blockReason || (state.hrThreadLoading ? '正在读取对话…' : '当前会话暂时不能回复。'));
   }
   if (dom.hrReplyInput) dom.hrReplyInput.disabled = !allowed;
-  const draft = state.hrDrafts[String(conversation.id)] || '';
+  const draft = state.hrDrafts[key] || '';
   if (dom.hrReplyInput && document.activeElement !== dom.hrReplyInput) {
     dom.hrReplyInput.value = draft;
   }
@@ -4637,19 +5142,28 @@ async function ensureHrConversationsLoaded(force = false) {
     state.hrAvailable = null;
     state.hrReason = '';
     state.hrPlatformErrors = {};
+    state.hrSummary = null;
+    state.hrPlatformSummary = {};
+    state.hrUnreadTotal = 0;
+    state.hrLastSyncedAt = '';
+    state.hrSyncSupported = null;
+    state.hrSyncing = false;
+    state.hrThreadRenderedKey = '';
   }
   if (!force && state.hrConversationsLoaded && state.hrMode === state.mode) return;
   if (state.hrConversationsLoading) return;
   await loadHrConversations();
 }
 
-async function loadHrConversations() {
+async function loadHrConversations(options = {}) {
   const mode = state.mode;
   const seq = ++state.hrSeq;
-  state.hrConversationsLoading = true;
-  renderHrConversations();
+  const quiet = Boolean(options.quiet);
+  state.hrConversationsLoading = !quiet;
+  if (!quiet) renderHrConversations();
+  let data = null;
   try {
-    const response = await fetch(
+    data = await hrRequestJson(
       `/api/offerpilot/conversations?platform=all&mode=${encodeURIComponent(mode)}`,
       {
         method: 'GET',
@@ -4657,8 +5171,7 @@ async function loadHrConversations() {
         cache: 'no-store'
       }
     );
-    const data = await parseResponse(response);
-    if (seq !== state.hrSeq) return;
+    if (seq !== state.hrSeq) return null;
     state.hrMode = mode;
     state.hrConversationsLoaded = true;
     state.hrAvailable = Boolean(data && data.available !== false);
@@ -4667,6 +5180,7 @@ async function loadHrConversations() {
     state.hrConversations = state.hrAvailable && Array.isArray(data.conversations)
       ? data.conversations
       : [];
+    if (data && data.last_synced_at) state.hrLastSyncedAt = String(data.last_synced_at);
     if (!state.hrAvailable) {
       state.hrSelectedId = '';
       state.hrThread = null;
@@ -4676,24 +5190,32 @@ async function loadHrConversations() {
       state.hrSelectedId = first ? String(first.id || '') : '';
       state.hrThread = null;
       if (state.hrSelectedId) loadHrThread(state.hrSelectedId, { quiet: true });
+    } else if (options.refreshThread) {
+      loadHrThread(state.hrSelectedId, { quiet: true });
     }
+    if (state.hrSyncSupported === false) hrSetNavUnread(hrUnreadFromConversations());
   } catch (error) {
-    if (seq !== state.hrSeq) return;
-    state.hrMode = mode;
-    state.hrConversationsLoaded = true;
-    state.hrAvailable = false;
-    state.hrReason = `读取会话失败：${friendlyError(error)}`;
-    state.hrConversations = [];
-    state.hrSelectedId = '';
-    state.hrThread = null;
-    state.hrThreads = {};
-    state.hrPlatformErrors = {};
+    if (seq !== state.hrSeq) return null;
+    // 后台刷新失败时保留已显示的本地会话；首次读取失败才整体标为不可用。
+    if (!quiet || !state.hrConversations.length) {
+      state.hrMode = mode;
+      state.hrConversationsLoaded = true;
+      state.hrAvailable = false;
+      state.hrReason = `读取会话失败：${friendlyError(error)}`;
+      state.hrConversations = [];
+      state.hrSelectedId = '';
+      state.hrThread = null;
+      state.hrThreads = {};
+      state.hrPlatformErrors = {};
+    }
+    if (error && error.missing) state.hrSyncSupported = false;
   } finally {
     if (seq === state.hrSeq) {
       state.hrConversationsLoading = false;
       renderHrConversations();
     }
   }
+  return data;
 }
 
 async function loadHrThread(id, options = {}) {
@@ -4709,11 +5231,10 @@ async function loadHrThread(id, options = {}) {
   state.hrThreadLoading = true;
   if (!options.quiet) renderHrThread();
   try {
-    const response = await fetch(
+    const data = await hrRequestJson(
       `/api/offerpilot/conversation?platform=${encodeURIComponent(platform)}&mode=${encodeURIComponent(mode)}&id=${encodeURIComponent(key)}`,
       { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' }
     );
-    const data = await parseResponse(response);
     if (state.mode !== mode || String(state.hrSelectedId) !== key) return;
     const base = hrConversationById(key) || {};
     const nested = data && data.conversation && typeof data.conversation === 'object'
@@ -4746,7 +5267,7 @@ async function loadHrThread(id, options = {}) {
       }
     }
   } catch (error) {
-    if (state.mode === mode && String(state.hrSelectedId) === key) {
+    if (state.mode === mode && String(state.hrSelectedId) === key && !options.quiet) {
       state.hrThread = null;
       setStatus(`读取对话失败：${friendlyError(error)}`, 'error');
     }
@@ -4762,10 +5283,12 @@ function selectHrConversation(id) {
   const key = String(id || '');
   if (!key) return;
   state.hrSelectedId = key;
+  // 已读过的会话先显示本机缓存，再在后台增量读取。
   state.hrThread = state.hrThreads[key] || null;
-  state.hrThreadLoading = true;
+  state.hrThreadLoading = !state.hrThread;
+  hrSetMobilePane('thread');
   renderHrConversations();
-  loadHrThread(key);
+  loadHrThread(key, { quiet: Boolean(state.hrThread) });
 }
 
 function jumpToHrJob(conversation) {
@@ -6990,6 +7513,56 @@ function renderConfig(snapshot) {
   renderDefinitionList(dom.configSummary, rows);
 }
 
+/* AI settings (08 设置): the stored API key is never sent back to the page. */
+
+function renderAiSettings(settings) {
+  if (!dom.aiSettingsForm || !settings) return;
+  dom.aiSettingsService.value = settings.service || 'anthropic';
+  dom.aiSettingsModel.value = settings.model || '';
+  dom.aiSettingsBaseUrl.value = settings.base_url || '';
+  dom.aiSettingsKey.value = '';
+  dom.aiSettingsKey.placeholder = settings.key_configured ? '已保存密钥；留空表示不修改' : '尚未保存密钥';
+  dom.aiSettingsBadge.textContent = settings.key_configured ? '已配置' : '未配置密钥';
+  dom.aiSettingsBadge.className = `badge ${settings.key_configured ? 'badge-good' : 'badge-warn'}`;
+}
+
+async function loadAiSettings() {
+  if (!dom.aiSettingsForm) return;
+  try {
+    const data = await postAction('get-ai-settings');
+    renderAiSettings(data);
+  } catch (error) {
+    dom.aiSettingsBadge.textContent = '读取失败';
+    showInline(dom.aiSettingsResult, friendlyError(error), 'error');
+  }
+}
+
+async function saveAiSettings(event) {
+  event.preventDefault();
+  const payload = {
+    service: dom.aiSettingsService.value,
+    model: dom.aiSettingsModel.value.trim(),
+    base_url: dom.aiSettingsBaseUrl.value.trim(),
+    api_key: dom.aiSettingsKey.value.trim()
+  };
+  const data = await runAction(dom.aiSettingsSave, () => postAction('save-ai-settings', payload));
+  dom.aiSettingsKey.value = '';
+  if (!data) return;
+  renderAiSettings(data.settings);
+  showInline(dom.aiSettingsResult, data.message || 'AI 接口设置已保存', 'ok');
+  setStatus(data.message || 'AI 接口设置已保存', 'ok');
+}
+
+async function testAiSettings() {
+  const data = await runAction(dom.aiSettingsTest, () => postAction('test-ai-connection'));
+  if (!data) return;
+  if (data.ok) {
+    showInline(dom.aiSettingsResult, `连接成功：模型 ${data.model || ''}，耗时 ${data.elapsed_ms} 毫秒，回复「${data.reply || ''}」`, 'ok');
+  } else {
+    showInline(dom.aiSettingsResult, `连接失败：${data.reason || '未知原因'}`, 'error');
+  }
+}
+
 function renderData(snapshot) {
   const downloads = Array.isArray(snapshot.downloads) ? snapshot.downloads : [];
   renderTable(dom.downloadsTable, {
@@ -7221,8 +7794,9 @@ function bindEvents() {
     dom.profileForm.addEventListener('submit', saveProfileForm);
   }
   if (dom.profileImport) {
-    dom.profileImport.addEventListener('click', importProfileFromCv);
+    dom.profileImport.addEventListener('click', chooseProfileCv);
   }
+  bindResumeDrops();
   document.querySelectorAll('[data-profile-add]').forEach((button) => {
     button.addEventListener('click', () => addProfileRow(button.dataset.profileAdd, {}));
   });
@@ -7483,8 +8057,14 @@ function bindEvents() {
 
   if (dom.hrRefresh) {
     dom.hrRefresh.addEventListener('click', () => {
-      ensureHrConversationsLoaded(true);
+      hrLoadSummary();
+      Promise.resolve(ensureHrConversationsLoaded(true)).then(() => {
+        if (state.hrSyncSupported !== false) hrTriggerSync();
+      });
     });
+  }
+  if (dom.hrMobileBack) {
+    dom.hrMobileBack.addEventListener('click', () => hrSetMobilePane('list'));
   }
   if (dom.hrSearch) {
     dom.hrSearch.addEventListener('input', () => {
@@ -7537,6 +8117,12 @@ function bindEvents() {
       if (!id) return;
       state.hrDrafts[id] = dom.hrReplyInput.value;
       updateHrComposerState();
+    });
+    // Ctrl/⌘ + Enter 只打开确认框；真正发送仍要点确认。
+    dom.hrReplyInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      openHrReplyModal(dom.hrReplySend);
     });
   }
   if (dom.hrReplyModalCancel) {
@@ -7647,6 +8233,11 @@ function bindEvents() {
   dom.runTestsButton.addEventListener('click', runTests);
   dom.webReportButton.addEventListener('click', generateWebReport);
   dom.exportButton.addEventListener('click', exportData);
+  if (dom.aiSettingsForm) {
+    dom.aiSettingsForm.addEventListener('submit', saveAiSettings);
+    if (dom.aiSettingsTest) dom.aiSettingsTest.addEventListener('click', testAiSettings);
+    loadAiSettings();
+  }
   
   dom.dryRunForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -7698,6 +8289,7 @@ function init() {
   showView('workbench');
   bindEvents();
   bindAmbient();
+  hrStartPolling();
   updateQueueSelectionUI();
   loadState({ announce: true });
 }

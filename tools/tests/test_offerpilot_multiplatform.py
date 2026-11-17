@@ -71,6 +71,10 @@ class _FakePlatformMonitor:
             {"sender": "unknown", "text": "x" * 800},
         ]
 
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
+
     def _open_monitor_tab(self, url, config, *, background=True):
         self.urls.append(url)
         self.opened += 1
@@ -230,7 +234,7 @@ class PlatformChatTests(unittest.TestCase):
 
     def test_reply_is_refused_for_non_boss_platforms(self):
         listing = self._list("zhilian")
-        with patch.object(offerpilot_runtime, "_send_window_open", return_value=True), patch.object(
+        with patch.object(
             offerpilot_runtime, "_stop_requested", return_value=False
         ), patch.object(offerpilot_runtime, "_risk_lock_reason", return_value=None):
             with self.assertRaises(ValueError) as ctx:
@@ -292,7 +296,7 @@ class BackendChatDispatchTests(unittest.TestCase):
     def test_backend_passes_platform_through(self):
         with patch.object(
             offerpilot_runtime,
-            "list_conversations",
+            "cached_conversations",
             return_value={"ok": True, "available": True, "platform": "liepin", "conversations": [], "count": 0},
         ) as listing, patch.object(
             offerpilot_runtime,
@@ -423,10 +427,9 @@ class ConversationAggregationTests(unittest.TestCase):
         listing = self._aggregate_with(results)
         row = listing["conversations"][0]
         canned = {"ok": True, "available": True, "platform": "zhilian", "conversation_id": row["id"], "messages": []}
-        with patch.object(offerpilot_runtime, "_get_platform_thread", return_value=canned) as reader:
+        with patch.object(offerpilot_runtime, "_get_zhilian_thread", return_value=canned) as reader:
             thread = offerpilot_runtime.get_thread(row["id"], "all")
         reader.assert_called_once()
-        self.assertEqual(reader.call_args.args[1], "zhilian")
         self.assertEqual(thread["platform"], "zhilian")
 
     def test_thread_platform_mismatch_is_rejected(self):

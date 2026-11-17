@@ -17,7 +17,7 @@ from offerpilot.db import (
     get_db, get_jobs_by_status,
     update_job_status, add_history, add_risk_event, set_platform_safety_lock,
 )
-from offerpilot.throttle import RequestThrottle, SendWindowChecker
+from offerpilot.throttle import RequestThrottle
 from offerpilot.platform_safety import (
     PlatformAccessGuard,
     PlatformSafetyStop,
@@ -874,10 +874,8 @@ def _generate_auto_reply(messages: list[dict], job: dict, config: dict) -> str |
 
 def _send_message_in_chat(target_id: str, message: str, config: dict | None = None) -> bool:
     """Send a text message in the current open chat via Vue handleSubmit."""
-    if config is not None:
-        windows = config.get("throttle", {}).get("send_windows", ["09:00-16:00"])
-        if stop_requested(config) or not SendWindowChecker(windows).is_active():
-            return False
+    if config is not None and stop_requested(config):
+        return False
     js_send = f"""
     (() => {{
         const input = document.querySelector('#chat-input');
@@ -2093,12 +2091,6 @@ def monitor_and_send_resumes(config: dict) -> dict:
     throttle_config = config.get("throttle", {})
     stop_event = get_stop_event(config)
     if stop_event and stop_event.is_set():
-        return {"skipped": 0, "pending": 0, "replied": 0, "needs_resume": 0, "rejected": 0, "failed": 0}
-
-    # Time window check (09:00-16:00)
-    window_checker = SendWindowChecker(throttle_config.get("send_windows", ["09:00-16:00"]))
-    if not window_checker.is_active():
-        console.print("[yellow]当前不在配置的发送时间窗口内[/yellow]")
         return {"skipped": 0, "pending": 0, "replied": 0, "needs_resume": 0, "rejected": 0, "failed": 0}
 
     operation_multiplier = get_boss_operation_interval_multiplier(config)

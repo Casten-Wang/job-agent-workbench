@@ -135,8 +135,13 @@ class HrReplyPageMarkupTests(unittest.TestCase):
         self.assertIn("channelLabel(conversation.platform)", self.hr)
         self.assertIn("hr-platform-badge", self.hr)
         self.assertNotIn("/api/offerpilot/conversations?", self.hr.replace("/api/offerpilot/conversations?platform=all&mode=", ""))
-        # 只读 GET；不得用写方法请求会话。
-        self.assertNotIn("method: 'POST'", self.hr)
+        # 摘要与同步只读本机存储、后台增量读取；唯一的 POST 只用来启动同步，
+        # 回复仍然只走确认框里的 offerpilot-reply。
+        self.assertIn("const HR_SUMMARY_URL = '/api/offerpilot/conversations/summary';", self.hr)
+        self.assertIn("const HR_SYNC_URL = '/api/offerpilot/conversations/sync';", self.hr)
+        self.assertEqual(self.hr.count("method: 'POST'"), 1)
+        self.assertIn("hrRequestJson(HR_SYNC_URL,", self.hr)
+        self.assertIn("body: JSON.stringify({ platform })", self.hr)
 
     def test_unavailable_state_is_explained_in_place(self):
         self.assertIn("请先在本机 Chrome 登录各招聘平台（BOSS / 智联 / 猎聘）、打开调试端口", self.hr)
@@ -381,6 +386,109 @@ class HrReplyStyleTests(unittest.TestCase):
         mobile = self.theme[self.theme.index("@media (max-width: 900px)") :]
         self.assertIn(".hr-layout", mobile)
         self.assertIn("grid-template-columns: minmax(0, 1fr)", mobile)
+
+
+class HrFrontendSyncAndStatesTests(unittest.TestCase):
+    """本地优先的会话页：进入即显示，后台增量同步，失败只影响单个平台。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read(INDEX)
+        cls.script = _read(APP)
+        cls.theme = _read(THEME)
+        cls.hr = _hr_block(cls.script)
+        cls.mail_view = _between(cls.html, 'id="view-mail"', 'id="view-interview"')
+
+    def test_entering_the_page_shows_local_data_and_syncs_in_background(self):
+        show_view = _between(self.script, "function showView(", "function clearTransientResults(")
+        self.assertIn("hrEnterPage();", show_view)
+        enter = _between(self.script, "function hrEnterPage(", "async function hrPollTick(")
+        self.assertIn("hrLoadSummary();", enter)
+        self.assertIn("Promise.resolve(ensureHrConversationsLoaded())", enter)
+        self.assertIn("hrTriggerSync();", enter)
+        self.assertIn("HR_ENTER_SYNC_THROTTLE", enter)
+        # 顶部状态条只写同步时间与状态，不用旋转占位挡住本地会话。
+        self.assertIn('id="hr-sync-status"', self.mail_view)
+        self.assertIn('id="hr-sync-text"', self.mail_view)
+        self.assertIn("已是最新", self.hr)
+        self.assertIn("正在同步", self.hr)
+        self.assertIn("刷新会话", self.html)
+
+    def test_background_sync_polls_only_while_the_page_is_visible_and_on_hr(self):
+        self.assertIn("const HR_POLL_INTERVAL = 60000;", self.hr)
+        tick = _between(self.script, "async function hrPollTick(", "function hrStartPolling(")
+        self.assertIn("if (!hrPageVisible() || state.hrPollBusy) return;", tick)
+        self.assertIn("if (!hrOnMailView()) return;", tick)
+        self.assertIn("hrTriggerSync();", tick)
+        start = _between(self.script, "function hrStartPolling(", "function filteredHrConversations(")
+        self.assertIn("window.setInterval(hrPollTick, HR_POLL_INTERVAL)", start)
+        self.assertIn("visibilitychange", start)
+        self.assertIn("document.visibilityState !== 'hidden'", self.hr)
+
+    def test_nav_shows_the_unread_count_from_the_summary(self):
+        self.assertIn('id="hr-nav-unread"', self.html)
+        self.assertIn("toInt(state.hrSummary.unread_total)", self.hr)
+        self.assertIn("state.hrUnreadTotal = total;", self.hr)
+        self.assertIn("dom.hrNavUnread.textContent = total > 99 ? '99+' : String(total);", self.hr)
+        self.assertIn("dom.hrNavUnread.hidden = total === 0;", self.hr)
+        self.assertIn(".hr-nav-unread", self.theme)
+
+    def test_unread_rows_are_bold_and_carry_a_dot_and_platform_badge(self):
+        render = _between(self.hr, "function renderHrConversations(", "function renderHrThread(")
+        self.assertIn("hr-unread-dot", render)
+        self.assertIn("is-unread", render)
+        self.assertIn("channelLabel(conversation.platform)", render)
+        self.assertIn("hr-platform-badge", render)
+        self.assertIn("sortHrConversationsByRecent(filteredHrConversations())", render)
+        self.assertIn(".hr-conversation.is-unread .hr-conversation-hr", self.theme)
+        self.assertIn(".hr-unread-dot", self.theme)
+
+    def test_thread_keeps_stored_messages_visible_and_only_follows_the_bottom(self):
+        self.assertIn("state.hrThread = state.hrThreads[key] || null;", self.script)
+        self.assertIn("loadHrThread(key, { quiet: Boolean(state.hrThread) });", self.script)
+        thread = _between(self.hr, "function renderHrThread(", "function updateHrComposerState(")
+        self.assertIn("const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 32;", thread)
+        self.assertIn("if (switching || atBottom) viewport.scrollTop = viewport.scrollHeight;", thread)
+        self.assertIn("else viewport.scrollTop = previousTop;", thread)
+
+    def test_each_platform_status_row_reports_success_source_or_its_own_error(self):
+        self.assertIn('id="hr-platform-status"', self.mail_view)
+        self.assertIn("HR_VISIBLE_PLATFORMS = ['boss', 'zhilian', 'liepin']", self.hr)
+        status = _between(self.hr, "function hrPlatformStatusRows(", "async function hrLoadSummary(")
+        self.assertIn("row.source === 'api' ? '接口' : row.source === 'dom' ? '页面' : ''", status)
+        self.assertIn("(entry && entry.error) || state.hrPlatformErrors[platform]", status)
+        self.assertIn("const node = el('div', { className: `hr-platform-row${row.error ? ' is-error' : ''}` });", status)
+
+    def test_linked_job_card_shows_company_title_and_score(self):
+        card = _between(self.hr, "function renderHrJobCard(", "function renderHrThread(")
+        self.assertIn("conversation.company", card)
+        self.assertIn("conversation.title", card)
+        self.assertIn("formatScore(score)", card)
+        self.assertIn("查看岗位", card)
+        self.assertIn("未关联岗位", self.hr)
+        self.assertIn(".hr-job-card", self.theme)
+        self.assertIn(".hr-job-card-score", self.theme)
+
+    def test_reply_still_needs_the_confirmation_dialog_and_ctrl_enter_only_opens_it(self):
+        bindings = _between(self.script, "if (dom.hrReplyInput) {", "if (dom.hrReplyModalCancel) {")
+        self.assertIn("event.ctrlKey || event.metaKey", bindings)
+        self.assertIn("openHrReplyModal(dom.hrReplySend);", bindings)
+        self.assertNotIn("postAction", bindings)
+        self.assertIn('id="hr-key-hint"', self.mail_view)
+        self.assertIn("Ctrl / ⌘ + Enter", self.mail_view)
+        self.assertIn('id="hr-draft-count"', self.mail_view)
+        # 全天可发送：页面不得出现“发送窗口”一类限制文案。
+        self.assertNotIn("发送窗口", self.html)
+        self.assertNotIn("发送窗口", self.hr)
+
+    def test_mobile_switches_between_list_and_thread(self):
+        self.assertIn('id="hr-mobile-back"', self.mail_view)
+        self.assertIn('id="hr-layout"', self.mail_view)
+        self.assertIn("dom.hrLayout.dataset.hrPane = state.hrMobilePane;", self.hr)
+        self.assertIn("hrSetMobilePane('thread');", self.script)
+        mobile = self.theme[self.theme.index("@media (max-width: 900px)") :]
+        self.assertIn('.hr-layout[data-hr-pane="list"] .hr-thread', mobile)
+        self.assertIn('.hr-layout[data-hr-pane="thread"] .hr-sidebar', mobile)
 
 
 if __name__ == "__main__":

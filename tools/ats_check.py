@@ -246,11 +246,18 @@ def check_pdf(
         for keyword in keywords
     }
     result["keyword_matches"] = matches
-    result["all_keywords_found"] = all(matches.values()) if keywords else False
+    # No keywords means readability-only mode.  It is not a failed keyword
+    # check, but it still needs manual review because no coverage was tested.
+    result["all_keywords_found"] = all(matches.values()) if keywords else None
+    keyword_status = (
+        "not_run" if not keywords
+        else "pass" if result["all_keywords_found"]
+        else "fail"
+    )
     checks.append(
         {
             "name": "keyword_match",
-            "status": "pass" if result["all_keywords_found"] else "fail",
+            "status": keyword_status,
             "detail": matches,
         }
     )
@@ -258,6 +265,8 @@ def check_pdf(
         notes.append("--keywords 为空，未验证任何关键词")
     if result["all_keywords_found"] and keywords:
         result["verdict"] = "pass"
+    elif not keywords:
+        result["verdict"] = "needs_manual_check"
     else:
         result["verdict"] = "fail"
     notes.append(

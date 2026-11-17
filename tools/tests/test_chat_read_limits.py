@@ -76,6 +76,10 @@ class _SlowPlatformMonitor:
         self.closed: list[str] = []
         self.urls: list[str] = []
 
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
+
     def _open_monitor_tab(self, url, config, *, background=True):
         self.urls.append(url)
         return "tab-slow"
@@ -301,6 +305,10 @@ class _FacadeMonitor:
 
     def __init__(self) -> None:
         self.closed: list[str] = []
+
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
 
     def _open_monitor_tab(self, url, config, *, background=True):
         return "tab-gate"

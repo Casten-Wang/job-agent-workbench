@@ -92,6 +92,10 @@ class _FakeChatMonitor:
     def _get_monitor_chat_target(self, chat_url, config):
         return "tab-boss", False
 
+    def get_page_targets(self):
+        # No real browser: never borrow the machine's own tabs in tests.
+        return []
+
     def _open_monitor_tab(self, url, config, *, background=True):
         self.urls.append(url)
         return "tab-platform"

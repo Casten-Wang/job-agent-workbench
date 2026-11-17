@@ -62,7 +62,7 @@ python3 -m venv .venv
 
 导入时直接保留内嵌运行时的文档匹配分（0–100 整数），不再做 0–5 换算，也不使用 71 / 4.0 等数字阈值；同时保留 `score_raw`、`score_scale`，并带上 `score_coverage`、`mandatory_status`、`hiring_status` 与 `mandatory_conditions`。JD 明确必备条件为「明确不满足」或岗位已关闭 / 确认失效的岗位不会自动入队，只能手动加入并填写原因；「待确认」不作为不满足处理。同一岗位按指纹去重，重复导入不会产生副本。任务完成后面板会自动调用一次导入（同一任务只导入一次，失败可重试）；导入只写岗位信息，不进入审批、不发送任何内容。
 
-没有 `deliver` 路由，也没有自动 Submit/Send 路径。发送仍由内嵌 OfferPilot 自己的人工确认门、配置时间窗口和首次使用风险提示控制；工作台不绕过、不隐藏这些门禁。
+没有 `deliver` 路由，也没有自动 Submit/Send 路径。发送仍由内嵌 OfferPilot 自己的人工确认门、每日上限、随机间隔和首次使用风险提示控制；工作台不绕过、不隐藏这些门禁。
 
 ## 招呼语与定制材料包
 
@@ -100,7 +100,7 @@ python3 -m venv .venv
 - `save_resume()` 复用内嵌运行时的 `prepare_resume_content`、`write_resume_artifacts`、`resolve_active_resume_path` 与 `select_resume_markdown_filename`，与上游上传行为一致；简历只写入 `web/data/user/offerpilot/data/resumes/`，不进入仓库。
 - `start_greet_task()` 只启动 `greet` 任务：要求 AI 已配置且本机有评分简历；在 `task_runner.start` 的 `before_start` 回调里把本批运行时岗位标记为 `ready`（否则状态为 `pending` 的岗位会被生成器过滤），并写一条 `workbench_greet` 历史。任务只生成文本，不访问平台、不发送。生成器为每个岗位同时产出定制材料包（见上节），材料包失败计入 `failed_count` 与 `materials_failed`，岗位保留原招呼语。
 - `get_greetings()` 只读返回白名单字段（公司、岗位、招呼语、来源、风格提示、是否可复核、材料包 `materials`），最多 50 条；`snapshot` 把它附加到 `approved` 队列行，供审批队列做只读预览，同时把材料包附加到 `jobs[]` 对应行。
-- `start_deliver_task()` 只启动 `deliver` 任务：启动前检查发送窗口、平台风控锁、岗位状态、招呼语是否齐全且不在 `pending` 复核态；`before_start` 把本批岗位标记为 `approved` 并写 `workbench_deliver` 历史；配置固定带 `_workbench_skip_greeting=True`，发送的就是复核过的文本。运行时不传 `force`，窗口、日限、间隔、退避与风控锁全部沿用内嵌运行时。
+- `start_deliver_task()` 只启动 `deliver` 任务：启动前检查平台风控锁、岗位状态、招呼语是否齐全且不在 `pending` 复核态；`before_start` 把本批岗位标记为 `approved` 并写 `workbench_deliver` 历史；配置固定带 `_workbench_skip_greeting=True`，发送的就是复核过的文本。运行时不传 `force`，日限、间隔、退避与风控锁全部沿用内嵌运行时；发送不设时间段限制，全天可执行。
 - 批次结果写在 `web/data/<mode>/deliveries.json`：只存岗位、状态与原因码，不存招呼语正文。任务结束后 `_sync_deliveries()` 读取运行时岗位状态，把每条标记为 `sent` / `failed` / `deferred` / `blocked`，并为每条写一条 `send` 阶段的 pipeline 事件（`actor: embedded_runtime`）。`GET /api/state` 的 `pipeline.delivery` 返回最近批次，队列行附带 `delivery` 摘要。
 - `import_offerpilot_jobs()` 只读 `get_jobs()` 的白名单字段，按岗位指纹去重后写入工作台 `jobs.json`；不写回内嵌运行时，也不改变审批状态。
 - 依赖缺失或初始化失败时返回 `ok: false` 与本地安装提示，面板显示「未就绪」，服务本身继续运行。
