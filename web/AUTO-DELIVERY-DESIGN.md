@@ -211,7 +211,7 @@ not_ready → greeting_ready → confirmed → sending → sent
 - 幂等：已发送岗位拒绝重发；同一批重复 id 去重；同步任务按 `task_id` 只写一次。
 - 映射：运行时状态 → 工作台投递状态；`stop_reason` → `deferred` / `blocked`。
 - 运行时包装：`start_delivery` 传给 `task_runner.start` 的模式、岗位 id、`_workbench_skip_greeting`、`before_start` 的审批标记；启动失败不落任何状态。
-- HTTP：`offerpilot-greet` / `offerpilot-deliver` / `offerpilot-deliveries` 的 400/409/503 分支；demo 模式全拒绝。
+- HTTP：`offerpilot-greet` / `offerpilot-deliver` / `offerpilot-deliveries` 的 400/409/503 分支。
 - 回归：现有 136 项测试保持全绿；`/api/state` 顶层键不变。
 - 界面：桌面与手机宽度各跑一次生成 → 复核 → 发送 → 结果展示。
 

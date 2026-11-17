@@ -167,40 +167,38 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/offerpilot/state":
                 mode = query.get("mode", "user")
-                if mode not in backend.Store.VALID_MODES:
-                    self._error("数据模式只能是 demo 或 user")
-                    return
                 self._json({"ok": True, "state": backend.get_offerpilot_state(mode)})
                 return
             if path == "/api/offerpilot/jobs":
                 mode = query.get("mode", "user")
-                if mode not in backend.Store.VALID_MODES:
-                    self._error("数据模式只能是 demo 或 user")
-                    return
                 self._json(backend.get_offerpilot_jobs(mode))
                 return
+            if path == "/api/offerpilot/conversations":
+                mode = query.get("mode", "user")
+                self._json(backend.get_offerpilot_conversations(mode, query.get("platform", "boss")))
+                return
+            if path == "/api/offerpilot/conversation":
+                mode = query.get("mode", "user")
+                self._json(backend.get_offerpilot_conversation(
+                    mode, query.get("id", ""), query.get("platform", "boss")
+                ))
+                return
             if path == "/api/pipeline":
-                mode = query.get("mode", "demo")
-                if mode not in backend.Store.VALID_MODES:
-                    self._error("数据模式只能是 demo 或 user")
-                    return
+                mode = query.get("mode", "user")
                 store = backend.get_store(mode)
                 self._json({
                     "ok": True,
-                    "mode": mode,
+                    "mode": store.mode,
                     "contract": backend.pipeline_contract(),
                     "status": backend.pipeline_status(store, store.jobs(), store.queue(), store.mails()),
                 })
                 return
             if path == "/api/profile":
-                mode = query.get("mode", "demo")
-                if mode not in backend.Store.VALID_MODES:
-                    self._error("数据模式只能是 demo 或 user")
-                    return
+                mode = query.get("mode", "user")
                 store = backend.get_store(mode)
                 self._json({
                     "ok": True,
-                    "mode": mode,
+                    "mode": store.mode,
                     "profile": backend.profile_for_api(mode, store),
                     "guarantees": {
                         "local_only": True,
@@ -210,7 +208,7 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                 })
                 return
             if path == "/api/state":
-                mode = query.get("mode", "demo")
+                mode = query.get("mode", "user")
                 result = backend.snapshot(mode, {
                     "period": query.get("period", "all"),
                     "channel": query.get("channel", "all"),
@@ -301,17 +299,11 @@ class JobAgentHandler(BaseHTTPRequestHandler):
             if path == "/api/pipeline/event":
                 self._json(backend.ingest_pipeline_event(payload))
                 return
-            if path == "/api/reset-demo":
-                if str(payload.get("mode") or "demo") != "demo":
-                    self._error("只允许重置演示数据")
-                    return
-                self._json(backend.reset_demo())
-                return
             if path == "/api/run-tests":
                 self._json(backend.run_tests())
                 return
             if path == "/api/web-report":
-                self._json(backend.web_report(str(payload.get("mode") or "demo")))
+                self._json(backend.web_report(str(payload.get("mode") or "user")))
                 return
             if path == "/api/export":
                 self._json(backend.export_data(str(payload.get("mode") or "user")))

@@ -11,6 +11,8 @@ const CHANNEL_LABELS = {
   boss: 'Boss直聘',
   liepin: '猎聘',
   '51job': '前程无忧',
+  zhilian: '智联招聘',
+  zhilian_campus: '智联校园',
   unknown: '未知渠道'
 };
 const INTENT_LABELS = {
@@ -111,7 +113,8 @@ function safeLocalSet(key, value) {
 }
 
 const state = {
-  mode: safeLocalGet('job-workbench-mode') === 'user' ? 'user' : 'demo',
+  // 工作台只有真实数据一种模式；接口仍带 mode 参数以兼容后端契约。
+  mode: 'user',
   theme: ['auto', 'light', 'dark'].includes(safeLocalGet('job-workbench-theme'))
     ? safeLocalGet('job-workbench-theme')
     : 'auto',
@@ -137,22 +140,53 @@ const state = {
   offerpilotAutoScoreTouched: false,
   offerpilotPipeline: null,
   jobsSelection: new Set(),
+  jobsDossierId: null,
+  queueReviewId: null,
   queueApprovedSelection: new Set(),
   queueDeliveryIds: [],
+  queueDeliveryOpen: false,
+  queueDeliveryBusy: false,
+  queueDeliverySubmitted: false,
+  queueDeliveryBatchId: null,
+  queueDeliveryReturnFocus: null,
+  queueGreetingWatch: null,
   profileDirty: false,
   profileAutoPrefillTried: false,
-  profilePrefillCount: 0
+  profilePrefillCount: 0,
+  hrConversations: [],
+  hrConversationsLoaded: false,
+  hrConversationsLoading: false,
+  hrAvailable: null,
+  hrReason: '',
+  hrMode: null,
+  hrSelectedId: '',
+  hrThread: null,
+  hrThreadLoading: false,
+  hrThreads: {},
+  hrSearch: '',
+  hrFilter: 'all',
+  hrPlatform: 'all',
+  hrPlatformErrors: {},
+  hrDrafts: {},
+  hrReplyModalOpen: false,
+  hrReplyBusy: false,
+  hrReplyReturnFocus: null,
+  hrSeq: 0
 };
 
 const dom = {
   html: document.documentElement,
   views: document.getElementById('views'),
   status: document.getElementById('status'),
-  modeBanner: document.getElementById('mode-banner'),
   generatedAt: document.getElementById('generated-at'),
   loadingNote: document.getElementById('loading-note'),
   refreshButton: document.getElementById('refresh-button'),
-  workbenchNextText: document.getElementById('workbench-next-text'),
+  homeDate: document.getElementById('home-date'),
+  homeLede: document.getElementById('home-lede'),
+  homeJobsCount: document.getElementById('home-jobs-count'),
+  homeGreetingsCount: document.getElementById('home-greetings-count'),
+  homeRepliesCount: document.getElementById('home-replies-count'),
+  homeSendSummary: document.getElementById('home-send-summary'),
   belt: document.getElementById('belt'),
   beltFocus: document.getElementById('belt-focus'),
   pipeline: document.getElementById('pipeline'),
@@ -180,6 +214,12 @@ const dom = {
   jobsCount: document.getElementById('jobs-count'),
   jobsEmptyHint: document.getElementById('jobs-empty-hint'),
   jobsTable: document.getElementById('jobs-table'),
+  jobsDossier: document.getElementById('jobs-dossier'),
+  jobsDossierBody: document.getElementById('jobs-dossier-body'),
+  jobsDossierClose: document.getElementById('jobs-dossier-close'),
+  queueReview: document.getElementById('queue-review'),
+  queueReviewBody: document.getElementById('queue-review-body'),
+  queueReviewClose: document.getElementById('queue-review-close'),
   jobsActionResult: document.getElementById('jobs-action-result'),
   jobsSelectAll: document.getElementById('jobs-select-all'),
   jobsSelectionCount: document.getElementById('jobs-selection-count'),
@@ -263,6 +303,7 @@ const dom = {
   queueDeliverySummary: document.getElementById('queue-delivery-summary'),
   queueDeliveryList: document.getElementById('queue-delivery-list'),
   queueDeliveryRisk: document.getElementById('queue-delivery-risk'),
+  queueDeliveryProgress: document.getElementById('queue-delivery-progress'),
   jobsOverrideReason: document.getElementById('jobs-override-reason'),
   queueDeliveryStart: document.getElementById('queue-delivery-start'),
   queueDeliveryCancel: document.getElementById('queue-delivery-cancel'),
@@ -277,6 +318,31 @@ const dom = {
   mailResult: document.getElementById('mail-result'),
   mailList: document.getElementById('mail-list'),
   mailActionResult: document.getElementById('mail-action-result'),
+  hrRefresh: document.getElementById('hr-refresh'),
+  hrStatus: document.getElementById('hr-status'),
+  hrSearch: document.getElementById('hr-search'),
+  hrFilterButtons: Array.from(document.querySelectorAll('[data-hr-filter]')),
+  hrPlatformSelect: document.getElementById('hr-platform'),
+  hrPlatformErrors: document.getElementById('hr-platform-errors'),
+  hrConversationCount: document.getElementById('hr-conversation-count'),
+  hrConversationList: document.getElementById('hr-conversation-list'),
+  hrDetailTitle: document.getElementById('hr-detail-title'),
+  hrDetailMeta: document.getElementById('hr-detail-meta'),
+  hrDetailJob: document.getElementById('hr-detail-job'),
+  hrMessages: document.getElementById('hr-messages'),
+  hrReplyBlockReason: document.getElementById('hr-reply-block-reason'),
+  hrReplyForm: document.getElementById('hr-reply-form'),
+  hrReplyInput: document.getElementById('hr-reply-input'),
+  hrReplySend: document.getElementById('hr-reply-send'),
+  hrDraftCount: document.getElementById('hr-draft-count'),
+  hrReplyConfirmPanel: document.getElementById('hr-reply-confirm-panel'),
+  hrReplyDialog: document.getElementById('hr-reply-dialog'),
+  hrReplyWho: document.getElementById('hr-reply-who'),
+  hrReplyModalText: document.getElementById('hr-reply-modal-text'),
+  hrReplyModalProgress: document.getElementById('hr-reply-modal-progress'),
+  hrReplyModalRisk: document.getElementById('hr-reply-modal-risk'),
+  hrReplyModalCancel: document.getElementById('hr-reply-modal-cancel'),
+  hrReplyConfirm: document.getElementById('hr-reply-confirm'),
   worksheetForm: document.getElementById('worksheet-form'),
   worksheetMinutes: document.getElementById('worksheet-minutes'),
   worksheetJd: document.getElementById('worksheet-jd'),
@@ -299,11 +365,10 @@ const dom = {
   variantSubmit: document.getElementById('variant-submit'),
   variantResult: document.getElementById('variant-result'),
   variantList: document.getElementById('variant-list'),
+  variantCompareResult: document.getElementById('resume-compare-result'),
   runTestsButton: document.getElementById('run-tests-button'),
   webReportButton: document.getElementById('web-report-button'),
   exportButton: document.getElementById('export-button'),
-  resetDemoButton: document.getElementById('reset-demo-button'),
-  resetNote: document.getElementById('reset-note'),
   opsResult: document.getElementById('ops-result'),
   dryRunForm: document.getElementById('dry-run-form'),
   dryJobId: document.getElementById('dry-job-id'),
@@ -317,7 +382,6 @@ const dom = {
   boundariesTable: document.getElementById('boundaries-table'),
   configSummary: document.getElementById('config-summary'),
   navItems: Array.from(document.querySelectorAll('.nav-item')),
-  modeButtons: Array.from(document.querySelectorAll('[data-mode]')),
   themeButtons: Array.from(document.querySelectorAll('[data-theme-choice]')),
   viewPanels: Array.from(document.querySelectorAll('[data-view-panel]'))
 };
@@ -537,8 +601,7 @@ async function loadState(options = {}) {
     state.snapshot = data;
     renderAll(data);
     if (announce) {
-      const modeText = data.mode === 'demo' ? '演示数据' : '用户数据';
-      setStatus(`已载入${modeText}；生成时间 ${formatDateTime(data.generated_at)}。`, 'ok');
+      setStatus(`已载入本地数据；更新于 ${formatDateTime(data.generated_at)}。`, 'ok');
     }
   } catch (error) {
     if (seq !== state.fetchSeq) return;
@@ -673,12 +736,6 @@ function applyTheme(choice) {
   });
 }
 
-function syncModeButtons() {
-  dom.modeButtons.forEach((button) => {
-    button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode));
-  });
-}
-
 function showView(name) {
   const hub = HUB_FOR_VIEW[name] || name;
   dom.navItems.forEach((button) => {
@@ -705,6 +762,9 @@ function showView(name) {
     state.profileAutoPrefillTried = false;
     maybeAutoPrefillProfile();
   }
+  if (name === 'mail') {
+    ensureHrConversationsLoaded();
+  }
 }
 
 function clearTransientResults() {
@@ -719,6 +779,7 @@ function clearTransientResults() {
     dom.debriefResult,
     dom.bankResult,
     dom.variantResult,
+    dom.variantCompareResult,
     dom.profileResult,
     dom.opsResult
   ].forEach(resetContainer);
@@ -726,20 +787,6 @@ function clearTransientResults() {
   dom.dryRunResult.textContent = '';
   dom.atsFile.value = '';
   state.queueSelection.clear();
-}
-
-function switchMode(mode) {
-  if (mode !== 'demo' && mode !== 'user') return;
-  if (mode === state.mode) return;
-  state.mode = mode;
-  safeLocalSet('job-workbench-mode', mode);
-  state.jobState = 'all';
-  state.profileDirty = false;
-  state.profileAutoPrefillTried = false;
-  state.profilePrefillCount = 0;
-  clearTransientResults();
-  syncModeButtons();
-  loadState({ announce: true });
 }
 
 /* Generic table and chart rendering */
@@ -1029,53 +1076,104 @@ function renderHorizontalBar(container, options) {
 /* Render: header, filters, belt, KPI */
 
 function renderMeta(snapshot) {
-  syncModeButtons();
-  const demo = snapshot.mode === 'demo';
-  dom.modeBanner.className = `mode-banner ${demo ? 'is-demo' : 'is-user'}`;
-  dom.modeBanner.textContent = demo
-    ? '演示模式：全部为虚构测试数据，仅用于验证工作台。'
-    : '用户数据模式：只读写本机 web/data/user。';
-  dom.generatedAt.textContent = `生成于 ${formatDateTime(snapshot.generated_at)} · ${demo ? '演示数据' : '用户数据'}`;
-
-  dom.resetDemoButton.disabled = !demo;
-  dom.resetNote.textContent = demo
-    ? '只重置 demo 数据，不触碰 user 数据。'
-    : 'user 模式不能重置；请切换到 demo 后操作。';
+  dom.generatedAt.textContent = `更新于 ${formatDateTime(snapshot.generated_at)}`;
 }
 
-/* 首页只保留一句「下一步」：按本地数据从采集推进到发送。 */
-function renderWorkbenchNextStep(snapshot) {
-  if (!dom.workbenchNextText) return;
-  const queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
-  const stages = snapshot.pipeline && Array.isArray(snapshot.pipeline.stages)
-    ? snapshot.pipeline.stages
-    : [];
-  const countOf = (key) => {
-    const stage = stages.find((item) => item && item.key === key);
-    return stage ? toInt(stage.count) : 0;
-  };
-  const intake = countOf('intake');
-  const screening = countOf('screening');
-  const pending = queue.filter((row) => row && row.status === 'pending').length;
-  const approved = queue.filter((row) => row && row.status === 'approved').length;
-  const ready = queue.filter((row) => row && row.status === 'approved'
-    && row.greeting && row.greeting.ready).length;
+/* 首页「今天」：只回答今天要做什么，数据全部来自本地快照。 */
+/* home-today:start（tools/tests/test_home_today.py 会截取本段用 node 执行） */
+function homeGreetingText(row) {
+  const greeting = row && row.greeting && typeof row.greeting === 'object' ? row.greeting : null;
+  return greeting ? String(greeting.greeting || '').trim() : '';
+}
 
-  let text;
-  if (!intake) {
-    text = '下一步：还没有岗位，先去「求职主线 · 采集」拉取岗位。';
-  } else if (pending > 0) {
-    text = `下一步：有 ${pending} 个岗位等你确认，打开「审批队列」逐条通过或拒绝。`;
-  } else if (ready > 0) {
-    text = `下一步：${ready} 条招呼语已就绪，在「审批队列」确认后发送（不会自动投递）。`;
-  } else if (approved > 0) {
-    text = `下一步：为 ${approved} 个已通过岗位生成招呼语。`;
-  } else if (screening < intake) {
-    text = `下一步：岗位池有 ${intake - screening} 个岗位未评分，去「筛选」加入审批队列。`;
-  } else {
-    text = '下一步：去岗位池挑出合适的岗位，加入审批队列。';
+function homeAlreadySent(row) {
+  const delivery = row && row.delivery && typeof row.delivery === 'object' ? row.delivery : null;
+  return Boolean(delivery && delivery.status === 'sent');
+}
+
+function homeMailNeedsReply(row) {
+  const classification = row && row.classification && typeof row.classification === 'object'
+    ? row.classification
+    : {};
+  return ['interview_invite', 'assessment', 'offer'].includes(String(classification.intent || ''));
+}
+
+function homeTaskCounts(snapshot) {
+  const snap = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const queue = Array.isArray(snap.queue) ? snap.queue : [];
+  const mails = Array.isArray(snap.mails) ? snap.mails : [];
+  return {
+    jobs: queue.filter((row) => row && row.status === 'pending').length,
+    greetings: queue.filter((row) => row && row.status === 'approved'
+      && homeGreetingText(row) && !homeAlreadySent(row)).length,
+    replies: mails.filter(homeMailNeedsReply).length
+  };
+}
+
+function homeParseDate(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const normalized = text.includes(' ') && !text.includes('T') ? text.replace(' ', 'T') : text;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function homeBatchCounts(batch) {
+  const items = Array.isArray(batch && batch.items) ? batch.items : [];
+  return items.reduce((total, item) => {
+    const status = String((item && item.status) || '');
+    if (status === 'sent') total.sent += 1;
+    else if (status === 'failed') total.failed += 1;
+    return total;
+  }, { sent: 0, failed: 0 });
+}
+
+function homeBatchIsToday(batch, now) {
+  const stamp = homeParseDate(batch && (batch.finished_at || batch.created_at || batch.started_at));
+  if (!stamp) return false;
+  const today = now instanceof Date ? now : new Date();
+  return stamp.getFullYear() === today.getFullYear()
+    && stamp.getMonth() === today.getMonth()
+    && stamp.getDate() === today.getDate();
+}
+
+function homeDeliveryLine(snapshot, now) {
+  const delivery = snapshot && snapshot.pipeline && snapshot.pipeline.delivery;
+  const batches = delivery && Array.isArray(delivery.batches) ? delivery.batches : [];
+  if (!batches.length) return '还没有发送记录。';
+  const today = now instanceof Date ? now : new Date();
+  const dated = batches.filter((batch) => homeBatchIsToday(batch, today));
+  if (dated.length) {
+    const total = dated.reduce((sum, batch) => {
+      const counts = homeBatchCounts(batch);
+      sum.sent += counts.sent;
+      sum.failed += counts.failed;
+      return sum;
+    }, { sent: 0, failed: 0 });
+    return `今天已发送 ${total.sent} 条，失败 ${total.failed} 条。`;
   }
-  dom.workbenchNextText.textContent = text;
+  const latest = homeBatchCounts(batches[batches.length - 1]);
+  return `最近一次发送：成功 ${latest.sent} 条，失败 ${latest.failed} 条。`;
+}
+/* home-today:end */
+
+function renderHomeToday(snapshot) {
+  const counts = homeTaskCounts(snapshot);
+  if (dom.homeDate) {
+    const now = new Date();
+    const weekday = '日一二三四五六'[now.getDay()];
+    dom.homeDate.textContent = `${now.getMonth() + 1} 月 ${now.getDate()} 日，星期${weekday}`;
+  }
+  if (dom.homeJobsCount) dom.homeJobsCount.textContent = `${counts.jobs} 个`;
+  if (dom.homeGreetingsCount) dom.homeGreetingsCount.textContent = `${counts.greetings} 条`;
+  if (dom.homeRepliesCount) dom.homeRepliesCount.textContent = `${counts.replies} 封`;
+  if (dom.homeLede) {
+    const total = counts.jobs + counts.greetings + counts.replies;
+    dom.homeLede.textContent = total
+      ? `还有 ${total} 件待办，先做下面这些。`
+      : '今天没有待办，可以去采集新岗位。';
+  }
+  if (dom.homeSendSummary) dom.homeSendSummary.textContent = homeDeliveryLine(snapshot);
 }
 
 /* 六段契约只在前端合并成用户要做的四步：后端 PIPELINE_STAGES 与 /api/pipeline 的键都不变。 */
@@ -1455,9 +1553,208 @@ function approvalNode(value) {
   return el('span', { className: 'muted', text: '未入队' });
 }
 
+/* jobs-dossier:start（tools/tests/test_jobs_dossier.py 会截取本段用 node 执行） */
+const JOB_STANDARD_FIELDS = [
+  ['title', '岗位名称'],
+  ['location', '工作地点'],
+  ['responsibilities', '工作内容'],
+  ['must_have', '必备条件'],
+  ['nice_to_have', '加分条件'],
+  ['salary_and_start', '薪资与到岗'],
+  ['hiring_status', '招聘状态'],
+  ['source_platform', '来源平台'],
+  ['source_updated_at', '来源更新时间']
+];
+
+function dossierText(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function dossierList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (item && typeof item === 'object') {
+          return dossierText(item.text || item.label || item.value || item.item);
+        }
+        return dossierText(item);
+      })
+      .filter(Boolean);
+  }
+  const text = dossierText(value);
+  if (!text) return [];
+  return text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+}
+
+function dossierStandard(job) {
+  const standard = job && typeof job.standard === 'object' && job.standard ? job.standard : {};
+  return JOB_STANDARD_FIELDS.map(([key, label]) => {
+    const raw = standard[key];
+    return {
+      key,
+      label,
+      value: Array.isArray(raw) ? dossierList(raw).join('\n') || null : dossierText(raw)
+    };
+  });
+}
+
+function dossierMatch(job) {
+  const match = job && typeof job.match === 'object' && job.match ? job.match : {};
+  return [
+    { key: 'fit_score', label: '适配分', value: dossierText(match.fit_score) },
+    { key: 'fit_confidence', label: '判断置信度', value: dossierText(match.fit_confidence) },
+    { key: 'risk_level', label: '岗位风险等级', value: dossierText(match.risk_level) }
+  ];
+}
+
+function dossierTraceability(job) {
+  const rows = job && Array.isArray(job.traceability) ? job.traceability : [];
+  return rows
+    .map((row) => ({
+      requirement: dossierText(row && row.requirement),
+      evidence: dossierText(row && row.project_evidence),
+      source: dossierText(row && row.source)
+    }))
+    .filter((row) => row.requirement || row.evidence || row.source);
+}
+
+function dossierParts(job) {
+  const dossier = job && typeof job.dossier === 'object' && job.dossier ? job.dossier : {};
+  const existingGreeting = job && job.greeting && typeof job.greeting === 'object' ? job.greeting.greeting : job && job.greeting;
+  return {
+    analysis: dossierText(dossier.analysis_card),
+    resume: dossierText(dossier.resume_variant),
+    greeting: dossierText(dossier.greeting) || dossierText(existingGreeting),
+    checklist: dossierList(dossier.checklist),
+    action: dossierText(dossier.recommended_action)
+  };
+}
+
+function dossierFindJob(snapshot, id) {
+  const jobs = snapshot && Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  return jobs.find((job) => String((job && job.id) || '') === String(id)) || null;
+}
+
+function queueReviewJob(snapshot, id) {
+  if (id === null || id === undefined) return null;
+  const queue = snapshot && Array.isArray(snapshot.queue) ? snapshot.queue : [];
+  const row = queue.find((item) => String((item && item.id) || '') === String(id));
+  if (!row) return null;
+  return Object.assign({}, dossierFindJob(snapshot, id) || {}, row);
+}
+
+/* 定制材料（materials）：字段名由后端固定，materials 为 null 表示尚未生成。
+   这里只做纯数据归一与联系方式过滤；渲染层在 jobs-dossier 区块之外。 */
+const MATERIALS_GREETING_VARIANTS = [
+  { key: 'concise', label: '简洁版' },
+  { key: 'project', label: '项目成果版' },
+  { key: 'safe', label: '稳妥版' }
+];
+
+// 电话、邮箱、微信与链接一律不进入界面；外部文本仍按数据处理。
+const MATERIALS_REDACTIONS = [
+  [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '［邮箱已隐藏］'],
+  [/\bhttps?:\/\/[^\s，。；、）)]+/gi, '［链接已隐藏］'],
+  [/\bwww\.[^\s，。；、）)]+/gi, '［链接已隐藏］'],
+  [/(?:微信|微 信|wechat|weixin|\bwx\b|\bvx\b)\s*[:：]?\s*[A-Za-z0-9_-]{4,}/gi, '［微信已隐藏］'],
+  [/(?:\+?86[-\s]?)?1[3-9]\d{9}/g, '［电话已隐藏］'],
+  [/\b0\d{2,3}[-\s]\d{7,8}\b/g, '［电话已隐藏］']
+];
+
+function materialsSafeText(value) {
+  const text = dossierText(value);
+  if (!text) return null;
+  return MATERIALS_REDACTIONS.reduce(
+    (result, [pattern, replacement]) => result.replace(pattern, replacement),
+    text
+  );
+}
+
+function materialsTextList(value) {
+  return dossierList(value).map((item) => materialsSafeText(item)).filter(Boolean);
+}
+
+function materialsObjectList(value) {
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : [];
+}
+
+function materialsStatusTone(status) {
+  if (status === '已满足') return 'met';
+  if (status === '明确不满足') return 'unmet';
+  if (status === '待确认') return 'pending';
+  return 'unknown';
+}
+
+// 与队列卡片共用 greeting.selection 的来源标注：能对上就选中对应版本。
+function materialsGreetingSelection(job, greetings) {
+  const greeting = job && job.greeting && typeof job.greeting === 'object' ? job.greeting : {};
+  const label = dossierText(greeting.selection);
+  const withText = MATERIALS_GREETING_VARIANTS.filter((variant) => greetings[variant.key]);
+  const matched = label
+    ? withText.find((variant) => label === variant.key
+      || label === variant.label
+      || label.indexOf(variant.label) !== -1)
+    : null;
+  if (matched) return matched.key;
+  return withText.length ? withText[0].key : '';
+}
+
+function materialsOf(job) {
+  const raw = job && typeof job.materials === 'object' && job.materials ? job.materials : null;
+  if (!raw) return null;
+  const mapping = materialsObjectList(raw.mapping)
+    .map((row) => ({
+      requirement: materialsSafeText(row.requirement),
+      evidence: materialsSafeText(row.evidence),
+      source: materialsSafeText(row.source)
+    }))
+    .filter((row) => row.requirement || row.evidence || row.source);
+  const conditions = materialsObjectList(raw.conditions)
+    .map((row) => ({
+      condition: materialsSafeText(row.condition),
+      status: materialsSafeText(row.status),
+      evidence: materialsSafeText(row.evidence)
+    }))
+    .filter((row) => row.condition || row.status || row.evidence);
+  const resumeSuggestions = materialsObjectList(raw.resume_suggestions)
+    .map((row) => ({
+      original: materialsSafeText(row.original),
+      suggested: materialsSafeText(row.suggested),
+      evidence: materialsSafeText(row.evidence),
+      reason: materialsSafeText(row.reason)
+    }))
+    .filter((row) => row.original || row.suggested || row.evidence || row.reason);
+  const rawGreetings = raw.greetings && typeof raw.greetings === 'object' ? raw.greetings : {};
+  const greetings = {};
+  MATERIALS_GREETING_VARIANTS.forEach((variant) => {
+    greetings[variant.key] = materialsSafeText(rawGreetings[variant.key]);
+  });
+  return {
+    mapping,
+    conditions,
+    unknownFields: materialsTextList(raw.unknown_fields),
+    resumeSuggestions,
+    greetings,
+    confirmItems: materialsTextList(raw.confirm_items),
+    selected: materialsGreetingSelection(job, greetings)
+  };
+}
+/* jobs-dossier:end */
+
+// 入队线只用于界面提示「这个岗位为什么需要手动加入」；实际入队由后端按文档评分规则判定。
+function approvalMinOf(snapshot) {
+  const score = snapshot && snapshot.config && snapshot.config.score;
+  const value = score ? Number(score.approval_min) : NaN;
+  return Number.isFinite(value) ? value : null;
+}
+
 function renderJobs(snapshot) {
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
   const transitions = snapshot.transitions || {};
+  const approvalMin = approvalMinOf(snapshot);
+  const approvalMinLabel = approvalMin === null ? null : String(approvalMin);
   dom.jobsCount.textContent = `显示 ${jobs.length} 条`;
   if (dom.jobsEmptyHint) dom.jobsEmptyHint.hidden = jobs.length > 0;
 
@@ -1487,10 +1784,10 @@ function renderJobs(snapshot) {
     if (warnings.length) warningCell.setAttribute('title', warnings.join('；'));
     const riskNode = riskBadgeNode(job.risk);
 
-    const actions = el('div', { className: 'row-actions' });
+    const actions = el('div', { className: 'row-actions jobs-actions' });
     const scoreValue = typeof job.score === 'number' ? job.score : null;
     const queued = job.approval !== null && job.approval !== undefined;
-    const lowScore = scoreValue === null || scoreValue < 4.0;
+    const lowScore = scoreValue === null || (approvalMin !== null && scoreValue < approvalMin);
     const enqueueButton = el('button', {
       className: 'button button-small button-quiet',
       text: queued ? '已在审批队列' : lowScore ? '手动加入审批队列' : '加入审批队列',
@@ -1501,7 +1798,9 @@ function renderJobs(snapshot) {
       enqueueButton.title = '该岗位已在审批队列中';
       enqueueButton.setAttribute('aria-label', '已在审批队列（不可重复加入）');
     } else if (lowScore) {
-      enqueueButton.title = '低于 4.0 评分门或未评分；点击后手动加入待确认队列';
+      enqueueButton.title = approvalMinLabel === null
+        ? '未评分；点击后手动加入待确认队列'
+        : `低于入队线（当前 ${approvalMinLabel} 分）或未评分；点击后手动加入待确认队列`;
       enqueueButton.setAttribute('aria-label', '手动加入审批队列（评分不足，需你自行判断）');
     } else {
       enqueueButton.title = '只加入待确认队列，不投递';
@@ -1541,18 +1840,37 @@ function renderJobs(snapshot) {
       actions.append(el('span', { className: 'terminal-note', text: '终态，无后续流转' }));
     }
 
+    const dossierButton = el('button', {
+      className: 'button button-small button-quiet',
+      text: '查看详情',
+      attrs: {
+        type: 'button',
+        'aria-label': `查看 ${String(job.company || '')} ${String(job.title || '')} 的标准字段与匹配结果`.trim()
+      }
+    });
+    dossierButton.addEventListener('click', () => openJobDossier(job));
+    actions.append(dossierButton);
+
+    const companyText = String(job.company || '未填写公司');
+    const titleText = String(job.title || '未填写岗位');
+    const platformText = channelLabel(job.source_channel);
+    const scoreText = formatScore(job.score);
+    const scoreNode = el('span', {
+      className: scoreText === '未评分' ? 'jobs-score jobs-score-empty' : 'jobs-score',
+      text: scoreText
+    });
     return [
       checkbox,
-      el('span', { text: String(job.company || '未填写公司') }),
-      el('span', { text: String(job.title || '未填写岗位') }),
-      String(job.city || '—'),
-      String(job.salary_label || '未填写'),
-      channelLabel(job.source_channel),
-      formatScore(job.score),
-      hardFilterNode(job),
-      riskNode,
-      String(job.state || '未知'),
-      approvalNode(job.approval),
+      el('span', { className: 'jobs-company', text: companyText, attrs: { title: companyText } }),
+      el('span', { className: 'jobs-title', text: titleText, attrs: { title: titleText } }),
+      el('span', { className: 'jobs-city', text: String(job.city || '—') }),
+      el('span', { className: 'jobs-salary', text: String(job.salary_label || '未填写') }),
+      el('span', { className: 'jobs-platform', text: platformText, attrs: { title: `来源平台：${platformText}` } }),
+      scoreNode,
+      el('span', { className: 'jobs-hard-filter' }, [hardFilterNode(job)]),
+      el('span', { className: 'jobs-risk' }, [riskNode]),
+      el('span', { className: 'jobs-state', text: String(job.state || '未知') }),
+      el('span', { className: 'jobs-approval' }, [approvalNode(job.approval)]),
       warningCell,
       actions
     ];
@@ -1560,12 +1878,350 @@ function renderJobs(snapshot) {
 
   renderTable(dom.jobsTable, {
     caption: '表：岗位清单与允许的下一步',
-    columns: ['选择', '公司', '岗位', '城市', '薪资', '渠道', '评分', '硬过滤', '风险', '状态', '审批状态', '警告数', '动作'],
+    columns: ['选择', '公司', '岗位', '城市', '薪资', '来源平台', '评分', '硬过滤', '风险', '状态', '审批状态', '警告数', '动作'],
     rows,
     emptyText: '当前筛选下没有岗位。可以调整筛选，或在下方粘贴 JD / 导入静态 JSON。',
     className: 'jobs-table'
   });
+
+  const dossierJob = jobs.find((job) => String(job.id) === String(state.jobsDossierId)) || null;
+  if (dossierJob && dom.jobsDossier && dom.jobsDossierBody) {
+    dom.jobsDossier.hidden = false;
+    renderDossier(dom.jobsDossierBody, dossierJob);
+  } else if (dom.jobsDossier) {
+    state.jobsDossierId = null;
+    dom.jobsDossier.hidden = true;
+    clear(dom.jobsDossierBody);
+  }
   syncJobsSelection(jobs);
+}
+
+function dossierSection(title, children) {
+  return el('section', { className: 'jobs-dossier-section' }, [
+    el('h4', { className: 'jobs-dossier-heading', text: title }),
+    ...children
+  ]);
+}
+
+function dossierSectionText(title, value, className) {
+  return dossierSection(title, [
+    el('p', {
+      className: value ? className || 'jobs-dossier-text' : 'jobs-dossier-empty',
+      text: value || '未知'
+    })
+  ]);
+}
+
+function dossierSectionList(title, values) {
+  if (!values.length) return dossierSection(title, [el('p', { className: 'jobs-dossier-empty', text: '未知' })]);
+  return dossierSection(title, [
+    el('ul', { className: 'jobs-dossier-list' }, values.map((value) => el('li', { text: value })))
+  ]);
+}
+
+function dossierStandardSection(job) {
+  const list = el('dl', { className: 'jobs-dossier-fields' });
+  dossierStandard(job).forEach(({ key, label, value }) => {
+    const item = el('div', { className: 'jobs-dossier-field' });
+    item.dataset.field = key;
+    item.append(el('dt', { text: label }));
+    item.append(el('dd', {
+      className: value ? '' : 'jobs-dossier-unknown',
+      text: value || '未知'
+    }));
+    list.append(item);
+  });
+  return dossierSection('标准字段', [list]);
+}
+
+function dossierMatchSection(job) {
+  const row = el('div', { className: 'jobs-dossier-match' });
+  dossierMatch(job).forEach(({ key, label, value }) => {
+    const item = el('div', { className: 'jobs-dossier-match-item' });
+    item.dataset.match = key;
+    item.append(el('span', { className: 'jobs-dossier-match-label', text: label }));
+    item.append(el('span', {
+      className: value ? 'jobs-dossier-match-value' : 'jobs-dossier-match-value jobs-dossier-unknown',
+      text: value || '未知'
+    }));
+    row.append(item);
+  });
+  return dossierSection('匹配结果', [row]);
+}
+
+function dossierTraceSection(job) {
+  const rows = dossierTraceability(job);
+  if (!rows.length) {
+    return dossierSection('逐条核对', [el('p', { className: 'jobs-dossier-empty', text: '未知' })]);
+  }
+  const list = el('ul', { className: 'jobs-dossier-trace' });
+  rows.forEach((row) => {
+    const item = el('li', { className: 'jobs-dossier-trace-row' });
+    item.append(el('p', { className: 'jobs-dossier-trace-requirement', text: row.requirement || '未知' }));
+    item.append(el('p', {
+      className: 'jobs-dossier-trace-evidence',
+      text: row.evidence ? `项目证据：${row.evidence}` : '项目证据：未知'
+    }));
+    item.append(el('p', {
+      className: 'jobs-dossier-trace-source',
+      text: row.source ? `来源：${row.source}` : '来源：未知'
+    }));
+    list.append(item);
+  });
+  return dossierSection('逐条核对', [list]);
+}
+
+function dossierGreetingEvidenceSection(job) {
+  const parts = dossierParts(job);
+  const children = [
+    el('p', {
+      className: parts.analysis ? 'jobs-dossier-text' : 'jobs-dossier-empty',
+      text: parts.analysis || '未知'
+    })
+  ];
+  const sources = Array.from(new Set(dossierTraceability(job).map((row) => row.source).filter(Boolean)));
+  if (sources.length) {
+    children.push(el('p', { className: 'jobs-dossier-sources', text: `依据来源：${sources.join('；')}` }));
+  }
+  return dossierSection('招呼语依据', children);
+}
+
+/* 定制材料：只增区块，不改上面已有的详情段。 */
+function materialsTextCell(value) {
+  if (!value) return el('span', { className: 'jobs-dossier-empty', text: '未知' });
+  return el('span', { className: 'jobs-materials-text', text: value });
+}
+
+function materialsBlock(title, children, className) {
+  return el('div', { className: className ? `jobs-materials-block ${className}` : 'jobs-materials-block' }, [
+    el('h5', { className: 'jobs-materials-subheading', text: title }),
+    ...children
+  ]);
+}
+
+function materialsEmptyBlock(title) {
+  return materialsBlock(title, [el('p', { className: 'jobs-dossier-empty', text: '未知' })]);
+}
+
+// 表格样式与窄屏堆叠由 data-label 承担：宽屏并排，窄屏逐格列出。
+function materialsTable(tableClassName, headers, rows) {
+  const table = el('table', { className: `jobs-materials-table ${tableClassName}` });
+  const headRow = el('tr');
+  headers.forEach((label) => {
+    headRow.append(el('th', { attrs: { scope: 'col' }, text: label }));
+  });
+  const thead = el('thead');
+  thead.append(headRow);
+  table.append(thead);
+  const tbody = el('tbody');
+  rows.forEach((cells) => {
+    const tr = el('tr');
+    cells.forEach((cell) => {
+      const td = el('td', { attrs: { 'data-label': cell.label } });
+      td.append(cell.node);
+      tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  table.append(tbody);
+  return el('div', { className: 'jobs-materials-scroll' }, [table]);
+}
+
+function materialsNote(parts) {
+  const lines = parts.filter(Boolean);
+  if (!lines.length) return null;
+  return el('p', { className: 'jobs-materials-note', text: lines.join('；') });
+}
+
+function materialsMappingBlock(materials) {
+  if (!materials.mapping.length) return materialsEmptyBlock('岗位要求与证据');
+  const rows = materials.mapping.map((row) => [
+    { label: '岗位要求', node: materialsTextCell(row.requirement) },
+    { label: '项目证据', node: materialsTextCell(row.evidence) },
+    { label: '来源', node: materialsTextCell(row.source) }
+  ]);
+  return materialsBlock('岗位要求与证据', [
+    materialsTable('jobs-materials-table--mapping', ['岗位要求', '项目证据', '来源'], rows)
+  ]);
+}
+
+function materialsConditionsBlock(materials) {
+  if (!materials.conditions.length) return materialsEmptyBlock('硬条件');
+  const rows = materials.conditions.map((row) => {
+    const tone = materialsStatusTone(row.status);
+    return [
+      { label: '条件', node: materialsTextCell(row.condition) },
+      {
+        label: '状态',
+        node: el('span', {
+          className: `jobs-materials-status jobs-materials-status--${tone}`,
+          text: row.status || '未知'
+        })
+      },
+      { label: '证据', node: materialsTextCell(row.evidence) }
+    ];
+  });
+  return materialsBlock('硬条件与待确认', [
+    materialsTable('jobs-materials-table--conditions', ['条件', '状态', '证据'], rows)
+  ]);
+}
+
+function materialsUnknownBlock(materials) {
+  if (!materials.unknownFields.length) return materialsEmptyBlock('未知字段');
+  return materialsBlock('未知字段', [
+    el('ul', { className: 'jobs-materials-unknown' }, materials.unknownFields.map((field) => (
+      el('li', { text: field })
+    )))
+  ]);
+}
+
+function materialsResumeBlock(materials) {
+  if (!materials.resumeSuggestions.length) return materialsEmptyBlock('简历建议');
+  const rows = materials.resumeSuggestions.map((row) => [
+    { label: '原文', node: materialsTextCell(row.original) },
+    {
+      label: '建议',
+      node: el('div', { className: 'jobs-materials-suggestion' }, [
+        materialsTextCell(row.suggested),
+        materialsNote([row.evidence ? `依据：${row.evidence}` : null, row.reason ? `理由：${row.reason}` : null])
+      ].filter(Boolean))
+    }
+  ]);
+  return materialsBlock('简历建议', [
+    materialsTable('jobs-materials-table--resume', ['简历原文', '建议改法'], rows)
+  ]);
+}
+
+function materialsGreetingsBlock(job, materials) {
+  const options = MATERIALS_GREETING_VARIANTS.filter((variant) => materials.greetings[variant.key]);
+  if (!options.length) return materialsEmptyBlock('招呼语');
+  const fieldName = `jobs-materials-greeting-${String((job && job.id) || 'job')}`;
+  const radios = el('div', {
+    className: 'jobs-materials-greeting-options',
+    attrs: { role: 'radiogroup', 'aria-label': '招呼语版本' }
+  });
+  const preview = el('p', { className: 'jobs-materials-greeting-text' });
+  const meta = el('p', { className: 'jobs-materials-greeting-meta' });
+  const labels = [];
+  const select = (key) => {
+    const variant = options.find((item) => item.key === key) || options[0];
+    preview.textContent = materials.greetings[variant.key] || '未知';
+    preview.dataset.variant = variant.key;
+    // 与队列卡片的「来源：…」共用同一套标注，不发送、不写入。
+    meta.textContent = `来源：${variant.label}`;
+    labels.forEach(({ input, label }) => {
+      const active = input.value === variant.key;
+      label.classList.toggle('is-active', active);
+      input.checked = active;
+    });
+  };
+  options.forEach((variant) => {
+    const id = `${fieldName}-${variant.key}`;
+    const input = el('input', { attrs: { type: 'radio', name: fieldName, id, value: variant.key } });
+    const label = el('label', { className: 'jobs-materials-greeting-option', attrs: { for: id } });
+    label.append(input);
+    label.append(el('span', { text: variant.label }));
+    input.addEventListener('change', () => {
+      if (input.checked) select(variant.key);
+    });
+    labels.push({ input, label });
+    radios.append(label);
+  });
+  select(materials.selected || options[0].key);
+  return materialsBlock('招呼语（三版择一）', [radios, preview, meta]);
+}
+
+function materialsConfirmBlock(materials) {
+  if (!materials.confirmItems.length) return materialsEmptyBlock('确认事项');
+  return materialsBlock('确认事项', [
+    el('ul', { className: 'jobs-materials-confirm' }, materials.confirmItems.map((item) => (
+      el('li', { text: item })
+    )))
+  ]);
+}
+
+function dossierMaterialsSection(job) {
+  const materials = materialsOf(job);
+  if (!materials) {
+    return dossierSection('定制材料', [
+      el('p', {
+        className: 'jobs-materials-empty',
+        text: '尚未生成定制材料。在审批队列勾选已确认岗位后点「生成招呼语」。'
+      })
+    ]);
+  }
+  return dossierSection('定制材料', [
+    el('div', { className: 'jobs-materials' }, [
+      materialsMappingBlock(materials),
+      materialsConditionsBlock(materials),
+      materialsUnknownBlock(materials),
+      materialsResumeBlock(materials),
+      materialsGreetingsBlock(job, materials),
+      materialsConfirmBlock(materials)
+    ])
+  ]);
+}
+
+function dossierSections(job) {
+  const parts = dossierParts(job);
+  return [
+    dossierStandardSection(job),
+    dossierMatchSection(job),
+    dossierTraceSection(job),
+    dossierMaterialsSection(job),
+    dossierSectionText('简历改动', parts.resume),
+    dossierSectionText('招呼语（确认前原文）', parts.greeting, 'jobs-dossier-greeting'),
+    dossierGreetingEvidenceSection(job),
+    dossierSectionList('剩余不确定项', parts.checklist),
+    dossierSectionText('建议动作', parts.action)
+  ];
+}
+
+function renderDossier(container, job) {
+  if (!container) return;
+  clear(container);
+  if (!job) {
+    container.append(el('p', { className: 'jobs-dossier-empty', text: '未知' }));
+    return;
+  }
+  container.append(el('div', { className: 'jobs-dossier-meta' }, [
+    el('strong', { className: 'jobs-dossier-job', text: String(job.company || '未知公司') }),
+    el('span', { className: 'jobs-dossier-role', text: String(job.title || '未知岗位') })
+  ]));
+  dossierSections(job).forEach((section) => container.append(section));
+}
+
+function openJobDossier(job) {
+  state.jobsDossierId = String(job.id);
+  if (!dom.jobsDossier || !dom.jobsDossierBody) return;
+  dom.jobsDossier.hidden = false;
+  renderDossier(dom.jobsDossierBody, job);
+  if (typeof dom.jobsDossier.scrollIntoView === 'function') {
+    dom.jobsDossier.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function closeJobDossier() {
+  state.jobsDossierId = null;
+  if (dom.jobsDossier) dom.jobsDossier.hidden = true;
+  clear(dom.jobsDossierBody);
+}
+
+function openQueueReview(snapshot, row) {
+  state.queueReviewId = String(row.id);
+  const job = queueReviewJob(snapshot, row.id) || row;
+  if (!dom.queueReview || !dom.queueReviewBody) return;
+  dom.queueReview.hidden = false;
+  renderDossier(dom.queueReviewBody, job);
+  if (typeof dom.queueReview.scrollIntoView === 'function') {
+    dom.queueReview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function closeQueueReview() {
+  state.queueReviewId = null;
+  if (dom.queueReview) dom.queueReview.hidden = true;
+  clear(dom.queueReviewBody);
 }
 
 function syncJobsSelection(jobs) {
@@ -1787,8 +2443,7 @@ function renderProfileDraftBanner() {
 }
 
 function profileShouldAutoPrefill(profile) {
-  return state.mode === 'user'
-    && profile.saved === false
+  return profile.saved === false
     && profile.cv_available === true
     && !state.profileAutoPrefillTried;
 }
@@ -1810,7 +2465,6 @@ async function autoPrefillProfileFromCv() {
     return;
   }
   // The form is empty before this point (saved=false), so overwriting needs no confirmation.
-  if (state.mode !== 'user') return;
   populateProfileForm(data.profile);
   state.profileDirty = true;
   state.profilePrefillCount = profileCountPrefilled(data.profile);
@@ -1840,8 +2494,7 @@ function renderProfile(profile) {
     dom.profileBadge.className = `badge ${level === 'ready' && !state.profileDirty ? 'badge-good' : 'badge-neutral'}`;
   }
   if (dom.profileImport) {
-    dom.profileImport.disabled = state.mode !== 'user';
-    dom.profileImport.title = state.mode === 'user' ? '读取本机 workspace/resume.md 并填入可识别字段' : '演示模式不读取真实简历；请切换到「我的 user」';
+    dom.profileImport.title = '读取本机 workspace/resume.md 并填入可识别字段';
   }
 }
 
@@ -1935,10 +2588,6 @@ async function saveProfileForm(event) {
 }
 
 async function importProfileFromCv() {
-  if (state.mode !== 'user') {
-    setStatus('演示模式不读取真实简历；请切换到「我的 user」。', 'warn');
-    return;
-  }
   if (state.profileDirty && !window.confirm('导入会覆盖当前未保存的修改，继续吗？')) return;
   const data = await runAction(dom.profileImport, () => postAction('import-profile-cv'));
   if (!data) return;
@@ -2152,9 +2801,7 @@ function renderCollectChecks(preflight) {
   if (!preflight) {
     dom.collectChecks.append(el('p', {
       className: 'hint',
-      text: state.mode === 'demo'
-        ? '演示模式只读，不会启动真实采集；切换到「我的 user」后可检查本机环境。'
-        : '修改条件后需要重新检查。'
+      text: '修改条件后需要重新检查。'
     }));
     return;
   }
@@ -2228,7 +2875,7 @@ function syncCollectResumeUI() {
 }
 
 function applyOfferPilotPrefs(data) {
-  if (state.mode !== 'user' || !data.preferences || typeof data.preferences !== 'object') return;
+  if (!data.preferences || typeof data.preferences !== 'object') return;
   if (state.offerpilotPrefsMode === state.mode) return;
   state.offerpilotPrefsMode = state.mode;
   const prefs = data.preferences;
@@ -2249,7 +2896,7 @@ function renderOfferPilot(boss) {
   // /api/offerpilot/state uses `ok`; pipeline.offerpilot uses `connected`.
   const connected = data.connected === true || data.ok === true;
   state.offerpilotConnected = connected;
-  state.offerpilotCanStart = connected && data.mode !== 'demo'
+  state.offerpilotCanStart = connected
     && !(data.capabilities && data.capabilities.collect_without_ai === false);
   if (state.offerpilotJobsMode !== state.mode) {
     // Never carry a job snapshot across data modes: demo must not show user jobs.
@@ -2268,15 +2915,13 @@ function renderOfferPilot(boss) {
     }
   }
   if (dom.offerpilotConnection) {
-    dom.offerpilotConnection.textContent = connected
-      ? (state.offerpilotCanStart ? '已就绪' : '演示只读')
-      : '未就绪';
-    dom.offerpilotConnection.className = `badge ${connected ? 'badge-good' : 'badge-warn'}`;
+    dom.offerpilotConnection.textContent = state.offerpilotCanStart ? '已就绪' : '未就绪';
+    dom.offerpilotConnection.className = `badge ${state.offerpilotCanStart ? 'badge-good' : 'badge-warn'}`;
   }
   if (dom.offerpilotState) {
     clear(dom.offerpilotState);
     dom.offerpilotState.append(offerpilotMetaRow('地址', el('span', { className: 'cell-mono', text: String(data.base_url || '—') })));
-    dom.offerpilotState.append(offerpilotMetaRow('连接', state.offerpilotCanStart ? '内嵌后端可用' : connected ? '演示模式，不启动真实采集' : '依赖或数据未就绪'));
+    dom.offerpilotState.append(offerpilotMetaRow('连接', state.offerpilotCanStart ? '内嵌后端可用' : '依赖或数据未就绪'));
     if (connected && data.ai) {
       dom.offerpilotState.append(offerpilotMetaRow('AI 配置', data.ai.configured ? '已配置（状态不回传密钥）' : '未配置（仍可无 AI 采集/监控）'));
     }
@@ -2436,7 +3081,7 @@ async function loadOfferPilotJobs(options = {}) {
 
 async function runOfferPilotPreflight(button) {
   if (!state.offerpilotCanStart) {
-    setStatus('当前是演示模式或内嵌后端未就绪；切换到用户数据后再检查真实采集环境。', 'error');
+    setStatus('内嵌后端未就绪；请先重新检测。', 'error');
     return;
   }
   const mode = collectMode();
@@ -2505,7 +3150,7 @@ async function refreshOfferPilot(options = {}) {
     if (options.announce) {
       setStatus(
         data.state && data.state.ok
-          ? (state.offerpilotCanStart ? '岗位自动化已就绪。' : '演示模式只读；切换到用户数据后可启动真实任务。')
+          ? (state.offerpilotCanStart ? '岗位自动化已就绪。' : '岗位自动化未就绪；请先重新检测。')
           : `岗位自动化不可用：${(data.state && data.state.error) || '依赖或数据未就绪'}`,
         data.state && data.state.ok ? 'ok' : 'warn'
       );
@@ -2528,7 +3173,7 @@ async function startOfferPilotTask(button) {
     return;
   }
   if (!state.offerpilotCanStart) {
-    setStatus('当前是演示模式或内嵌后端未就绪；切换到用户数据后再启动真实任务。', 'error');
+    setStatus('内嵌后端未就绪；请先重新检测。', 'error');
     return;
   }
   const needsSearch = collectNeedsSearch(mode);
@@ -2582,7 +3227,7 @@ function markTaskImported(taskId, imported) {
 }
 
 async function maybeAutoImportCollected(task) {
-  if (!task || state.mode !== 'user' || !state.offerpilotCanStart) return;
+  if (!task || !state.offerpilotCanStart) return;
   if (state.offerpilotTaskActive || state.offerpilotAutoImporting) return;
   if (!['completed', 'stopped'].includes(String(task.status || ''))) return;
   const ids = task.progress && Array.isArray(task.progress.collected_job_ids)
@@ -2821,7 +3466,7 @@ function renderPipelineStatus() {
   const parts = [];
   if (message) parts.push(message);
   if (awaiting) {
-    parts.push(`当前有 ${approved} 条已通过岗位等待你最终确认；未点「开始发送」前不会发出任何消息。`);
+    parts.push(`当前有 ${approved} 条已通过岗位等待你最终确认；未点「确认发送本批」前不会发出任何消息。`);
   }
   dom.queuePipelineStatus.textContent = parts.join(' ');
   dom.queuePipelineStatus.className = awaiting ? 'notice notice-accent' : 'notice';
@@ -2830,6 +3475,7 @@ function renderPipelineStatus() {
 
 function renderQueue(snapshot) {
   const queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
+  const approvalMin = approvalMinOf(snapshot);
   const pending = queue.filter((row) => row.status === 'pending');
   const approved = queue.filter((row) => row.status === 'approved');
   const pendingIds = new Set(pending.map((row) => String(row.id)));
@@ -2853,6 +3499,12 @@ function renderQueue(snapshot) {
       else state.queueSelection.delete(id);
       updateQueueSelectionUI();
     });
+    const reviewButton = el('button', {
+      className: 'button button-small button-quiet queue-review-open',
+      text: '核对',
+      attrs: { type: 'button', 'aria-label': `核对 ${row.company || ''} ${row.title || ''} 的要求与证据` }
+    });
+    reviewButton.addEventListener('click', () => openQueueReview(snapshot, row));
     return [
       checkbox,
       String(row.company || '—'),
@@ -2860,14 +3512,17 @@ function renderQueue(snapshot) {
       formatScore(row.score),
       channelLabel(row.Source_Channel),
       formatDateTime(row.created_at),
-      row.high_confidence ? badge('高置信', 'good', '✓') : el('span', { className: 'muted', text: '普通' })
+      confidenceCell(row),
+      reviewButton
     ];
   });
   renderTable(dom.queuePendingTable, {
     caption: '表：待确认队列',
-    columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '置信'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断置信度', '核对'],
     rows: pendingRows,
-    emptyText: '待确认队列为空。可以在「岗位」表把评分达到 4.0 的岗位加入队列。',
+    emptyText: approvalMin === null
+      ? '待确认队列为空。可以在「岗位」表把岗位加入队列。'
+      : `待确认队列为空。可以在「岗位」表把达到入队线（当前 ${String(approvalMin)} 分）的岗位加入队列。`,
     className: 'data-table-wide'
   });
 
@@ -2884,6 +3539,12 @@ function renderQueue(snapshot) {
       else state.queueApprovedSelection.delete(id);
       updateQueueApprovedSelectionUI();
     });
+    const reviewButton = el('button', {
+      className: 'button button-small button-quiet queue-review-open',
+      text: '核对',
+      attrs: { type: 'button', 'aria-label': `核对已确认岗位 ${row.company || ''} ${row.title || ''} 的要求与证据` }
+    });
+    reviewButton.addEventListener('click', () => openQueueReview(snapshot, row));
     return [
       checkbox,
       String(row.company || '—'),
@@ -2893,19 +3554,34 @@ function renderQueue(snapshot) {
       greetingStatusBadge(row.greeting),
       deliveryStatusBadge(row.delivery),
       planBadge(row.plan),
-      badge('approved · 可人工投递', 'good', '✓')
+      badge('approved · 可人工投递', 'good', '✓'),
+      reviewButton
     ];
   });
   renderTable(dom.queueApprovedTable, {
     caption: '表：已确认可人工投递',
-    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态', '核对'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。approved 只表示可人工投递，不代表已投递。',
     className: 'data-table-wide'
   });
   renderQueueGreetings(approved);
   renderDeliveryResults(snapshot);
+  if (state.queueDeliveryOpen) {
+    renderDeliveryProgress(snapshot);
+    updateDeliveryStartState();
+  }
   renderPipelineStatus();
+
+  const reviewJob = queueReviewJob(snapshot, state.queueReviewId);
+  if (reviewJob && dom.queueReview && dom.queueReviewBody) {
+    dom.queueReview.hidden = false;
+    renderDossier(dom.queueReviewBody, reviewJob);
+  } else if (dom.queueReview) {
+    state.queueReviewId = null;
+    dom.queueReview.hidden = true;
+    clear(dom.queueReviewBody);
+  }
 
   updateQueueSelectionUI();
   updateQueueApprovedSelectionUI();
@@ -2927,6 +3603,25 @@ function greetingStatusBadge(greeting) {
   if (!greeting || !String(greeting.greeting || '').trim()) return badge('未生成', 'neutral', '·');
   if (greeting.ready) return badge('已生成', 'good', '✓');
   return badge('待复核', 'warn', '!');
+}
+
+// 「判断置信度」是独立结果：必备条件证据的充分度，缺失时取资料覆盖率。
+// 旧队列行的 high_confidence 只是阈值标记、未参与任何判定，不再显示在这一列。
+function confidenceCell(row) {
+  const value = row && typeof row.fit_confidence === 'number' ? row.fit_confidence : null;
+  if (value === null) {
+    const node = el('span', { className: 'muted', text: '—' });
+    node.setAttribute('title', '该岗位没有可用的判断证据（必备条件证据或资料覆盖率）');
+    return node;
+  }
+  const percent = Math.round(value * 100);
+  const node = percent >= 70
+    ? badge(formatPercent(value), 'good', '')
+    : percent >= 40
+      ? badge(formatPercent(value), 'warn', '')
+      : el('span', { className: 'muted', text: formatPercent(value) });
+  node.setAttribute('title', '判断置信度：必备条件证据的充分度；没有必备条件时取资料覆盖率');
+  return node;
 }
 
 function renderQueueGreetings(approved) {
@@ -2994,7 +3689,7 @@ function updateQueueApprovedSelectionUI() {
       ? '已有岗位自动化任务正在运行；请先停止或等待结束'
       : selected > 10
         ? '一次最多 10 条'
-        : '只生成招呼语，不发送';
+        : '只生成招呼语；完成后自动弹出核对窗口';
   }
   if (dom.queueSendGreetings) {
     const selectedRows = approved.filter((row) => state.queueApprovedSelection.has(String(row.id)));
@@ -3002,12 +3697,13 @@ function updateQueueApprovedSelectionUI() {
       && selectedRows.every((row) => row.greeting && row.greeting.ready);
     dom.queueSendGreetings.disabled = !greetingReady
       || selected > 10
-      || Boolean(state.offerpilotTaskActive);
+      || Boolean(state.offerpilotTaskActive)
+      || state.queueDeliveryOpen;
     dom.queueSendGreetings.title = state.offerpilotTaskActive
       ? '已有岗位自动化任务正在运行；请先停止或等待结束'
       : !greetingReady
         ? '请先为所选岗位生成招呼语'
-        : '核对招呼语后发送';
+        : '查看并发送所选岗位的招呼语';
   }
 }
 
@@ -3019,9 +3715,49 @@ async function generateQueueGreetings(button) {
   }
   const data = await runAction(button, () => postAction('offerpilot-greet', { ids }));
   if (!data) return;
-  state.queueApprovedSelection.clear();
-  setStatus(data.message || '已开始生成招呼语；只生成，不发送。', 'ok');
-  await refreshOfferPilot();
+  if (data.ok === false) {
+    setStatus(data.message || '招呼语生成未开始。', 'warn');
+    return;
+  }
+  setStatus(data.message || '正在生成招呼语；完成后会自动弹出核对窗口。', 'ok');
+  watchQueueGreetings(ids, button);
+}
+
+/* 生成招呼语是后台任务：轮询到所选岗位都 ready 后自动打开发送弹窗。 */
+function stopQueueGreetingWatch() {
+  const watch = state.queueGreetingWatch;
+  if (watch && watch.timer) window.clearTimeout(watch.timer);
+  state.queueGreetingWatch = null;
+}
+
+function watchQueueGreetings(ids, trigger) {
+  stopQueueGreetingWatch();
+  const watch = { ids: ids.map(String), attempts: 0, timer: null, trigger };
+  state.queueGreetingWatch = watch;
+  const maxAttempts = 30;
+  const tick = async () => {
+    if (state.queueGreetingWatch !== watch) return;
+    watch.attempts += 1;
+    if (!state.offerpilotPollTimer) {
+      await refreshOfferPilot();
+    }
+    if (state.queueGreetingWatch !== watch) return;
+    const rows = approvedQueueRows().filter((row) => watch.ids.includes(String(row.id)));
+    const ready = rows.length === watch.ids.length
+      && rows.every((row) => row.greeting && row.greeting.ready);
+    if (ready) {
+      stopQueueGreetingWatch();
+      openDeliveryModal(rows, trigger);
+      return;
+    }
+    if (watch.attempts >= maxAttempts) {
+      stopQueueGreetingWatch();
+      setStatus('招呼语还在生成；完成后可勾选岗位点「查看并发送」核对。', 'warn');
+      return;
+    }
+    watch.timer = window.setTimeout(tick, 2500);
+  };
+  watch.timer = window.setTimeout(tick, 1500);
 }
 
 const DELIVERY_STATUS_META = {
@@ -3047,62 +3783,199 @@ function deliveryConfirmPhrase(count) {
   return `确认发送本批 ${count} 条`;
 }
 
-function openDeliveryPanel() {
-  const rows = selectedApprovedRows();
-  if (!rows.length) {
+function openDeliveryPanel(trigger) {
+  openDeliveryModal(selectedApprovedRows(), trigger);
+}
+
+function openDeliveryModal(rows, trigger) {
+  if (!dom.queueDeliveryPanel) return;
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (!list.length) {
     setStatus('请先勾选已确认岗位。', 'warn');
     return;
   }
-  if (!rows.every((row) => row.greeting && row.greeting.ready)) {
+  if (!list.every((row) => row.greeting && row.greeting.ready)) {
     setStatus('所选岗位需要先生成招呼语。', 'warn');
     return;
   }
+  if (!state.queueDeliveryOpen) {
+    state.queueDeliveryOpen = true;
+    state.queueDeliveryReturnFocus = trigger || (document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null);
+    document.body.classList.add('queue-modal-open');
+    document.addEventListener('keydown', handleDeliveryKeydown);
+  }
+  state.queueDeliveryBusy = false;
+  state.queueDeliverySubmitted = false;
+  state.queueDeliveryBatchId = null;
+  renderDeliveryModal(list);
+  // 视图容器可能带 transform，会让 position:fixed 相对容器定位；弹窗挂到 body 才是全屏遮罩。
+  if (dom.queueDeliveryPanel.parentElement !== document.body) {
+    document.body.append(dom.queueDeliveryPanel);
+  }
+  dom.queueDeliveryPanel.hidden = false;
+  if (dom.queueDeliveryCancel) dom.queueDeliveryCancel.focus();
+  updateQueueApprovedSelectionUI();
+}
+
+function renderDeliveryModal(rows) {
   state.queueDeliveryIds = rows.map((row) => String(row.id));
   const count = rows.length;
-  dom.queueDeliverySummary.textContent = count > 1
-    ? `本批 ${count} 条；预计 ${count - 1} 次间隔，约 ${count - 1}–${(count - 1) * 3} 分钟。发送前请核对下方文本。`
-    : '本批 1 条；确认后立即开始。发送前请核对下方文本。';
+  if (dom.queueDeliverySummary) {
+    dom.queueDeliverySummary.textContent = count > 1
+      ? `本批 ${count} 条；预计 ${count - 1} 次间隔，约 ${count - 1}–${(count - 1) * 3} 分钟。请逐条核对招呼语后再发送。`
+      : '本批 1 条；确认后立即开始。请核对招呼语后再发送。';
+  }
   clear(dom.queueDeliveryList);
   rows.forEach((row) => {
+    const greeting = row.greeting || {};
     const item = el('li', { className: 'queue-delivery-item' });
     item.append(el('strong', { text: `${row.company || '—'}｜${row.title || '—'}` }));
-    item.append(el('p', { text: String((row.greeting || {}).greeting || '') }));
+    item.append(el('p', { className: 'queue-delivery-text', text: String(greeting.greeting || '') }));
+    item.append(el('p', {
+      className: 'queue-delivery-meta',
+      text: `来源：${greeting.selection || '未标注'}`
+    }));
+    const evidence = greeting.evidence_check;
+    if (evidence && Array.isArray(evidence.unsupported_claims) && evidence.unsupported_claims.length) {
+      item.append(el('p', {
+        className: 'queue-delivery-meta queue-delivery-warn',
+        text: '无证据数字（仅提示，不会自动改写）：'
+      }));
+      const evidenceList = el('ul', { className: 'queue-delivery-evidence' });
+      evidence.unsupported_claims.forEach((claim) => {
+        evidenceList.append(el('li', {
+          text: `「${claim.context}」中的数字 ${claim.value} 在个人资料中找不到依据，请核对后再发送`
+        }));
+      });
+      item.append(evidenceList);
+    }
     dom.queueDeliveryList.append(item);
   });
-  dom.queueDeliveryRisk.checked = true;
-  dom.queueDeliveryPanel.hidden = false;
+  if (dom.queueDeliveryRisk) dom.queueDeliveryRisk.checked = true;
+  if (dom.queueDeliveryProgress) dom.queueDeliveryProgress.textContent = '';
   updateDeliveryStartState();
+}
+
+function deliveryProgressText(snapshot) {
+  if (state.queueDeliveryBusy) return '正在提交发送请求…';
+  if (state.queueDeliverySubmitted) {
+    const delivery = snapshot && snapshot.pipeline && snapshot.pipeline.delivery;
+    const latest = delivery && delivery.latest_batch;
+    const batch = latest && (!state.queueDeliveryBatchId
+      || String(latest.batch_id || '') === state.queueDeliveryBatchId)
+      ? latest
+      : null;
+    if (batch) {
+      const status = String(batch.status || '');
+      if (status === 'starting' || status === 'sending') {
+        return `发送中：已成功 ${batch.sent || 0} 条，剩余在队列中；关闭弹窗后可在结果区查看。`;
+      }
+      return `已提交：${batch.sent || 0} 成功，${batch.failed || 0} 失败，${batch.deferred || 0} 延后。关闭弹窗后可在结果区查看。`;
+    }
+    return '已提交发送，正在后台执行；关闭弹窗后可在结果区查看。';
+  }
+  return '';
+}
+
+function renderDeliveryProgress(snapshot) {
+  if (!dom.queueDeliveryProgress) return;
+  dom.queueDeliveryProgress.textContent = deliveryProgressText(snapshot);
 }
 
 function updateDeliveryStartState() {
   if (!dom.queueDeliveryStart) return;
   const count = state.queueDeliveryIds.length;
-  dom.queueDeliveryStart.disabled = !(
-    count > 0
-    && dom.queueDeliveryRisk.checked
-    && !state.offerpilotTaskActive
-  );
+  const riskChecked = Boolean(dom.queueDeliveryRisk && dom.queueDeliveryRisk.checked);
+  const blocked = state.queueDeliveryBusy
+    || state.queueDeliverySubmitted
+    || Boolean(state.offerpilotTaskActive);
+  dom.queueDeliveryStart.disabled = !(count > 0 && riskChecked && !blocked);
+  dom.queueDeliveryStart.textContent = `确认发送本批 ${count} 条`;
+  if (dom.queueDeliveryCancel) dom.queueDeliveryCancel.disabled = state.queueDeliveryBusy;
+}
+
+function deliveryFocusable() {
+  if (!dom.queueDeliveryPanel) return [];
+  return Array.from(dom.queueDeliveryPanel.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+  )).filter((node) => node.offsetParent !== null || node === document.activeElement);
+}
+
+function handleDeliveryKeydown(event) {
+  if (!state.queueDeliveryOpen) return;
+  if (event.key === 'Escape') {
+    if (state.queueDeliveryBusy) return;
+    event.preventDefault();
+    closeDeliveryModal();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const nodes = deliveryFocusable();
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function closeDeliveryModal() {
+  if (!state.queueDeliveryOpen || !dom.queueDeliveryPanel) return;
+  if (state.queueDeliveryBusy) return;
+  dom.queueDeliveryPanel.hidden = true;
+  state.queueDeliveryOpen = false;
+  state.queueDeliveryIds = [];
+  state.queueDeliverySubmitted = false;
+  state.queueDeliveryBatchId = null;
+  document.body.classList.remove('queue-modal-open');
+  document.removeEventListener('keydown', handleDeliveryKeydown);
+  // 先恢复按钮可用状态，否则弹窗打开期间被禁用的触发按钮无法接收焦点。
+  updateQueueApprovedSelectionUI();
+  const target = state.queueDeliveryReturnFocus;
+  state.queueDeliveryReturnFocus = null;
+  if (target && typeof target.focus === 'function' && document.contains(target) && !target.disabled) {
+    target.focus();
+  } else if (dom.queueSendGreetings && !dom.queueSendGreetings.disabled) {
+    dom.queueSendGreetings.focus();
+  }
 }
 
 async function startQueueDelivery(button) {
   const ids = [...state.queueDeliveryIds];
   if (!ids.length) return;
+  if (!dom.queueDeliveryRisk || !dom.queueDeliveryRisk.checked) return;
   const count = ids.length;
-  const confirmed = window.confirm(
-    `确认发送本批 ${count} 条？\n\n发送会在 BOSS 直聘上代你操作，可能被平台限制账号。\n发送时间固定在 09:00–16:00，每天有上限，中间会随机停顿。`
-  );
-  if (!confirmed) return;
+  state.queueDeliveryBusy = true;
+  state.queueDeliverySubmitted = false;
+  updateDeliveryStartState();
+  renderDeliveryProgress(state.snapshot);
+  setStatus('正在提交发送请求…', 'warn');
   const data = await runAction(button, () => postAction('offerpilot-deliver', {
     ids,
     confirm: deliveryConfirmPhrase(count),
     risk_acknowledged: true
   }));
-  if (!data) return;
-  dom.queueDeliveryPanel.hidden = true;
-  state.queueDeliveryIds = [];
+  state.queueDeliveryBusy = false;
+  if (!data || data.ok === false) {
+    updateDeliveryStartState();
+    renderDeliveryProgress(state.snapshot);
+    if (data && data.message) setStatus(data.message, 'warn');
+    return;
+  }
+  state.queueDeliverySubmitted = true;
+  state.queueDeliveryBatchId = String((data.batch && data.batch.batch_id) || '') || null;
   state.queueApprovedSelection.clear();
+  updateQueueApprovedSelectionUI();
   setStatus(data.message || '已提交发送；受窗口与日限约束。', 'ok');
   await refreshOfferPilot();
+  renderDeliveryProgress(state.snapshot);
+  updateDeliveryStartState();
 }
 
 
@@ -3131,11 +4004,13 @@ function renderDeliveryResults(snapshot) {
     partial: '部分完成',
     failed: '发送未完成'
   };
-  head.append(el('strong', { text: `${titles[status] || status} · 批次 ${batch.batch_id || ''}` }));
-  head.append(badge(`${batch.sent || 0} 成功`, 'good', '✓'));
-  if (batch.failed) head.append(badge(`${batch.failed} 失败`, 'bad', '!'));
-  if (batch.deferred) head.append(badge(`${batch.deferred} 延后`, 'warn', '…'));
-  if (batch.blocked) head.append(badge(`${batch.blocked} 已阻止`, 'bad', '!'));
+  const sent = Number(batch.sent) || 0;
+  const failed = Number(batch.failed) || 0;
+  head.append(el('strong', {
+    text: `${titles[status] || '发送结果'}：成功 ${sent} 条，失败 ${failed} 条`
+  }));
+  if (batch.deferred) head.append(badge(`${batch.deferred} 条延后`, 'warn', '…'));
+  if (batch.blocked) head.append(badge(`${batch.blocked} 条被阻止`, 'bad', '!'));
   card.append(head);
   if (status === 'sending' || status === 'starting') {
     const active = snapshot.pipeline.offerpilot && snapshot.pipeline.offerpilot.task;
@@ -3262,6 +4137,666 @@ function renderMails(snapshot) {
     emptyText: '还没有解析过邮件。粘贴主题与正文后，会在这里看到分类结果。',
     className: 'data-table-wide'
   });
+  renderHrConversations();
+  const mailView = document.getElementById('view-mail');
+  if (mailView && !mailView.hidden) ensureHrConversationsLoaded();
+}
+
+/* Render: HR conversations（页面内单条回复，发送前必须确认） */
+
+const HR_REPLY_CONFIRM_PHRASE = '确认发送这条回复';
+
+function hrConversationById(id) {
+  const key = String(id || '');
+  if (!key) return null;
+  return state.hrConversations.find((row) => String((row && row.id) || '') === key) || null;
+}
+
+function hrConversationHasReply(conversation) {
+  const id = String((conversation && conversation.id) || '');
+  const cached = state.hrThreads[id];
+  if (cached && Array.isArray(cached.messages)) {
+    return cached.messages.some((message) => message && message.sender === 'hr');
+  }
+  return Boolean(conversation && (conversation.unread || conversation.last_message));
+}
+
+/* hr-inbox:start（tools/tests/test_hr_inbox.py 会截取本段用 node 执行） */
+// 各平台把最近消息时间给成不同的展示文本（“11-16 10:20”“昨天”“09:20”），
+// 这里只做排序用的粗解析；解析不出来的排在最后，保持原有顺序。
+function hrMessageTime(value, now) {
+  const text = String(value || '').trim();
+  if (!text) return NaN;
+  const ref = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  const stamp = (year, month, day, hour, minute) =>
+    new Date(year, month - 1, day, hour || 0, minute || 0).getTime();
+  let match = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if (match) {
+    return stamp(+match[1], +match[2], +match[3], +match[4] || 0, +match[5] || 0);
+  }
+  match = text.match(/^(\d{1,2})[-/.](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (match) {
+    const month = +match[1];
+    const day = +match[2];
+    let year = ref.getFullYear();
+    if (month > ref.getMonth() + 1 || (month === ref.getMonth() + 1 && day > ref.getDate() + 1)) {
+      year -= 1;
+    }
+    return stamp(year, month, day, +match[3] || 0, +match[4] || 0);
+  }
+  match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    return stamp(ref.getFullYear(), ref.getMonth() + 1, ref.getDate(), +match[1], +match[2]);
+  }
+  if (/(刚刚|刚才)/.test(text)) return ref.getTime();
+  match = text.match(/(\d+)\s*分钟前/);
+  if (match) return ref.getTime() - (+match[1]) * 60000;
+  match = text.match(/(\d+)\s*小时前/);
+  if (match) return ref.getTime() - (+match[1]) * 3600000;
+  const relative = text.match(/(前天|昨天|今天)[^\d]*(\d{1,2}):(\d{2})/);
+  if (relative) {
+    const offset = relative[1] === '前天' ? -2 : relative[1] === '昨天' ? -1 : 0;
+    const day = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + offset);
+    return stamp(day.getFullYear(), day.getMonth() + 1, day.getDate(), +relative[2], +relative[3]);
+  }
+  if (/前天/.test(text)) {
+    const day = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - 2);
+    return stamp(day.getFullYear(), day.getMonth() + 1, day.getDate(), 0, 0);
+  }
+  if (/昨天/.test(text)) {
+    const day = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - 1);
+    return stamp(day.getFullYear(), day.getMonth() + 1, day.getDate(), 0, 0);
+  }
+  // 只接受带时区的完整 ISO 串；不对任意文本调用 Date 构造，避免 "3" 之类被解析成无关日期。
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) {
+    const iso = new Date(text);
+    return Number.isNaN(iso.getTime()) ? NaN : iso.getTime();
+  }
+  return NaN;
+}
+
+// 回复页暂不展示前程无忧；接口仍照常返回它的状态，只在展示层隐藏。
+function hrPlatformHidden(platform) {
+  return String(platform || '').toLowerCase() === '51job';
+}
+
+function sortHrConversationsByRecent(rows) {
+  const now = new Date();
+  return (Array.isArray(rows) ? rows : [])
+    .map((row, index) => ({ row, index, time: hrMessageTime(row && row.last_message_at, now) }))
+    .sort((a, b) => {
+      const aValid = Number.isFinite(a.time);
+      const bValid = Number.isFinite(b.time);
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      if (aValid && bValid && a.time !== b.time) return b.time - a.time;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.row);
+}
+/* hr-inbox:end */
+
+function filteredHrConversations() {
+  const query = state.hrSearch.trim().toLowerCase();
+  return state.hrConversations.filter((conversation) => {
+    if (!conversation) return false;
+    if (hrPlatformHidden(conversation.platform)) return false;
+    if (state.hrPlatform !== 'all' && String(conversation.platform || 'boss') !== state.hrPlatform) return false;
+    if (state.hrFilter === 'unread' && !conversation.unread) return false;
+    if (state.hrFilter === 'replied' && !hrConversationHasReply(conversation)) return false;
+    if (!query) return true;
+    return [conversation.company, conversation.title, conversation.hr_name, conversation.hr_title, conversation.last_message]
+      .some((value) => String(value || '').toLowerCase().includes(query));
+  });
+}
+
+function hrPlatformErrorsFrom(data) {
+  const errors = {};
+  const source = data && data.errors && typeof data.errors === 'object' ? data.errors : {};
+  Object.entries(source).forEach(([platform, message]) => {
+    if (message) errors[String(platform)] = String(message);
+  });
+  if (!Object.keys(errors).length && data && Array.isArray(data.platforms)) {
+    data.platforms.forEach((row) => {
+      if (row && row.platform && row.error) errors[String(row.platform)] = String(row.error);
+    });
+  }
+  return errors;
+}
+
+function showHrStatus(message, accent) {
+  if (!dom.hrStatus) return;
+  dom.hrStatus.hidden = false;
+  dom.hrStatus.className = `notice hr-notice${accent ? ' notice-accent' : ''}`;
+  dom.hrStatus.textContent = message;
+}
+
+function hideHrStatus() {
+  if (!dom.hrStatus) return;
+  dom.hrStatus.hidden = true;
+  dom.hrStatus.textContent = '';
+}
+
+// 读取失败只挂在对应平台上；其他平台的会话不受影响，继续显示。
+function renderHrPlatformErrors(unavailable) {
+  if (!dom.hrPlatformErrors) return;
+  clear(dom.hrPlatformErrors);
+  const entries = (unavailable ? [] : Object.entries(state.hrPlatformErrors || {}))
+    .filter(([platform]) => !hrPlatformHidden(platform));
+  dom.hrPlatformErrors.hidden = !entries.length;
+  if (!entries.length) return;
+  // 平时只占一行；需要看原因时再展开，避免侧栏被错误文案撑高。
+  const details = el('details', { className: 'hr-platform-errors-details' });
+  details.append(el('summary', {
+    className: 'hr-platform-errors-summary',
+    text: `${entries.length} 个平台未读取，其他平台照常显示`
+  }));
+  const list = el('div', { className: 'hr-platform-errors-list' });
+  entries.forEach(([platform, reason]) => {
+    list.append(el('p', {
+      className: 'hr-platform-error',
+      text: `${channelLabel(platform)}未读取：${reason}`
+    }));
+  });
+  details.append(list);
+  dom.hrPlatformErrors.append(details);
+}
+
+function renderHrConversations() {
+  if (!dom.hrConversationList) return;
+  const unavailable = state.hrAvailable === false;
+  if (hrPlatformHidden(state.hrPlatform)) state.hrPlatform = 'all';
+  if (unavailable) {
+    showHrStatus(
+      `${state.hrReason || 'HR 会话暂不可用。'} 请先在本机 Chrome 登录各招聘平台（BOSS / 智联 / 猎聘）、打开调试端口，再点「刷新会话」。`,
+      false
+    );
+  } else if (state.hrConversationsLoading) {
+    showHrStatus('正在读取本机会话…', true);
+  } else {
+    hideHrStatus();
+  }
+  renderHrPlatformErrors(unavailable);
+  if (dom.hrRefresh) dom.hrRefresh.disabled = state.hrConversationsLoading;
+  if (dom.hrPlatformSelect && dom.hrPlatformSelect.value !== state.hrPlatform) {
+    dom.hrPlatformSelect.value = state.hrPlatform;
+  }
+  dom.hrFilterButtons.forEach((button) => {
+    const active = button.dataset.hrFilter === state.hrFilter;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  if (dom.hrSearch && dom.hrSearch.value !== state.hrSearch && document.activeElement !== dom.hrSearch) {
+    dom.hrSearch.value = state.hrSearch;
+  }
+
+  // 所有平台的会话合并在一个收件箱里，最近有消息的排在前面。
+  const conversations = unavailable ? [] : sortHrConversationsByRecent(filteredHrConversations());
+  if (dom.hrConversationCount) {
+    dom.hrConversationCount.textContent = unavailable ? '0 个会话' : `${conversations.length} 个会话`;
+  }
+  clear(dom.hrConversationList);
+  if (!conversations.length) {
+    let emptyText = '暂无 HR 会话。';
+    if (unavailable) emptyText = '会话不可用。';
+    else if (state.hrConversations.length) emptyText = '没有匹配的会话。';
+    dom.hrConversationList.append(el('p', { className: 'hr-empty', text: emptyText }));
+  } else {
+    conversations.forEach((conversation) => {
+      const id = String(conversation.id || '');
+      const active = id === state.hrSelectedId;
+      const top = el('span', { className: 'hr-conversation-top' }, [
+        el('strong', { className: 'hr-conversation-hr', text: String(conversation.hr_name || 'HR') })
+      ]);
+      const tags = el('span', { className: 'hr-conversation-tags' });
+      if (conversation.platform) {
+        tags.append(el('span', {
+          className: 'hr-platform-badge',
+          text: channelLabel(conversation.platform)
+        }));
+      }
+      if (conversation.unread) tags.append(badge('未读', 'good', '•'));
+      if (tags.childNodes.length) top.append(tags);
+      const platformLabel = channelLabel(conversation.platform);
+      const item = el('button', {
+        className: `hr-conversation${active ? ' is-active' : ''}`,
+        attrs: {
+          type: 'button',
+          'aria-current': active ? 'true' : 'false',
+          'aria-label': `${conversation.hr_name || 'HR'}，${conversation.company || '未填写公司'}，${conversation.title || '未填写岗位'}，${platformLabel}${conversation.unread ? '，未读' : ''}`
+        }
+      }, [
+        top,
+        el('span', {
+          className: 'hr-conversation-sub',
+          text: [conversation.hr_title, conversation.company, conversation.title].filter(Boolean).join(' · ') || '—'
+        }),
+        el('span', {
+          className: 'hr-conversation-last',
+          text: String(conversation.last_message || '暂无消息')
+        }),
+        el('span', {
+          className: 'hr-conversation-time',
+          text: formatDateTime(conversation.last_message_at)
+        })
+      ]);
+      item.addEventListener('click', () => selectHrConversation(id));
+      dom.hrConversationList.append(item);
+    });
+  }
+  renderHrThread();
+}
+
+function renderHrThread() {
+  if (!dom.hrMessages) return;
+  const conversation = state.hrThread && state.hrThread.conversation
+    ? state.hrThread.conversation
+    : hrConversationById(state.hrSelectedId);
+  clear(dom.hrMessages);
+  clear(dom.hrDetailJob);
+  if (!conversation) {
+    dom.hrDetailTitle.textContent = '选择一个 HR 会话';
+    dom.hrDetailMeta.textContent = '';
+    if (dom.hrReplyInput) dom.hrReplyInput.value = '';
+    if (dom.hrReplyInput) dom.hrReplyInput.disabled = true;
+    if (dom.hrReplySend) dom.hrReplySend.disabled = true;
+    if (dom.hrDraftCount) dom.hrDraftCount.textContent = '0 字';
+    if (dom.hrReplyBlockReason) {
+      dom.hrReplyBlockReason.hidden = true;
+      dom.hrReplyBlockReason.textContent = '';
+    }
+    dom.hrMessages.append(el('p', {
+      className: 'hr-empty',
+      text: '从左侧选择一位 HR，查看完整对话。'
+    }));
+    return;
+  }
+  dom.hrDetailTitle.textContent = String(conversation.hr_name || 'HR');
+  dom.hrDetailMeta.textContent = [
+    conversation.platform ? channelLabel(conversation.platform) : '',
+    conversation.hr_title,
+    conversation.company,
+    conversation.title
+  ].filter(Boolean).join(' · ');
+  if (conversation.job_id) {
+    const jobButton = el('button', {
+      className: 'button button-quiet button-small',
+      attrs: { type: 'button' },
+      text: '查看岗位'
+    });
+    jobButton.addEventListener('click', () => jumpToHrJob(conversation));
+    dom.hrDetailJob.append(jobButton);
+  } else {
+    dom.hrDetailJob.append(el('span', { className: 'hr-muted', text: '未关联岗位' }));
+  }
+
+  const thread = state.hrThread && state.hrThread.conversation
+    && String(state.hrThread.conversation.id) === String(conversation.id)
+    ? state.hrThread
+    : null;
+  const messages = thread && Array.isArray(thread.messages) ? thread.messages : [];
+  if (!messages.length) {
+    const empty = el('div', { className: 'hr-empty-block' });
+    empty.append(el('p', {
+      className: 'hr-empty',
+      text: state.hrThreadLoading ? '正在读取对话…' : '这个会话还没有消息。'
+    }));
+    if (!state.hrThreadLoading) {
+      empty.append(el('p', {
+        className: 'hr-empty-hint',
+        text: '如果你刚在平台上回复过，可以让工作台重新读一次。'
+      }));
+      const refresh = el('button', {
+        className: 'button button-quiet button-small',
+        text: '刷新这个会话',
+        attrs: { type: 'button' }
+      });
+      refresh.addEventListener('click', () => loadHrThread(String(conversation.id)));
+      empty.append(refresh);
+    }
+    dom.hrMessages.append(empty);
+  } else {
+    messages.forEach((message) => {
+      const sender = String((message && message.sender) || 'system');
+      const kind = sender === 'hr' ? 'hr' : sender === 'me' ? 'me' : 'system';
+      const bubble = el('article', { className: `hr-message hr-message-${kind}` });
+      const who = kind === 'hr' ? (conversation.hr_name || 'HR') : kind === 'me' ? '我' : '系统';
+      const stamp = formatDateTime(message && message.time);
+      bubble.append(el('p', {
+        className: 'hr-message-meta',
+        text: stamp && stamp !== '—' ? `${who} · ${stamp}` : who
+      }));
+      bubble.append(el('p', { className: 'hr-message-text', text: String((message && message.text) || '') }));
+      dom.hrMessages.append(bubble);
+    });
+    dom.hrMessages.scrollTop = dom.hrMessages.scrollHeight;
+  }
+
+  const allowed = Boolean(thread && thread.reply_allowed);
+  const blockReason = thread && thread.reply_block_reason ? String(thread.reply_block_reason) : '';
+  if (dom.hrReplyBlockReason) {
+    dom.hrReplyBlockReason.hidden = allowed;
+    dom.hrReplyBlockReason.textContent = allowed
+      ? ''
+      : (blockReason || (state.hrThreadLoading ? '正在读取对话…' : '当前会话暂时不能回复。'));
+  }
+  if (dom.hrReplyInput) dom.hrReplyInput.disabled = !allowed;
+  const draft = state.hrDrafts[String(conversation.id)] || '';
+  if (dom.hrReplyInput && document.activeElement !== dom.hrReplyInput) {
+    dom.hrReplyInput.value = draft;
+  }
+  updateHrComposerState();
+}
+
+function updateHrComposerState() {
+  const id = String(state.hrSelectedId || '');
+  const draft = String(state.hrDrafts[id] || '');
+  const thread = state.hrThread;
+  const allowed = Boolean(
+    id
+    && thread
+    && thread.conversation
+    && String(thread.conversation.id) === id
+    && thread.reply_allowed
+  );
+  if (dom.hrDraftCount) dom.hrDraftCount.textContent = `${draft.length} 字`;
+  if (dom.hrReplyInput) dom.hrReplyInput.disabled = !allowed;
+  if (dom.hrReplySend) dom.hrReplySend.disabled = !allowed || !draft.trim();
+}
+
+async function ensureHrConversationsLoaded(force = false) {
+  if (state.hrMode !== null && state.hrMode !== state.mode) {
+    state.hrConversations = [];
+    state.hrSelectedId = '';
+    state.hrThread = null;
+    state.hrThreads = {};
+    state.hrConversationsLoaded = false;
+    state.hrAvailable = null;
+    state.hrReason = '';
+    state.hrPlatformErrors = {};
+  }
+  if (!force && state.hrConversationsLoaded && state.hrMode === state.mode) return;
+  if (state.hrConversationsLoading) return;
+  await loadHrConversations();
+}
+
+async function loadHrConversations() {
+  const mode = state.mode;
+  const seq = ++state.hrSeq;
+  state.hrConversationsLoading = true;
+  renderHrConversations();
+  try {
+    const response = await fetch(
+      `/api/offerpilot/conversations?platform=all&mode=${encodeURIComponent(mode)}`,
+      {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store'
+      }
+    );
+    const data = await parseResponse(response);
+    if (seq !== state.hrSeq) return;
+    state.hrMode = mode;
+    state.hrConversationsLoaded = true;
+    state.hrAvailable = Boolean(data && data.available !== false);
+    state.hrReason = String((data && (data.reason || data.error)) || '');
+    state.hrPlatformErrors = hrPlatformErrorsFrom(data);
+    state.hrConversations = state.hrAvailable && Array.isArray(data.conversations)
+      ? data.conversations
+      : [];
+    if (!state.hrAvailable) {
+      state.hrSelectedId = '';
+      state.hrThread = null;
+      state.hrThreads = {};
+    } else if (!hrConversationById(state.hrSelectedId)) {
+      const first = sortHrConversationsByRecent(state.hrConversations)[0];
+      state.hrSelectedId = first ? String(first.id || '') : '';
+      state.hrThread = null;
+      if (state.hrSelectedId) loadHrThread(state.hrSelectedId, { quiet: true });
+    }
+  } catch (error) {
+    if (seq !== state.hrSeq) return;
+    state.hrMode = mode;
+    state.hrConversationsLoaded = true;
+    state.hrAvailable = false;
+    state.hrReason = `读取会话失败：${friendlyError(error)}`;
+    state.hrConversations = [];
+    state.hrSelectedId = '';
+    state.hrThread = null;
+    state.hrThreads = {};
+    state.hrPlatformErrors = {};
+  } finally {
+    if (seq === state.hrSeq) {
+      state.hrConversationsLoading = false;
+      renderHrConversations();
+    }
+  }
+}
+
+async function loadHrThread(id, options = {}) {
+  const mode = state.mode;
+  const key = String(id || '');
+  if (!key) return;
+  const selected = hrConversationById(key);
+  const platform = String(
+    (selected && selected.platform)
+    || (state.hrThread && state.hrThread.conversation && state.hrThread.conversation.platform)
+    || 'all'
+  );
+  state.hrThreadLoading = true;
+  if (!options.quiet) renderHrThread();
+  try {
+    const response = await fetch(
+      `/api/offerpilot/conversation?platform=${encodeURIComponent(platform)}&mode=${encodeURIComponent(mode)}&id=${encodeURIComponent(key)}`,
+      { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' }
+    );
+    const data = await parseResponse(response);
+    if (state.mode !== mode || String(state.hrSelectedId) !== key) return;
+    const base = hrConversationById(key) || {};
+    const nested = data && data.conversation && typeof data.conversation === 'object'
+      ? data.conversation
+      : null;
+    const flatId = data && data.conversation_id ? String(data.conversation_id) : '';
+    const conversation = nested
+      ? { ...base, ...nested, id: String(nested.id || flatId || key) }
+      : flatId
+        ? {
+          ...base,
+          id: flatId,
+          company: String(data.company || base.company || ''),
+          title: String(data.title || base.title || '')
+        }
+        : null;
+    state.hrThread = conversation
+      ? {
+        conversation,
+        messages: Array.isArray(data.messages) ? data.messages : [],
+        reply_allowed: Boolean(data.reply_allowed),
+        reply_block_reason: String(data.reply_block_reason || '')
+      }
+      : null;
+    if (conversation) {
+      state.hrThreads[key] = state.hrThread;
+      const index = state.hrConversations.findIndex((row) => String((row && row.id) || '') === key);
+      if (index >= 0) {
+        state.hrConversations[index] = { ...state.hrConversations[index], ...conversation };
+      }
+    }
+  } catch (error) {
+    if (state.mode === mode && String(state.hrSelectedId) === key) {
+      state.hrThread = null;
+      setStatus(`读取对话失败：${friendlyError(error)}`, 'error');
+    }
+  } finally {
+    if (state.mode === mode && String(state.hrSelectedId) === key) {
+      state.hrThreadLoading = false;
+      renderHrConversations();
+    }
+  }
+}
+
+function selectHrConversation(id) {
+  const key = String(id || '');
+  if (!key) return;
+  state.hrSelectedId = key;
+  state.hrThread = state.hrThreads[key] || null;
+  state.hrThreadLoading = true;
+  renderHrConversations();
+  loadHrThread(key);
+}
+
+function jumpToHrJob(conversation) {
+  const jobId = String((conversation && conversation.job_id) || '');
+  if (!jobId) return;
+  showView('jobs');
+  const rows = Array.from(dom.jobsTable.querySelectorAll('tbody tr'));
+  const company = String((conversation && conversation.company) || '');
+  const title = String((conversation && conversation.title) || '');
+  const row = rows.find((candidate) => {
+    const cells = candidate.querySelectorAll('td');
+    return cells.length > 2
+      && cells[1].textContent.includes(company)
+      && cells[2].textContent.includes(title);
+  });
+  if (!row) {
+    setStatus('已打开岗位池；当前列表里没有找到对应岗位，可能被筛选或已删除。', 'warn');
+    return;
+  }
+  row.classList.add('hr-target-row');
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  window.setTimeout(() => row.classList.remove('hr-target-row'), 2600);
+}
+
+function openHrReplyModal(trigger) {
+  if (!dom.hrReplyConfirmPanel) return;
+  const conversation = state.hrThread && state.hrThread.conversation;
+  const id = String(state.hrSelectedId || '');
+  const text = String(state.hrDrafts[id] || '');
+  if (!conversation || !state.hrThread.reply_allowed || !text.trim()) return;
+  dom.hrReplyWho.textContent = [
+    `${conversation.hr_name || 'HR'}${conversation.hr_title ? `（${conversation.hr_title}）` : ''}`,
+    conversation.company || '—',
+    conversation.title
+  ].filter(Boolean).join(' · ');
+  dom.hrReplyModalText.textContent = text;
+  dom.hrReplyModalRisk.checked = true;
+  dom.hrReplyModalProgress.textContent = '';
+  state.hrReplyBusy = false;
+  if (!state.hrReplyModalOpen) {
+    state.hrReplyModalOpen = true;
+    state.hrReplyReturnFocus = trigger || (document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null);
+    document.body.classList.add('hr-modal-open');
+    document.addEventListener('keydown', handleHrReplyKeydown);
+  }
+  if (dom.hrReplyConfirmPanel.parentElement !== document.body) {
+    document.body.append(dom.hrReplyConfirmPanel);
+  }
+  dom.hrReplyConfirmPanel.hidden = false;
+  updateHrReplyConfirmState();
+  dom.hrReplyModalCancel.focus();
+}
+
+function updateHrReplyConfirmState() {
+  if (!dom.hrReplyConfirm) return;
+  const riskChecked = Boolean(dom.hrReplyModalRisk && dom.hrReplyModalRisk.checked);
+  dom.hrReplyConfirm.disabled = !riskChecked || state.hrReplyBusy;
+  if (dom.hrReplyModalCancel) dom.hrReplyModalCancel.disabled = state.hrReplyBusy;
+  if (dom.hrReplyModalRisk) dom.hrReplyModalRisk.disabled = state.hrReplyBusy;
+}
+
+function hrReplyFocusable() {
+  if (!dom.hrReplyConfirmPanel) return [];
+  return Array.from(dom.hrReplyConfirmPanel.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+  )).filter((node) => node.offsetParent !== null || node === document.activeElement);
+}
+
+function handleHrReplyKeydown(event) {
+  if (!state.hrReplyModalOpen) return;
+  if (event.key === 'Escape') {
+    if (state.hrReplyBusy) return;
+    event.preventDefault();
+    closeHrReplyModal();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const nodes = hrReplyFocusable();
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function closeHrReplyModal() {
+  if (!state.hrReplyModalOpen || !dom.hrReplyConfirmPanel) return;
+  if (state.hrReplyBusy) return;
+  dom.hrReplyConfirmPanel.hidden = true;
+  state.hrReplyModalOpen = false;
+  document.body.classList.remove('hr-modal-open');
+  document.removeEventListener('keydown', handleHrReplyKeydown);
+  const target = state.hrReplyReturnFocus;
+  state.hrReplyReturnFocus = null;
+  if (target && typeof target.focus === 'function' && document.contains(target) && !target.disabled) {
+    target.focus();
+  } else if (dom.hrReplySend && !dom.hrReplySend.disabled) {
+    dom.hrReplySend.focus();
+  }
+}
+
+async function submitHrReply() {
+  const conversation = state.hrThread && state.hrThread.conversation;
+  const id = String(state.hrSelectedId || '');
+  const text = String(state.hrDrafts[id] || '');
+  if (!conversation || !id || !text.trim()) return;
+  if (!dom.hrReplyModalRisk || !dom.hrReplyModalRisk.checked) return;
+  state.hrReplyBusy = true;
+  updateHrReplyConfirmState();
+  dom.hrReplyConfirm.disabled = true;
+  dom.hrReplyConfirm.setAttribute('aria-busy', 'true');
+  dom.hrReplyModalProgress.textContent = '正在发送这条回复…';
+  let data = null;
+  let failure = '';
+  try {
+    data = await postAction('offerpilot-reply', {
+      conversation_id: id,
+      text,
+      confirm: HR_REPLY_CONFIRM_PHRASE,
+      risk_acknowledged: true
+    });
+  } catch (error) {
+    failure = friendlyError(error);
+  } finally {
+    dom.hrReplyConfirm.removeAttribute('aria-busy');
+    state.hrReplyBusy = false;
+  }
+  const status = String((data && data.status) || '');
+  const sent = Boolean(data) && data.ok !== false && (status === 'sent' || !status);
+  if (sent) {
+    state.hrDrafts[id] = '';
+    dom.hrReplyModalProgress.textContent = '已发送。';
+    closeHrReplyModal();
+    setStatus((data && data.message) || '回复已发送。', 'ok');
+    await loadHrConversations();
+    if (state.hrSelectedId) await loadHrThread(state.hrSelectedId, { quiet: true });
+    return;
+  }
+  const message = data && data.message
+    ? String(data.message)
+    : failure
+      ? failure
+      : status === 'blocked'
+        ? '平台阻止了这次发送。'
+        : '发送失败，请稍后重试。';
+  dom.hrReplyModalProgress.textContent = message;
+  setStatus(message, status === 'blocked' ? 'warn' : 'error');
+  updateHrReplyConfirmState();
 }
 
 /* Render: interview */
@@ -3354,22 +4889,143 @@ function renderInterview(snapshot) {
     className: 'data-table-wide'
   });
 
-  const variants = Array.isArray(snapshot.variants) ? snapshot.variants : [];
+  renderVariants(snapshot);
+}
+
+/* Render: resume variants (read-only master comparison) */
+
+function renderVariants(snapshot) {
+  const variants = snapshot && Array.isArray(snapshot.variants) ? snapshot.variants : [];
   renderTable(dom.variantList, {
     caption: '表：已保存的经历变体',
-    columns: ['项目', '保存时间', '经历原文', 'SHA-256'],
-    rows: variants.map((variant) => [
-      String(variant.project || '—'),
-      formatDateTime(variant.created_at),
-      el('div', { className: 'cell-text', text: String(variant.text || '') }),
-      el('span', {
-        className: 'cell-mono',
-        text: String(variant.sha256 || '').slice(0, 16) || '—'
-      })
-    ]),
-    emptyText: '还没有保存经历变体。',
+    columns: ['项目', '保存时间', '经历原文', 'SHA-256', '主稿对比'],
+    rows: variants.map((variant) => {
+      const project = String(variant.project || '');
+      const compareButton = el('button', {
+        className: 'button button-small button-quiet resume-compare-button',
+        text: '与主稿对比',
+        attrs: {
+          type: 'button',
+          'aria-label': `与主稿对比：${project || '未命名项目'}`,
+          'data-resume-action': 'compare-variant'
+        }
+      });
+      compareButton.addEventListener('click', () => compareVariantWithMaster(variant, compareButton));
+      return [
+        String(variant.project || '—'),
+        formatDateTime(variant.created_at),
+        el('div', { className: 'cell-text', text: String(variant.text || '') }),
+        el('span', {
+          className: 'cell-mono',
+          text: String(variant.sha256 || '').slice(0, 16) || '—'
+        }),
+        el('div', { className: 'resume-compare-cell' }, [compareButton])
+      ];
+    }),
+    emptyText: '还没有保存经历变体；保存后才能与主稿对比。',
     className: 'data-table-wide'
   });
+}
+
+function renderVariantCompareMessage(kind, message) {
+  const container = dom.variantCompareResult;
+  if (!container) return;
+  clear(container);
+  container.className = `action-result action-result-${kind} resume-compare-result`;
+  container.hidden = false;
+  container.append(el('p', { className: 'resume-compare-meta', text: message }));
+}
+
+function variantSegmentKindLabel(segment) {
+  if (!segment || segment.kind === 'added') return '新增段落';
+  if (segment.kind === 'removed') return '主稿有此段，变体未保留';
+  return '改写';
+}
+
+function variantSegmentText(value) {
+  return String(value === undefined || value === null ? '' : value);
+}
+
+function renderVariantCompareResult(data, variant) {
+  const container = dom.variantCompareResult;
+  if (!container) return;
+  const info = data && typeof data === 'object' ? data : {};
+  const summary = info.summary && typeof info.summary === 'object' ? info.summary : {};
+  const segments = Array.isArray(info.segments) ? info.segments : [];
+  const project = String(info.project || (variant && variant.project) || '').trim();
+  clear(container);
+  container.className = 'action-result action-result-ok resume-compare-result';
+  container.hidden = false;
+  container.append(el('p', {
+    className: 'result-title',
+    text: `与主稿对比：${project || '未命名项目'}`
+  }));
+  container.append(el('p', {
+    className: 'resume-compare-meta',
+    text: [
+      `主稿来源：${String(info.master_source || '未提供')}`,
+      `新增 ${toInt(summary.added)} 段`,
+      `删除 ${toInt(summary.removed)} 段`,
+      `改写 ${toInt(summary.changed)} 段`,
+      `未改 ${toInt(summary.unchanged)} 段`
+    ].join(' · ')
+  }));
+  if (info.identical === true || !segments.length) {
+    container.append(el('p', {
+      className: 'resume-compare-empty',
+      text: '与主稿逐段一致，未发现新增、删除或改写。'
+    }));
+    return;
+  }
+  const list = el('ol', { className: 'resume-compare-list' });
+  segments.forEach((segment) => {
+    const kind = segment && segment.kind ? String(segment.kind) : 'changed';
+    const item = el('li', { className: `resume-compare-segment is-${kind}` });
+    item.append(el('span', {
+      className: 'resume-compare-kind',
+      text: variantSegmentKindLabel(segment)
+    }));
+    if (kind === 'changed') {
+      const pair = el('div', { className: 'resume-compare-pair' });
+      pair.append(el('span', { className: 'resume-compare-label', text: '主稿' }));
+      pair.append(el('p', { className: 'resume-compare-text', text: variantSegmentText(segment.before) }));
+      pair.append(el('span', { className: 'resume-compare-label', text: '变体' }));
+      pair.append(el('p', { className: 'resume-compare-text', text: variantSegmentText(segment.after) }));
+      item.append(pair);
+    } else {
+      item.append(el('p', {
+        className: 'resume-compare-text',
+        text: variantSegmentText(segment.text)
+      }));
+    }
+    list.append(item);
+  });
+  container.append(list);
+}
+
+async function compareVariantWithMaster(variant, button) {
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+  }
+  try {
+    const data = await postAction('compare-variant', {
+      variant_id: String((variant && variant.id) || ''),
+      project: String((variant && variant.project) || ''),
+      text: String((variant && variant.text) || '')
+    });
+    renderVariantCompareResult(data, variant);
+    setStatus('已生成只读对比；主稿与变体均未修改。', 'ok');
+  } catch (error) {
+    const message = friendlyError(error);
+    renderVariantCompareMessage('warn', message);
+    setStatus(message, 'warn');
+  } finally {
+    if (button) {
+      button.removeAttribute('aria-busy');
+      button.disabled = false;
+    }
+  }
 }
 
 /* Render: data and reports */
@@ -3470,18 +5126,13 @@ function renderData(snapshot) {
   });
   renderBoundaries(snapshot);
   renderConfig(snapshot);
-  const demo = snapshot.mode === 'demo';
-  dom.resetDemoButton.disabled = !demo;
-  dom.resetNote.textContent = demo
-    ? '只重置 demo 数据，不触碰 user 数据。'
-    : 'user 模式不能重置；请切换到 demo 后操作。';
 }
 
 /* Top-level render */
 
 function renderAll(snapshot) {
   renderMeta(snapshot);
-  renderWorkbenchNextStep(snapshot);
+  renderHomeToday(snapshot);
   renderPipeline(snapshot);
   renderProfile(snapshot.profile);
   renderOfferPilot(snapshot.pipeline && snapshot.pipeline.offerpilot);
@@ -3656,24 +5307,6 @@ async function exportData() {
   await loadState();
 }
 
-async function resetDemo() {
-  if (state.mode !== 'demo') {
-    setStatus('只有 demo 模式可以重置演示数据。', 'error');
-    return;
-  }
-  if (!window.confirm('确定恢复 demo 演示数据吗？user 数据不会改变。')) return;
-  const data = await runAction(dom.resetDemoButton, () => postJson('/api/reset-demo', { mode: 'demo' }));
-  if (!data) return;
-  setStatus(data.message || '演示数据已恢复；用户数据未改变。', data.ok ? 'ok' : 'warn');
-  showOpsResult({
-    title: '重置演示数据',
-    summary: data.message || '',
-    kind: data.ok ? 'ok' : 'warn'
-  });
-  state.queueSelection.clear();
-  await loadState();
-}
-
 /* Event handlers */
 
 function bindEvents() {
@@ -3689,10 +5322,7 @@ function bindEvents() {
     button.addEventListener('click', () => showView(button.dataset.viewLink));
   });
 
-  dom.modeButtons.forEach((button) => {
-    button.addEventListener('click', () => switchMode(button.dataset.mode));
-  });
-
+  
   dom.themeButtons.forEach((button) => {
     button.addEventListener('click', () => applyTheme(button.dataset.themeChoice));
   });
@@ -3793,13 +5423,10 @@ function bindEvents() {
     });
   }
   if (dom.queueSendGreetings) {
-    dom.queueSendGreetings.addEventListener('click', openDeliveryPanel);
+    dom.queueSendGreetings.addEventListener('click', () => openDeliveryPanel(dom.queueSendGreetings));
   }
   if (dom.queueDeliveryCancel) {
-    dom.queueDeliveryCancel.addEventListener('click', () => {
-      dom.queueDeliveryPanel.hidden = true;
-      state.queueDeliveryIds = [];
-    });
+    dom.queueDeliveryCancel.addEventListener('click', closeDeliveryModal);
   }
   if (dom.queueDeliveryRisk) {
     dom.queueDeliveryRisk.addEventListener('change', updateDeliveryStartState);
@@ -3839,7 +5466,9 @@ function bindEvents() {
       const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
       const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
       if (!selected.length) return;
-      const low = selected.some((job) => typeof job.score !== 'number' || job.score < 4.0);
+      const approvalMin = approvalMinOf(state.snapshot || {});
+      const low = selected.some((job) => typeof job.score !== 'number'
+        || (approvalMin !== null && job.score < approvalMin));
       enqueueJobs(selected, dom.jobsBulkEnqueue, low);
     });
   }
@@ -3850,6 +5479,12 @@ function bindEvents() {
       if (!selected.length) return;
       jobsDeleteSelected(selected, dom.jobsBulkDelete);
     });
+  }
+  if (dom.jobsDossierClose) {
+    dom.jobsDossierClose.addEventListener('click', closeJobDossier);
+  }
+  if (dom.queueReviewClose) {
+    dom.queueReviewClose.addEventListener('click', closeQueueReview);
   }
 
   dom.jdForm.addEventListener('submit', async (event) => {
@@ -3966,6 +5601,74 @@ function bindEvents() {
     await loadState();
   });
 
+  if (dom.hrRefresh) {
+    dom.hrRefresh.addEventListener('click', () => {
+      ensureHrConversationsLoaded(true);
+    });
+  }
+  if (dom.hrSearch) {
+    dom.hrSearch.addEventListener('input', () => {
+      state.hrSearch = dom.hrSearch.value;
+      renderHrConversations();
+    });
+    dom.hrSearch.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && dom.hrSearch.value) {
+        event.stopPropagation();
+        dom.hrSearch.value = '';
+        state.hrSearch = '';
+        renderHrConversations();
+      }
+    });
+  }
+  if (dom.hrPlatformSelect) {
+    dom.hrPlatformSelect.addEventListener('change', () => {
+      const platform = String(dom.hrPlatformSelect.value || 'all');
+      state.hrPlatform = platform;
+      const selected = hrConversationById(state.hrSelectedId);
+      if (platform !== 'all' && selected && String(selected.platform || 'boss') !== platform) {
+        const first = filteredHrConversations()[0];
+        if (first) {
+          selectHrConversation(first.id);
+          return;
+        }
+        state.hrSelectedId = '';
+        state.hrThread = null;
+      }
+      renderHrConversations();
+    });
+  }
+  dom.hrFilterButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const filter = String(button.dataset.hrFilter || '');
+      if (!filter) return;
+      state.hrFilter = filter;
+      renderHrConversations();
+    });
+  });
+  if (dom.hrReplyForm) {
+    dom.hrReplyForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      openHrReplyModal(dom.hrReplySend);
+    });
+  }
+  if (dom.hrReplyInput) {
+    dom.hrReplyInput.addEventListener('input', () => {
+      const id = String(state.hrSelectedId || '');
+      if (!id) return;
+      state.hrDrafts[id] = dom.hrReplyInput.value;
+      updateHrComposerState();
+    });
+  }
+  if (dom.hrReplyModalCancel) {
+    dom.hrReplyModalCancel.addEventListener('click', closeHrReplyModal);
+  }
+  if (dom.hrReplyModalRisk) {
+    dom.hrReplyModalRisk.addEventListener('change', updateHrReplyConfirmState);
+  }
+  if (dom.hrReplyConfirm) {
+    dom.hrReplyConfirm.addEventListener('click', submitHrReply);
+  }
+
   dom.worksheetForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const minutes = Number(dom.worksheetMinutes.value);
@@ -4064,8 +5767,7 @@ function bindEvents() {
   dom.runTestsButton.addEventListener('click', runTests);
   dom.webReportButton.addEventListener('click', generateWebReport);
   dom.exportButton.addEventListener('click', exportData);
-  dom.resetDemoButton.addEventListener('click', resetDemo);
-
+  
   dom.dryRunForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const data = await runAction(dom.dryRunButton, () => postAction('dry-run', {
@@ -4112,7 +5814,6 @@ function bindAmbient() {
 
 function init() {
   applyTheme(state.theme);
-  syncModeButtons();
   dom.mailDate.value = todayIso();
   showView('workbench');
   bindEvents();

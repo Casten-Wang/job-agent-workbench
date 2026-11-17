@@ -1,9 +1,9 @@
 # 个人资料接口（PROFILE-API）
 
-工作台把「个人资料」作为本地结构化事实源，供招呼语、模拟面试、定制简历与筛选偏好复用。数据只写入本机 `web/data/<mode>/profile.json`，不联网、不投递；真实资料不会进入 Git 仓库（`web/data/` 已忽略）。
+工作台把「个人资料」作为本地结构化事实源，供招呼语、模拟面试、定制简历与筛选偏好复用。数据只写入本机 `web/data/user/profile.json`，不联网、不投递；真实资料不会进入 Git 仓库（`web/data/` 已忽略）。
 
 - 服务地址：`http://127.0.0.1:8766`（仅 loopback）
-- 数据模式：`demo`（虚构演示）或 `user`（本机真实资料）
+- 数据模式：只有一个模式 `user`（本机真实资料）；`mode` 参数保留为兼容字段，其他取值按 `user` 处理
 - 版本：`1.0`
 
 ## 1. 读取
@@ -103,7 +103,7 @@ POST /api/action
 {"action": "import-profile-cv", "mode": "user"}
 ```
 
-只读取本机 `workspace/resume.md`，返回可识别的姓名、邮箱、电话、城市、技能词与一段简介建议；**不会自动保存**。演示模式返回 `400`，避免把真实简历写进 demo 数据。
+只读取本机 `workspace/resume.md`，返回可识别的姓名、邮箱、电话、城市、技能词与一段简介建议；**不会自动保存**。
 
 导入来源与解析范围（只增不改，旧字段保持原样）：
 
@@ -120,8 +120,8 @@ POST /api/action
 
 | 字段 | 含义 |
 | --- | --- |
-| `saved` | 该模式是否已通过 `save-profile` 写入过 `profile.json`。`false` 表示还只是空白或未保存的草稿来源 |
-| `cv_available` | user 模式下本机是否有可读的 Markdown 简历可供导入；demo 模式恒为 `false` |
+| `saved` | 本机是否已通过 `save-profile` 写入过 `profile.json`。`false` 表示还只是空白或未保存的草稿来源 |
+| `cv_available` | 本机是否有可读的 Markdown 简历可供导入 |
 
 页面据此决定是否在首次进入时自动预填一次草稿：仅当 `saved=false` 且 `cv_available=true` 时，预填结果只进入表单、不保存，并要求用户核对后再点「保存」。已保存过的资料（`saved=true`）不会被自动覆盖。
 
@@ -139,4 +139,4 @@ POST /api/action
 - 仅绑定 `127.0.0.1`，校验 `Host` 与 `Origin` 为 loopback。
 - 不接收凭据、Cookie、平台账号或第三方个人信息。
 - 不提供自动投递、自动发送、平台抓取或浏览器接管。
-- 真实 `profile.json` 位于 `web/data/user/`，已被 `.gitignore` 忽略；公开仓库只包含代码与虚构 demo 资料。
+- 唯一的 `profile.json` 位于 `web/data/user/`，已被 `.gitignore` 忽略；公开仓库只包含代码、测试夹具与虚构 `demo/` 样例文件。

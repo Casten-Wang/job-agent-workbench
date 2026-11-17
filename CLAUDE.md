@@ -95,3 +95,14 @@ git ls-files vendor/offerpilot/LICENSE vendor/offerpilot/pyproject.toml
 ```
 
 第 4 条应无输出；第 5 条只应列出 `workspace/README.md`；第 6 条应同时列出内嵌组件的许可与包定义。若改动涉及界面，另在 `http://127.0.0.1:8766/` 做一次桌面与手机宽度回归（user 模式确认内嵌后端「已就绪」与只读岗位数，demo 模式确认「演示只读」且启动禁用）。
+
+## 7. 会话模型别名
+
+以下对应关系由用户确认，子会话切换时按此使用：
+
+- `DeepSeek` → `mythos-magpie-1505138152`（用户确认；本机 API 对该 ID 的切换校验曾返回「无法确认」，以实际会话的 `model` 字段为准）
+- `hy3` → `mythos-magpie-9923421312`（用户确认）
+- Claude Sonnet 5.5 → `magpie-4959679688.anthropic.claude-sonnet-5-5`
+- Claude Opus 5.5 → `magpie-8544036116.anthropic.claude-opus-5-5`
+
+切换后必须用 `get_session` 核对 `model` 字段，不能只凭 `set_session_model` 的返回文字判断成功。

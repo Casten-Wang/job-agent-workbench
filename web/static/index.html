@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/offer-theme.css">
   <link rel="stylesheet" href="/ui-signals.css">
 </head>
-<body>
+<body class="offer-ui">
   <div class="ambient" aria-hidden="true">
     <div class="ambient-follow" id="ambient-follow"></div>
   </div>
@@ -32,27 +32,18 @@
 
       <nav class="nav" aria-label="主导航">
         <p class="nav-group-label">核心流程</p>
-        <button class="nav-item is-active" type="button" data-hub="workbench" data-view="workbench" aria-current="page"><span class="nav-index" aria-hidden="true">01</span><span class="nav-text"><span>工作台</span><small>今天做什么</small></span></button>
+        <button class="nav-item is-active" type="button" data-hub="workbench" data-view="workbench" aria-current="page"><span class="nav-index" aria-hidden="true">01</span><span class="nav-text"><span>首页</span><small>今天要做的事</small></span></button>
         <button class="nav-item" type="button" data-hub="find" data-view="collect"><span class="nav-index" aria-hidden="true">02</span><span class="nav-text"><span>求职主线</span><small>采集 · 筛选 · 通过 · 回复</small></span></button>
         <p class="nav-group-label">成长工具</p>
         <button class="nav-item" type="button" data-hub="profile" data-view="profile"><span class="nav-index" aria-hidden="true">03</span><span class="nav-text"><span>个人资料</span><small>事实源</small></span></button>
-        <button class="nav-item" type="button" data-hub="interview" data-view="interview"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>模拟面试</span><small>题单与复盘</small></span></button>
-        <button class="nav-item" type="button" data-hub="push" data-view="push"><span class="nav-index" aria-hidden="true">05</span><span class="nav-text"><span>信息推送</span><small>通知预览</small></span></button>
-        <button class="nav-item" type="button" data-hub="resume" data-view="resume"><span class="nav-index" aria-hidden="true">06</span><span class="nav-text"><span>定制简历</span><small>ATS 检查</small></span></button>
+        <button class="nav-item" type="button" data-hub="resume" data-view="resume"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>定制简历</span><small>简历检查</small></span></button>
+        <button class="nav-item" type="button" data-hub="interview" data-view="interview"><span class="nav-index" aria-hidden="true">05</span><span class="nav-text"><span>模拟面试</span><small>题单与复盘</small></span></button>
+        <button class="nav-item" type="button" data-hub="push" data-view="push"><span class="nav-index" aria-hidden="true">06</span><span class="nav-text"><span>信息推送</span><small>通知预览</small></span></button>
         <p class="nav-group-label">系统</p>
         <button class="nav-item" type="button" data-hub="data" data-view="data"><span class="nav-index" aria-hidden="true">07</span><span class="nav-text"><span>数据与设置</span><small>导出 · 边界</small></span></button>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="sidebar-block">
-          <p class="control-label" id="mode-label">数据模式</p>
-          <div class="segmented" role="group" aria-labelledby="mode-label">
-            <button type="button" data-mode="demo" aria-pressed="true">演示 demo</button>
-            <button type="button" data-mode="user" aria-pressed="false">我的 user</button>
-          </div>
-          <p class="hint">demo 全部为虚构测试数据；user 只读写本机 <code>web/data/user</code>。</p>
-        </div>
-
         <div class="sidebar-block">
           <p class="control-label" id="theme-label">外观</p>
           <div class="segmented segmented-3" role="group" aria-labelledby="theme-label">
@@ -62,7 +53,7 @@
           </div>
         </div>
 
-        <p class="sidebar-boundary">不自动投递 · 不抓取平台 · 仅本机 OfferPilot</p>
+        <p class="sidebar-boundary">只在本机运行，不会自动投递。</p>
       </div>
     </aside>
 
@@ -70,7 +61,6 @@
       <header class="topbar">
         <div class="topbar-heading">
           <h1>秋招规划师</h1>
-          <p class="mode-banner is-demo" id="mode-banner">演示模式：全部为虚构测试数据，仅用于验证工作台。</p>
         </div>
         <div class="topbar-meta">
           <p class="meta-line" id="generated-at">尚未载入本地数据</p>
@@ -83,108 +73,58 @@
 
       <div class="views" id="views" aria-busy="true">
         <section class="view" id="view-workbench" data-view-panel="workbench" aria-labelledby="workbench-title">
-          <h2 class="view-title" id="workbench-title">工作台</h2>
-          <p class="notice notice-accent workbench-next" id="workbench-next-text" aria-live="polite">正在读取本地数据…</p>
-          <div class="workbench-quick-actions">
-            <button class="button" type="button" data-view-link="collect">开始采集岗位</button>
-            <button class="button button-quiet" type="button" data-view-link="jobs">查看岗位池</button>
-            <button class="button button-quiet" type="button" data-view-link="queue">打开审批队列</button>
+          <div class="home-today" id="home-today">
+            <header class="home-head">
+              <h2 class="home-title" id="workbench-title">今天</h2>
+              <p class="home-date" id="home-date"></p>
+            </header>
+            <p class="home-lede" id="home-lede" aria-live="polite">正在读取本地数据…</p>
+
+            <ul class="home-tasks" aria-label="今天要做的事">
+              <li class="home-task">
+                <span class="home-task-label">待处理岗位</span>
+                <span class="home-task-count" id="home-jobs-count">0 个</span>
+                <button class="button button-small" type="button" id="home-jobs-action" data-view-link="queue">去确认</button>
+              </li>
+              <li class="home-task">
+                <span class="home-task-label">待确认招呼语</span>
+                <span class="home-task-count" id="home-greetings-count">0 条</span>
+                <button class="button button-small" type="button" id="home-greetings-action" data-view-link="queue">去发送</button>
+              </li>
+              <li class="home-task">
+                <span class="home-task-label">待回复的 HR 邮件</span>
+                <span class="home-task-count" id="home-replies-count">0 封</span>
+                <button class="button button-small" type="button" id="home-replies-action" data-view-link="mail">去回复</button>
+              </li>
+            </ul>
+
+            <p class="home-summary" id="home-send-summary">还没有发送记录。</p>
+
+            <details class="home-more" id="home-more">
+              <summary>这个工作台怎么用</summary>
+              <p>采集岗位，筛出合适的，生成招呼语，确认后发送。发送前一定会再问你一次，程序不会自己发。</p>
+              <p>先填好个人资料，评分和招呼语会更准。简历和模拟面试可以随时补。</p>
+              <p class="home-more-links">
+                <button class="button button-quiet button-small" type="button" data-view-link="profile">填写个人资料</button>
+                <button class="button button-quiet button-small" type="button" data-view-link="resume">整理简历</button>
+                <button class="button button-quiet button-small" type="button" data-view-link="interview">练习面试</button>
+                <button class="button button-quiet button-small" type="button" data-view-link="collect">采集新岗位</button>
+              </p>
+            </details>
           </div>
-
-          <section class="panel pipeline-panel" aria-labelledby="pipeline-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="pipeline-title">四步流程</h3>
-                <p class="panel-note">前三步由本地自动完成，只有最后一步需要你确认；本工作台只记录，不发送、不投递。</p>
-              </div>
-              <a class="button button-quiet button-small" href="/api/doc/pipeline-api" download="PIPELINE-API.md">接口文档</a>
-            </div>
-            <div class="pipeline workbench-stages" id="pipeline" aria-label="求职四步流程"></div>
-            <div class="external-events" id="pipeline-events" hidden></div>
-          </section>
-
-          <section class="panel belt-panel" aria-labelledby="belt-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="belt-title">9 状态工序带</h3>
-                <p class="panel-note">节点数字为当前筛选下的岗位数；点击节点按该状态筛选。箭头表示相邻工序，分支在焦点文字中列出。</p>
-              </div>
-              <p class="focus-line" id="belt-focus">当前焦点：全部状态</p>
-            </div>
-            <div class="belt" id="belt" role="group" aria-label="岗位状态工序带"></div>
-          </section>
-
-          <section class="kpi-section" aria-labelledby="kpi-title">
-            <h3 class="section-label" id="kpi-title">关键计数</h3>
-            <div class="kpi-row" id="kpi-row"></div>
-          </section>
-
-          <div class="chart-grid">
-            <section class="panel chart-panel" aria-labelledby="channel-chart-title">
-              <div class="panel-head">
-                <div>
-                  <h3 id="channel-chart-title">渠道转化</h3>
-                  <p class="panel-note">投递、面试、Offer 为同量纲计数；转化率见下方数据表。</p>
-                </div>
-              </div>
-              <div class="chart-canvas" id="channel-chart"></div>
-              <div class="chart-table" id="channel-table"></div>
-            </section>
-
-            <section class="panel chart-panel" aria-labelledby="quarter-chart-title">
-              <div class="panel-head">
-                <div>
-                  <h3 id="quarter-chart-title">季度计数</h3>
-                  <p class="panel-note">只画同量纲的投递、面试、Offer 计数；8 轴混合数据保留在表格中。</p>
-                </div>
-              </div>
-              <div class="chart-canvas" id="quarter-chart"></div>
-              <div class="chart-table" id="quarter-table"></div>
-            </section>
-
-            <section class="panel chart-panel" aria-labelledby="weakness-chart-title">
-              <div class="panel-head">
-                <div>
-                  <h3 id="weakness-chart-title">弱点标签</h3>
-                  <p class="panel-note">来自本地复盘卡片的显式弱点标签计数，不评价真实能力。</p>
-                </div>
-              </div>
-              <div class="chart-canvas" id="weakness-chart"></div>
-              <div class="chart-table" id="weakness-table"></div>
-            </section>
-
-            <section class="panel chart-panel" aria-labelledby="mail-chart-title">
-              <div class="panel-head">
-                <div>
-                  <h3 id="mail-chart-title">邮件意图</h3>
-                  <p class="panel-note">来自离线规则分类的本地邮件数量。</p>
-                </div>
-              </div>
-              <div class="chart-canvas" id="mail-chart"></div>
-              <div class="chart-table" id="mail-table"></div>
-            </section>
-          </div>
-
-          <section class="panel" aria-labelledby="activity-overview-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="activity-overview-title">最近动作</h3>
-                <p class="panel-note">本地操作日志，不随筛选变化。</p>
-              </div>
-            </div>
-            <div id="activity-overview"></div>
-          </section>
         </section>
 
         <section class="view" id="view-collect" data-view-panel="collect" aria-labelledby="collect-title" hidden>
-          <h2 class="view-title" id="collect-title">采集岗位</h2>
-          <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">1 采集</button>
-            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
-            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
-            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
-          </nav>
-          <p class="view-lede">按关键词和城市采集岗位，不会自动投递或发消息。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="collect-title">采集岗位</h2>
+            <p class="view-lede">按关键词和城市采集岗位，不会自动投递或发消息。</p>
+            <nav class="ui-hub-tabs" aria-label="求职主线">
+              <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">1 采集</button>
+              <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+              <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+              <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
+            </nav>
+          </header>
 
           <section class="panel collect-criteria-panel" aria-labelledby="collect-criteria-title">
             <div class="panel-head">
@@ -314,14 +254,16 @@
         </section>
 
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
-          <h2 class="view-title" id="jobs-title">岗位池</h2>
-          <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
-            <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
-            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
-            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
-          </nav>
-          <p class="view-lede">采集到的岗位会自动进入这里，并按你的简历评分。评分达到 4.0 的岗位会自动通过，进入「3 通过」。评分不足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="jobs-title">岗位池</h2>
+            <p class="view-lede">采集到的岗位会自动进入这里，并按你的简历评分。评分达到 4.0 的岗位会自动通过，进入「3 通过」。评分不足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
+            <nav class="ui-hub-tabs" aria-label="求职主线">
+              <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+              <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
+              <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+              <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
+            </nav>
+          </header>
           <p class="notice notice-accent" id="jobs-empty-hint">还没有岗位？先到 <button class="ui-link-button" type="button" data-view-link="collect">采集岗位</button> 按关键词采集，或在下方手动录入 JD。</p>
 
           <section class="panel" aria-labelledby="jobs-table-title">
@@ -333,19 +275,36 @@
               <p class="panel-count" id="jobs-count">显示 0 条</p>
             </div>
             <div class="action-result" id="jobs-action-result" hidden></div>
-            <div class="jobs-bulk-bar">
-              <label class="checkbox-label"><input type="checkbox" id="jobs-select-all" aria-label="全选当前列表"> 全选当前列表</label>
-              <span class="panel-count" id="jobs-selection-count">已选 0 条</span>
-              <label class="jobs-override-reason-label" for="jobs-override-reason">手动加入时的原因</label>
-              <select class="jobs-override-reason" id="jobs-override-reason" aria-label="手动加入时的原因">
-                <option value="值得沟通，人工判断">值得沟通，人工判断</option>
-                <option value="有内推或熟人渠道">有内推或熟人渠道</option>
-                <option value="公司或岗位我已了解">公司或岗位我已了解</option>
-              </select>
-              <button class="button button-small" type="button" id="jobs-bulk-enqueue" disabled>加入审批队列</button>
-              <button class="button button-small button-danger jobs-delete-button" type="button" id="jobs-bulk-delete" disabled>删除所选</button>
+            <div class="jobs-bulk-bar jobs-filter-bar">
+              <div class="jobs-filter-group jobs-filter-select">
+                <label class="checkbox-label"><input type="checkbox" id="jobs-select-all" aria-label="全选当前列表"> 全选当前列表</label>
+                <span class="panel-count jobs-selection-count" id="jobs-selection-count">已选 0 条</span>
+              </div>
+              <div class="jobs-filter-group jobs-filter-override">
+                <label class="jobs-override-reason-label" for="jobs-override-reason">手动加入时的原因</label>
+                <select class="jobs-override-reason" id="jobs-override-reason" aria-label="手动加入时的原因">
+                  <option value="值得沟通，人工判断">值得沟通，人工判断</option>
+                  <option value="有内推或熟人渠道">有内推或熟人渠道</option>
+                  <option value="公司或岗位我已了解">公司或岗位我已了解</option>
+                </select>
+              </div>
+              <div class="jobs-filter-group jobs-filter-actions">
+                <button class="button button-small" type="button" id="jobs-bulk-enqueue" disabled>加入审批队列</button>
+                <button class="button button-small button-danger jobs-delete-button" type="button" id="jobs-bulk-delete" disabled>删除所选</button>
+              </div>
             </div>
             <div id="jobs-table"></div>
+          </section>
+
+          <section class="panel jobs-dossier" id="jobs-dossier" hidden aria-labelledby="jobs-dossier-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="jobs-dossier-title">岗位详情</h3>
+                <p class="panel-note" id="jobs-dossier-sub">标准字段、三项匹配结果与核对材料；缺失的项显示为未知。</p>
+              </div>
+              <button class="button button-quiet button-small" type="button" id="jobs-dossier-close">收起</button>
+            </div>
+            <div id="jobs-dossier-body"></div>
           </section>
 
           <details class="panel jobs-manual-entry">
@@ -405,15 +364,17 @@
         </section>
 
         <section class="view" id="view-queue" data-view-panel="queue" aria-labelledby="queue-title" hidden>
-          <h2 class="view-title" id="queue-title">审批队列</h2>
-          <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
-            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
-            <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">3 通过</button>
-            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
-          </nav>
-          <p class="view-lede">评分达标的岗位已自动通过。这里只需处理手动加入的岗位；「今日安排」显示每天可联系的顺序，超出额度的岗位会顺延。</p>
-          <p class="notice notice-accent" id="queue-policy">真正发送前会再给你看一遍文案，由你确认后才发出。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="queue-title">审批队列</h2>
+            <p class="view-lede">评分达标的岗位已自动通过。这里只需处理手动加入的岗位；「今日安排」显示每天可联系的顺序，超出额度的岗位会顺延。</p>
+            <nav class="ui-hub-tabs" aria-label="求职主线">
+              <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+              <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+              <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">3 通过</button>
+              <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
+            </nav>
+          </header>
+          <p class="notice notice-accent" id="queue-policy">生成招呼语后会自动弹出核对窗口；你在窗口里确认后才发出，不会再弹浏览器确认框。</p>
           <p class="notice" id="queue-pipeline-status" hidden></p>
 
           <section class="panel" aria-labelledby="pending-title">
@@ -433,6 +394,17 @@
             </div>
           </section>
 
+          <section class="panel queue-review" id="queue-review" hidden aria-labelledby="queue-review-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="queue-review-title">人工核对</h3>
+                <p class="panel-note" id="queue-review-sub">逐条核对岗位要求与项目证据；通过和发送仍用上方原有按钮，这里只读。</p>
+              </div>
+              <button class="button button-quiet button-small" type="button" id="queue-review-close">收起</button>
+            </div>
+            <div id="queue-review-body"></div>
+          </section>
+
           <section class="panel" aria-labelledby="approved-title">
             <div class="panel-head">
               <div>
@@ -444,88 +416,165 @@
               <label class="checkbox-label"><input type="checkbox" id="queue-approved-select-all" aria-label="全选已确认"> 全选已确认</label>
               <span class="panel-count" id="queue-approved-selection-count">已选 0 条</span>
               <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
-              <button class="button button-small" type="button" id="queue-send-greetings" disabled>复核并发送</button>
+              <button class="button button-small" type="button" id="queue-send-greetings" disabled>查看并发送</button>
             </div>
             <div id="queue-approved-table"></div>
             <div class="queue-greetings" id="queue-greetings"></div>
-            <div class="queue-delivery-panel" id="queue-delivery-panel" hidden>
-              <div class="queue-delivery-head">
-                <strong>复核并发送</strong>
-                <button class="button button-quiet button-small" type="button" id="queue-delivery-cancel">取消</button>
+            <div class="queue-delivery-panel queue-delivery-modal" id="queue-delivery-panel" hidden>
+              <div class="queue-modal" role="dialog" aria-modal="true" aria-labelledby="queue-delivery-title" aria-describedby="queue-delivery-summary">
+                <div class="queue-delivery-head">
+                  <h3 id="queue-delivery-title">核对招呼语并发送</h3>
+                  <button class="button button-quiet button-small" type="button" id="queue-delivery-cancel">取消</button>
+                </div>
+                <p class="queue-delivery-summary" id="queue-delivery-summary"></p>
+                <ul class="queue-delivery-list" id="queue-delivery-list"></ul>
+                <p class="queue-modal-progress" id="queue-delivery-progress" role="status" aria-live="polite"></p>
+                <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk" checked> 我知道自动化操作可能被平台限制账号</label>
+                <div class="queue-delivery-actions">
+                  <button class="button" type="button" id="queue-delivery-start" disabled>确认发送本批 0 条</button>
+                </div>
+                <p class="hint">发送时间固定在 09:00–16:00，每天有上限，中间会随机停顿；遇到验证码或限流会立即停止。</p>
               </div>
-              <p class="queue-delivery-summary" id="queue-delivery-summary"></p>
-              <ul class="queue-delivery-list" id="queue-delivery-list"></ul>
-              <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk" checked> 我知道自动化操作可能被平台限制账号</label>
-              <div class="queue-delivery-actions">
-                <button class="button" type="button" id="queue-delivery-start" disabled>开始发送</button>
-              </div>
-              <p class="hint">发送时间固定在 09:00–16:00，每天有上限，中间会随机停顿；遇到验证码或限流会立即停止。</p>
             </div>
             <div class="queue-delivery-results" id="queue-delivery-results"></div>
           </section>
         </section>
 
         <section class="view" id="view-mail" data-view-panel="mail" aria-labelledby="mail-title" hidden>
-          <h2 class="view-title" id="mail-title">HR 回复</h2>
-          <nav class="ui-hub-tabs" aria-label="求职主线">
-            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
-            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
-            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
-            <button class="ui-hub-tab is-active" type="button" data-view="mail" aria-current="page">4 回复</button>
-          </nav>
-          <p class="view-lede">粘贴邮件内容，用离线规则识别意图、公司与岗位；不连接真实邮箱。识别出明确时间时可生成 .ics。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="mail-title">HR 回复</h2>
+            <p class="view-lede">各平台 HR 的消息都在这里按时间排在同一个收件箱，点开就能像聊天一样查看和回复；发送前必须在确认框里确认。</p>
+            <nav class="ui-hub-tabs" aria-label="求职主线">
+              <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+              <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+              <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+              <button class="ui-hub-tab is-active" type="button" data-view="mail" aria-current="page">4 回复</button>
+            </nav>
+          </header>
 
-          <section class="panel" aria-labelledby="mail-parse-title">
+          <section class="panel hr-panel" id="hr-conversations-panel" aria-labelledby="hr-panel-title">
             <div class="panel-head">
               <div>
-                <h3 id="mail-parse-title">解析邮件</h3>
-                <p class="panel-note">主题与正文按不可信数据展示；缺失字段保持为空，不猜测。</p>
+                <h3 id="hr-panel-title">HR 会话</h3>
+                <p class="panel-note">只读读取本机 Chrome 中各平台的会话（BOSS / 智联 / 猎聘）；回复每次只发一条，需你逐条确认。</p>
+              </div>
+              <button class="button button-quiet button-small" type="button" id="hr-refresh">刷新会话</button>
+            </div>
+            <div class="notice hr-notice" id="hr-status" role="status" aria-live="polite" hidden></div>
+            <div class="hr-layout">
+              <aside class="hr-sidebar" aria-label="HR 会话列表">
+                <input class="hr-search" id="hr-search" type="search" placeholder="搜索公司、HR 或消息" aria-label="搜索 HR 会话" autocomplete="off">
+                <label class="hr-platform-filter" for="hr-platform">平台
+                  <select id="hr-platform" aria-label="按平台筛选会话">
+                    <option value="all">全部平台</option>
+                    <option value="boss">Boss直聘</option>
+                    <option value="zhilian">智联招聘</option>
+                    <option value="liepin">猎聘</option>
+                  </select>
+                </label>
+                <div class="hr-filters" role="group" aria-label="会话筛选">
+                  <button class="hr-filter is-active" type="button" id="hr-filter-all" data-hr-filter="all" aria-pressed="true">全部</button>
+                  <button class="hr-filter" type="button" id="hr-filter-unread" data-hr-filter="unread" aria-pressed="false">未读</button>
+                  <button class="hr-filter" type="button" id="hr-filter-replied" data-hr-filter="replied" aria-pressed="false">有 HR 回复</button>
+                </div>
+                <div class="hr-platform-errors" id="hr-platform-errors" role="status" aria-live="polite" hidden></div>
+                <p class="hr-count" id="hr-conversation-count">0 个会话</p>
+                <div class="hr-conversation-list" id="hr-conversation-list"></div>
+              </aside>
+              <section class="hr-thread" aria-label="当前 HR 会话">
+                <div class="hr-thread-head">
+                  <div>
+                    <h4 id="hr-detail-title">选择一个 HR 会话</h4>
+                    <p class="hr-thread-meta" id="hr-detail-meta"></p>
+                  </div>
+                  <div class="hr-thread-job" id="hr-detail-job"></div>
+                </div>
+                <div class="hr-messages" id="hr-messages" aria-live="polite"></div>
+                <form class="hr-composer" id="hr-reply-form">
+                  <p class="hr-block-reason" id="hr-reply-block-reason" hidden></p>
+                  <textarea id="hr-reply-input" rows="3" aria-label="回复内容" placeholder="输入回复内容；发送前会再确认一次。" disabled></textarea>
+                  <div class="hr-composer-actions">
+                    <span class="hr-draft-count" id="hr-draft-count">0 字</span>
+                    <button class="button" type="submit" id="hr-reply-send" disabled>发送</button>
+                  </div>
+                </form>
+              </section>
+            </div>
+            <div class="hr-reply-modal" id="hr-reply-confirm-panel" hidden>
+              <div class="hr-reply-dialog" id="hr-reply-dialog" role="dialog" aria-modal="true" aria-labelledby="hr-reply-dialog-title" aria-describedby="hr-reply-who">
+                <div class="hr-reply-head">
+                  <h3 id="hr-reply-dialog-title">确认发送这条回复</h3>
+                  <button class="button button-quiet button-small" type="button" id="hr-reply-modal-cancel">取消</button>
+                </div>
+                <p class="hr-reply-who" id="hr-reply-who"></p>
+                <p class="hr-reply-text" id="hr-reply-modal-text"></p>
+                <p class="hr-reply-progress" id="hr-reply-modal-progress" role="status" aria-live="polite"></p>
+                <label class="checkbox-label"><input type="checkbox" id="hr-reply-modal-risk" checked> 我知道自动化操作可能被平台限制账号</label>
+                <div class="hr-reply-actions">
+                  <button class="button" type="button" id="hr-reply-confirm" disabled>确认发送这条回复</button>
+                </div>
               </div>
             </div>
-            <form class="form-grid" id="mail-form">
-              <div class="form-field full">
-                <label for="mail-subject">主题</label>
-                <input id="mail-subject" type="text" autocomplete="off" placeholder="面试邀请 / 笔试通知 / 录用通知">
-              </div>
-              <div class="form-field full">
-                <label for="mail-body">正文</label>
-                <textarea id="mail-body" rows="7" placeholder="粘贴邮件正文；若有明确时间，可生成 .ics。"></textarea>
-              </div>
-              <div class="form-field">
-                <label for="mail-from">发件人</label>
-                <input id="mail-from" type="text" autocomplete="off" placeholder="hr@example.invalid">
-              </div>
-              <div class="form-field">
-                <label for="mail-date">日期</label>
-                <input id="mail-date" type="date">
-              </div>
-              <div class="form-field full">
-                <label for="mail-message-id">Message-ID（可选）</label>
-                <input id="mail-message-id" type="text" autocomplete="off" spellcheck="false" placeholder="<id@example.invalid>">
-              </div>
-              <div class="form-field full form-actions">
-                <button class="button" type="submit" id="mail-submit">解析邮件</button>
-                <p class="hint">相同 Message-ID 会提示重复，不覆盖原记录。</p>
-              </div>
-            </form>
-            <div class="action-result" id="mail-result" hidden></div>
           </section>
 
-          <section class="panel" aria-labelledby="mail-list-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="mail-list-title">已解析邮件</h3>
-                <p class="panel-note">只有识别出明确 event_time 的邮件才可生成 .ics；不猜测日期。</p>
+          <details class="mail-offline">
+            <summary class="mail-offline-summary">离线邮件解析（可选）</summary>
+            <p class="panel-note mail-offline-note">手动粘贴邮件内容做离线解析，不连接真实邮箱；日常回复用上方会话即可。</p>
+
+            <section class="panel" aria-labelledby="mail-parse-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="mail-parse-title">解析邮件</h3>
+                  <p class="panel-note">主题与正文按不可信数据展示；缺失字段保持为空，不猜测。</p>
+                </div>
               </div>
-            </div>
-            <div id="mail-action-result"></div>
-            <div id="mail-list"></div>
-          </section>
+              <form class="form-grid" id="mail-form">
+                <div class="form-field full">
+                  <label for="mail-subject">主题</label>
+                  <input id="mail-subject" type="text" autocomplete="off" placeholder="面试邀请 / 笔试通知 / 录用通知">
+                </div>
+                <div class="form-field full">
+                  <label for="mail-body">正文</label>
+                  <textarea id="mail-body" rows="7" placeholder="粘贴邮件正文；若有明确时间，可生成 .ics。"></textarea>
+                </div>
+                <div class="form-field">
+                  <label for="mail-from">发件人</label>
+                  <input id="mail-from" type="text" autocomplete="off" placeholder="hr@example.invalid">
+                </div>
+                <div class="form-field">
+                  <label for="mail-date">日期</label>
+                  <input id="mail-date" type="date">
+                </div>
+                <div class="form-field full">
+                  <label for="mail-message-id">Message-ID（可选）</label>
+                  <input id="mail-message-id" type="text" autocomplete="off" spellcheck="false" placeholder="<id@example.invalid>">
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="mail-submit">解析邮件</button>
+                  <p class="hint">相同 Message-ID 会提示重复，不覆盖原记录。</p>
+                </div>
+              </form>
+              <div class="action-result" id="mail-result" hidden></div>
+            </section>
+
+            <section class="panel" aria-labelledby="mail-list-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="mail-list-title">已解析邮件</h3>
+                  <p class="panel-note">只有识别出明确 event_time 的邮件才可生成 .ics；不猜测日期。</p>
+                </div>
+              </div>
+              <div id="mail-action-result"></div>
+              <div id="mail-list"></div>
+            </section>
+          </details>
         </section>
 
         <section class="view" id="view-profile" data-view-panel="profile" aria-labelledby="profile-title" hidden>
-          <h2 class="view-title" id="profile-title">个人资料</h2>
-          <p class="view-lede">这里是工作台的结构化事实源：基本信息、求职偏好、教育/工作/项目经历与技能。保存后只写入本机 <code>web/data/&lt;mode&gt;/profile.json</code>；招呼语、模拟面试与定制简历会优先读取这里的专业信息，联系方式不会进入草稿。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="profile-title">个人资料</h2>
+            <p class="view-lede">这里是工作台的结构化事实源：基本信息、求职偏好、教育/工作/项目经历与技能。保存后只写入本机 <code>web/data/&lt;mode&gt;/profile.json</code>；招呼语、模拟面试与定制简历会优先读取这里的专业信息，联系方式不会进入草稿。</p>
+          </header>
 
           <section class="panel integration-panel" aria-labelledby="profile-api-title">
             <div class="integration-head">
@@ -549,7 +598,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="profile-form-title">资料编辑</h3>
-                <p class="panel-note">演示模式只含虚构资料；真实资料请切换到「我的 user」后填写。带 * 的字段用于完整度判断。</p>
+                <p class="panel-note">只保存在本机。带 * 的字段用于完整度判断。</p>
               </div>
               <div class="profile-head-actions">
                 <button class="button button-quiet button-small" type="button" id="profile-import">从本地简历导入</button>
@@ -622,8 +671,10 @@
         </section>
 
         <section class="view" id="view-interview" data-view-panel="interview" aria-labelledby="interview-title" hidden>
-          <h2 class="view-title" id="interview-title">模拟面试</h2>
-          <p class="view-lede">Mock 题单只从本地题库取题；复盘只摘录逐字稿中的显式证据。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="interview-title">模拟面试</h2>
+            <p class="view-lede">Mock 题单只从本地题库取题；复盘只摘录逐字稿中的显式证据。</p>
+          </header>
 
 
           <section class="panel integration-panel" aria-labelledby="interview-agent-title">
@@ -718,8 +769,10 @@
         </section>
 
         <section class="view" id="view-push" data-view-panel="push" aria-labelledby="push-title" hidden>
-          <h2 class="view-title" id="push-title">信息推送</h2>
-          <p class="view-lede">把岗位状态、面试提醒与 HR 回复整理成通知。当前只生成 dry-run 载荷，不连接真实推送服务。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="push-title">信息推送</h2>
+            <p class="view-lede">把岗位状态、面试提醒与 HR 回复整理成通知。当前只生成 dry-run 载荷，不连接真实推送服务。</p>
+          </header>
 
 
           <section class="panel integration-panel" aria-labelledby="push-agent-title">
@@ -775,8 +828,10 @@
         </section>
 
         <section class="view" id="view-resume" data-view-panel="resume" aria-labelledby="resume-title" hidden>
-          <h2 class="view-title" id="resume-title">定制简历</h2>
-          <p class="view-lede">围绕单个岗位整理可核实的经历原文，并做 ATS 静态可读性检查。不修改 Master Resume，不编造数字。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="resume-title">定制简历</h2>
+            <p class="view-lede">围绕单个岗位整理可核实的经历原文，并做 ATS 静态可读性检查。不修改 Master Resume，不编造数字。</p>
+          </header>
 
 
           <section class="panel integration-panel" aria-labelledby="resume-agent-title">
@@ -843,14 +898,18 @@
               </form>
               <div class="action-result" id="variant-result" hidden></div>
               <h4 class="subhead">已保存变体</h4>
+              <p class="panel-note">每行可只读对比主稿，逐段展示新增、删除与改写；不会修改主稿或保存任何内容。</p>
               <div id="variant-list"></div>
+              <div class="action-result resume-compare-result" id="resume-compare-result" aria-live="polite" hidden></div>
             </section>
           </div>
         </section>
 
         <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
-          <h2 class="view-title" id="data-title">数据与设置</h2>
-          <p class="view-lede">运行本地测试、生成验收报告、导出或重置演示数据。数据模式与外观在左侧设置区切换。</p>
+          <header class="view-head">
+            <h2 class="view-title" id="data-title">数据与设置</h2>
+            <p class="view-lede">运行本地测试、生成验收报告或导出数据。外观在左侧设置区切换。</p>
+          </header>
 
           <section class="panel" aria-labelledby="ops-title">
             <div class="panel-head">
@@ -863,9 +922,7 @@
               <button class="button" type="button" id="run-tests-button">运行测试</button>
               <button class="button" type="button" id="web-report-button">生成网页验收报告</button>
               <button class="button" type="button" id="export-button">导出 JSON</button>
-              <button class="button button-danger" type="button" id="reset-demo-button">重置演示数据</button>
             </div>
-            <p class="hint" id="reset-note">只重置 demo 数据，不触碰 user 数据。</p>
             <div class="action-result" id="ops-result" hidden></div>
           </section>
 
@@ -900,12 +957,99 @@
             </div>
             <div id="activity-data"></div>
           </section>
+
+          <h3 class="section-label" id="system-title">系统</h3>
+          <p class="view-lede">运行看板与流程图表，只读展示本地数据，不影响上方操作。</p>
+
+          <section class="panel pipeline-panel" aria-labelledby="pipeline-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="pipeline-title">四步流程</h3>
+                <p class="panel-note">前三步由本地自动完成，只有最后一步需要你确认；本工作台只记录，不发送、不投递。</p>
+              </div>
+              <a class="button button-quiet button-small" href="/api/doc/pipeline-api" download="PIPELINE-API.md">接口文档</a>
+            </div>
+            <div class="pipeline workbench-stages" id="pipeline" aria-label="求职四步流程"></div>
+            <div class="external-events" id="pipeline-events" hidden></div>
+          </section>
+
+          <section class="panel belt-panel" aria-labelledby="belt-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="belt-title">9 状态工序带</h3>
+                <p class="panel-note">节点数字为当前筛选下的岗位数；点击节点按该状态筛选。箭头表示相邻工序，分支在焦点文字中列出。</p>
+              </div>
+              <p class="focus-line" id="belt-focus">当前焦点：全部状态</p>
+            </div>
+            <div class="belt" id="belt" role="group" aria-label="岗位状态工序带"></div>
+          </section>
+
+          <section class="kpi-section" aria-labelledby="kpi-title">
+            <h3 class="section-label" id="kpi-title">关键计数</h3>
+            <div class="kpi-row" id="kpi-row"></div>
+          </section>
+
+          <div class="chart-grid">
+            <section class="panel chart-panel" aria-labelledby="channel-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="channel-chart-title">渠道转化</h3>
+                  <p class="panel-note">投递、面试、Offer 为同量纲计数；转化率见下方数据表。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="channel-chart"></div>
+              <div class="chart-table" id="channel-table"></div>
+            </section>
+
+            <section class="panel chart-panel" aria-labelledby="quarter-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="quarter-chart-title">季度计数</h3>
+                  <p class="panel-note">只画同量纲的投递、面试、Offer 计数；8 轴混合数据保留在表格中。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="quarter-chart"></div>
+              <div class="chart-table" id="quarter-table"></div>
+            </section>
+
+            <section class="panel chart-panel" aria-labelledby="weakness-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="weakness-chart-title">弱点标签</h3>
+                  <p class="panel-note">来自本地复盘卡片的显式弱点标签计数，不评价真实能力。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="weakness-chart"></div>
+              <div class="chart-table" id="weakness-table"></div>
+            </section>
+
+            <section class="panel chart-panel" aria-labelledby="mail-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="mail-chart-title">邮件意图</h3>
+                  <p class="panel-note">来自离线规则分类的本地邮件数量。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="mail-chart"></div>
+              <div class="chart-table" id="mail-table"></div>
+            </section>
+          </div>
+
+          <section class="panel" aria-labelledby="activity-overview-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="activity-overview-title">最近动作</h3>
+                <p class="panel-note">本地操作日志，不随筛选变化。</p>
+              </div>
+            </div>
+            <div id="activity-overview"></div>
+          </section>
         </section>
       </div>
 
       <footer class="footer">
-        <p>秋招规划师 · OfferPilot 本地工作台。approved 仅表示可人工投递；发送仍保留人工确认。</p>
-        <p>演示数据均为虚构测试数据；用户数据保存在本机 <code>web/data/user</code>。</p>
+        <p>秋招规划师，只在本机运行。标记为「已通过」只表示你同意联系，发送前仍需确认。</p>
+        <p>数据保存在本机 <code>web/data/user</code>。</p>
       </footer>
     </div>
   </div>

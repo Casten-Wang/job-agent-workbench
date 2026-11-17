@@ -25,7 +25,6 @@ from typing import Any
 WEB_DIR = Path(__file__).resolve().parent
 ROOT = WEB_DIR.parent
 TOOLS_DIR = ROOT / "tools"
-DEMO_DIR = ROOT / "demo"
 CV_PATH = ROOT / "workspace" / "resume.md"
 TESTS_DIR = TOOLS_DIR / "tests"
 
@@ -46,7 +45,10 @@ import filters  # noqa: E402
 import resume_quality  # noqa: E402
 import evidence_checker  # noqa: E402
 import greeting  # noqa: E402
+import job_dossier  # noqa: E402
+import job_match  # noqa: E402
 import job_risk  # noqa: E402
+import job_standardize  # noqa: E402
 import quota_planner  # noqa: E402
 import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
@@ -200,13 +202,18 @@ class ApiError(Exception):
 
 
 class Store:
-    """Own one clearly marked local dataset: demo or user."""
+    """Own the single local dataset at ``web/data/user``.
 
-    VALID_MODES = ("demo", "user")
+    ``mode`` is kept only as a compatibility field: the product has one mode,
+    so every value maps to the same local dataset.
+    """
 
-    def __init__(self, mode: str = "demo"):
-        self.mode = mode
-        self.root = WEB_DIR / "data" / mode
+    MODE = "user"
+    VALID_MODES = (MODE,)
+
+    def __init__(self, mode: str = MODE):
+        self.mode = self.MODE
+        self.root = WEB_DIR / "data" / self.MODE
         self.root.mkdir(parents=True, exist_ok=True)
         self.files = {
             "jobs": self.root / "jobs.json",
@@ -417,9 +424,8 @@ def _now() -> str:
 # Structured personal profile
 #
 # profile.json is the local source of truth for "who the user is". It lives in
-# web/data/<mode>/ and is gitignored. Demo mode only ever contains an obviously
-# fictional profile. Nothing here sends data anywhere; contact fields are kept
-# out of generated greetings, worksheets, and exported documents.
+# web/data/user/ and is gitignored. Nothing here sends data anywhere; contact
+# fields are kept out of generated greetings, worksheets, and exported documents.
 
 
 def _clean_text(value: Any, limit: int, multiline: bool = False) -> str:
@@ -987,21 +993,18 @@ def _profile_cv_source() -> tuple[Path, str] | None:
 def profile_for_api(mode: str, store: Store) -> dict[str, Any]:
     """Profile payload for the API and snapshot: public fields plus two read-only flags.
 
-    ``saved``: this mode has a profile.json written by save-profile.
-    ``cv_available``: a Markdown resume can be read for import (user mode only).
+    ``saved``: the local dataset has a profile.json written by save-profile.
+    ``cv_available``: a Markdown resume can be read for import.
     """
     return {
         **profile_public(store.profile()),
         "saved": store.files["profile"].is_file(),
-        "cv_available": mode == "user" and _profile_cv_source() is not None,
+        "cv_available": _profile_cv_source() is not None,
     }
 
 
 def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
     """Suggest profile fields from a local resume; never auto-save."""
-    mode = str(payload.get("mode") or "user")
-    if mode != "user":
-        raise ApiError("演示模式不读取真实简历；请切换到 user 模式")
     source = _profile_cv_source()
     if source is None:
         if any(path.suffix.lower() != ".md" for path in _runtime_resume_files()):
@@ -1015,7 +1018,7 @@ def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
     except (OSError, UnicodeError) as exc:
         raise ApiError(f"{label} 无法按 UTF-8 文本读取：{exc.__class__.__name__}", 400) from exc
     suggestion = normalize_profile(_extract_profile_from_cv(text))
-    store = get_store(mode)
+    store = get_store("user")
     store.log("读取简历建议资料", f"{label}；未自动保存")
     return {
         "ok": True,
@@ -1178,7 +1181,7 @@ def _contact_plan(
             "title": row.get("title") or job.get("title"),
             "score": row.get("score"),
             "risk_level": (risk_map.get(row_id) or {}).get("level"),
-            "posted_at": job.get("posted_at"),
+            "posted_at": job_standardize.source_updated_at(job),
         })
     plan = quota_planner.plan_contact_queue(
         candidates,
@@ -1194,199 +1197,13 @@ def _job_fingerprint(job: dict[str, Any]) -> str:
     return "|".join(str(job.get(key) or "").strip() for key in ("company", "title", "city", "source_channel"))
 
 
-def _demo_jobs() -> list[dict[str, Any]]:
-    rows = []
-    for index, path in enumerate(sorted(DEMO_DIR.glob("demo-job-*.md")), start=1):
-        parsed = jd_intake.parse_jd_text(path.read_text(encoding="utf-8-sig"), path.stem)
-        job = _normalize_job(parsed, index, "manual_paste")
-        job["score"] = _demo_scores().get(str(job["id"]))
-        rows.append(job)
-    return rows
+def get_store(mode: str = "user", seed_if_empty: bool = True) -> Store:
+    """Return the single local dataset.
 
-
-def _demo_scores() -> dict[str, float]:
-    return {
-        "demo-job-001": 4.7,
-        "demo-job-002": 4.2,
-        "demo-job-003": 3.5,
-        "demo-job-004": 4.1,
-        "demo-job-005": 3.8,
-        "demo-job-006": 4.4,
-    }
-
-
-def _demo_queue() -> list[dict[str, Any]]:
-    rows = []
-    for job in _demo_jobs():
-        score = _demo_scores().get(str(job["id"]))
-        if score is None or score < 4.0:
-            continue
-        rows.append({
-            "id": job["id"],
-            "score": score,
-            "company": job["company"],
-            "title": job["title"],
-            "status": "approved",
-            "Source_Channel": job["source_channel"],
-            "created_at": "2026-11-14T09:00:00+08:00",
-            "high_confidence": score >= 4.5,
-        })
-    return rows
-
-
-def _demo_mails() -> list[dict[str, Any]]:
-    rows = []
-    for path in sorted(DEMO_DIR.glob("mail-*.json")):
-        mail = mail_classifier.load_mail(path)
-        result = mail_classifier.classify(mail)
-        rows.append({"id": str(mail.get("message_id") or path.stem), "source_file": path.name, "mail": mail, "classification": result})
-    return rows
-
-
-def _demo_debriefs() -> list[dict[str, Any]]:
-    text = (DEMO_DIR / "transcript-01.md").read_text(encoding="utf-8-sig")
-    card = interview_debrief.debrief(text, "demo-transcript", bank_path=WEB_DIR / "data" / "demo" / "question-bank.json", config={
-        **interview_debrief.load_config(),
-        "question_bank_path": str(WEB_DIR / "data" / "demo" / "question-bank.json"),
-        "interview_dir": str(WEB_DIR / "data" / "demo" / "downloads"),
-    })
-    card["id"] = "demo-debrief"
-    card["source"] = "demo/transcript-01.md"
-    return [card]
-
-
-def _demo_events() -> list[dict[str, Any]]:
-    return [
-        {"job_id": "demo-job-001", "from": "已采集", "to": "已过滤", "note": "测试状态", "recorded_at": "2026-11-10T09:00:00+08:00"},
-        {"job_id": "demo-job-001", "from": "已过滤", "to": "简历已定制", "note": "测试状态", "recorded_at": "2026-11-11T09:00:00+08:00"},
-        {"job_id": "demo-job-001", "from": "简历已定制", "to": "已投递/已沟通", "note": "演示数据：人工投递后记录", "recorded_at": "2026-11-12T09:00:00+08:00"},
-        {"job_id": "demo-job-001", "from": "已投递/已沟通", "to": "一面", "note": "测试状态", "recorded_at": "2026-11-13T09:00:00+08:00"},
-        {"job_id": "demo-job-002", "from": "已采集", "to": "已过滤", "note": "测试状态", "recorded_at": "2026-11-11T09:00:00+08:00"},
-    ]
-
-
-def _demo_variants() -> list[dict[str, Any]]:
-    return [{
-        "id": "demo-variant-001",
-        "project": "虚构官网项目",
-        "created_at": "2026-11-10T10:00:00+08:00",
-        "text": "测试数据：用户手动改写的项目描述原文，未经模型生成或补充数字。",
-        "sha256": hashlib.sha256("demo".encode("utf-8")).hexdigest(),
-    }]
-
-
-def _demo_profile() -> dict[str, Any]:
-    """Obviously fictional demo profile, matching demo/demo-resume-002.md.
-
-    Every name, school, company and number here is invented for testing. Contact
-    fields are placeholders, never a real person's details.
+    ``mode`` and ``seed_if_empty`` stay in the signature so existing callers
+    keep working; both are ignored. There is no second dataset to choose.
     """
-    return normalize_profile({
-        "truth_confirmed": True,
-        "basic": {
-            "name": "虚构应聘者乙",
-            "phone": "00000000000",
-            "email": "demo@example.invalid",
-            "city": "上海",
-            "wechat": "demo_only",
-            "links": "https://example.invalid/portfolio",
-        },
-        "job_intent": {
-            "titles": ["AI 产品经理", "产品助理"],
-            "cities": ["上海", "杭州", "北京"],
-            "salary_min": 12000,
-            "salary_max": 20000,
-            "job_type": "全职",
-            "availability": "2027 届校招，2027 年 6 月毕业",
-        },
-        "education": [{
-            "school": "虚构理工大学",
-            "major": "信息管理与信息系统",
-            "degree": "本科",
-            "start": "2023-09",
-            "end": "2027-06",
-            "summary": "主修数据库原理、统计学、用户研究方法、产品设计基础、Python 程序设计；自学线性代数与概率论、机器学习入门。",
-        }],
-        "experiences": [
-            {
-                "company": "虚构智能科技有限公司（A）",
-                "title": "AI 产品经理实习生",
-                "start": "2025-09",
-                "end": "2026-03",
-                "summary": "负责智能内容审核工作台的产品设计，结合图像分类与文字识别降低人工审核成本。访谈 8 名审核员并归纳 4 类痛点；通过 A/B 测试选定模型方案；输出 PRD，上线后机审覆盖率提升至 90%，人工审核效率提升 40%，获部门季度创新奖。",
-            },
-            {
-                "company": "虚构科技有限公司（B）",
-                "title": "AI 产品助理实习生",
-                "start": "2025-02",
-                "end": "2025-08",
-                "summary": "参与 AI 面试官产品设计，参与 5 场 HR 访谈并整理 12 项需求，设计候选人端、面试官与管理后台流程。单场面试耗时由 40 分钟降到 20 分钟，评估报告自动生成率达到 90%，需求澄清时间由 3 天缩短到 1 天。",
-            },
-        ],
-        "projects": [
-            {
-                "name": "虚构英语学习浏览器插件",
-                "role": "产品设计 / MVP",
-                "start": "2025-09",
-                "end": "2025-09",
-                "summary": "访谈 5 名英语学习者并完成竞品分析，用提示词工程与 AI coding 工具搭建 MVP；组织 10 人参与 A/B 实验，学习步骤减少 60%。",
-            },
-            {
-                "name": "虚构角色聊天 Agent 搭建",
-                "role": "RAG / 提示词工程",
-                "start": "2025-08",
-                "end": "2025-08",
-                "summary": "搭建带检索增强的角色聊天 Agent 并设计评测指标，召回率提升 30%，检索相关性提升 25%。",
-            },
-        ],
-        "skills": {
-            "tools": ["Figma", "Axure", "墨刀", "XMind", "SQL", "Excel", "Python", "AI coding 工具"],
-            "strengths": ["需求分析", "PRD 撰写", "用户访谈", "竞品分析", "RAG 流程与基础评测"],
-        },
-        "summary": "信息管理背景的本科生，做过两段 AI 方向产品实习与 0-1 的 MVP，习惯先访谈、再出方案、用数据复盘，能与研发、测试对齐需求与排期。",
-        "excluded_terms": ["外包", "驻场", "培训贷"],
-    })
-
-
-def _demo_bank() -> dict[str, Any]:
-    return {
-        "version": 1,
-        "questions": [
-            {"id": "q-demo-1", "question": "请解释一次需求分析？", "section": "业务拆解", "source": "user_demo"},
-            {"id": "q-demo-2", "question": "如何复盘量化不足与逻辑漏洞？", "section": "项目深挖", "source": "user_demo"},
-        ],
-    }
-
-
-def seed_demo(store: Store) -> None:
-    """Seed isolated, obviously fictional demo data; never overwrite user data."""
-    if store.mode != "demo":
-        raise ApiError("只能重置演示数据")
-    store.set_jobs(_demo_jobs())
-    store.set_queue(_demo_queue())
-    store.set_mails(_demo_mails())
-    store.set_debriefs(_demo_debriefs())
-    store.set_variants(_demo_variants())
-    store.set_question_bank(_demo_bank())
-    demo_profile = _demo_profile()
-    demo_profile["updated_at"] = "2026-11-14T09:00:00+08:00"
-    store.set_profile(demo_profile)
-    store.files["events"].write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in _demo_events()), encoding="utf-8")
-    store.files["pipeline"].write_text("", encoding="utf-8")
-    store.files["activity"].write_text("", encoding="utf-8")
-    for path in store.files["downloads"].glob("*"):
-        if path.is_file():
-            path.unlink()
-    store.log("载入演示数据", "3 条虚构 JD、2 封虚构邮件、1 份虚构复盘")
-
-
-def get_store(mode: str, seed_if_empty: bool = True) -> Store:
-    if mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
-    store = Store(mode)
-    if mode == "demo" and seed_if_empty and not store.all_jobs():
-        seed_demo(store)
-    return store
+    return Store()
 
 
 def _activity_title(row: dict[str, Any]) -> str:
@@ -1471,58 +1288,8 @@ def _mail_rows(mails: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _demo_offerpilot_state(store: Store) -> dict[str, Any]:
-    profile = store.profile()
-    intent = profile.get("job_intent") if isinstance(profile.get("job_intent"), dict) else {}
-    skills = profile.get("skills") if isinstance(profile.get("skills"), dict) else {}
-    return {
-        "ok": True,
-        "embedded": True,
-        "base_url": "embedded://offerpilot",
-        "api_version": OFFERPILOT_AGENT_API_VERSION,
-        "preferences": {
-            "keywords": list(intent.get("titles") or []),
-            "cities": list(intent.get("cities") or []),
-            "salary": {"min": intent.get("salary_min", 0), "max": intent.get("salary_max", 0)},
-            "deal_breakers": list(profile.get("excluded_terms") or []),
-            "jd_deal_breakers": [],
-            "blocked_companies": [],
-            "education": (profile.get("basic") or {}).get("education", ""),
-            "recruitment_type": intent.get("job_type", ""),
-            "allow_internship": intent.get("job_type") == "实习",
-            "score_threshold": 60,
-            "platform_order": ["boss"],
-            "max_pages": {"boss": 1},
-        },
-        "ai": {"configured": False},
-        "capabilities": {
-            "collect_without_ai": False,
-            "evaluate_with_local_agent_without_ai": False,
-            "monitor_without_ai": False,
-            "start_full_flow": False,
-            "human_confirmation_before_delivery": True,
-        },
-        "task": None,
-        "last_task": None,
-        "resume": {"available": False, "filename": None, "size_label": None, "uploaded_at": None},
-        "pipeline": {"approved_count": 0, "awaiting_confirmation": False, "auto_submit": False},
-        "mode": "demo",
-        "note": "演示模式只展示虚构数据，不启动真实采集。",
-    }
-
-
-def _demo_offerpilot_jobs(store: Store) -> dict[str, Any]:
-    allowed = ("id", "title", "company", "salary", "city", "experience", "education", "recruitment_type", "status", "score", "created_at", "updated_at")
-    jobs = []
-    for row in store.jobs():
-        jobs.append({key: row.get(key) for key in allowed if key in row})
-    return {"ok": True, "embedded": True, "source": "demo", "read_only": True, "jobs": jobs, "count": len(jobs), "limit": 100}
-
-
 def get_offerpilot_state(mode: str = "user") -> dict[str, Any]:
     """Return the credential-free state of the in-process OfferPilot backend."""
-    if mode == "demo":
-        return _demo_offerpilot_state(get_store("demo"))
     state = offerpilot_runtime.get_state()
     if not state.get("ok"):
         state.setdefault("base_url", "embedded://offerpilot")
@@ -1543,16 +1310,97 @@ def get_offerpilot_state(mode: str = "user") -> dict[str, Any]:
 
 def get_offerpilot_jobs(mode: str = "user") -> dict[str, Any]:
     """Read the embedded OfferPilot job pool without an HTTP hop."""
-    if mode == "demo":
-        return _demo_offerpilot_jobs(get_store("demo"))
     return offerpilot_runtime.get_jobs()
 
 
+CONVERSATION_ID_RE = re.compile(r"[0-9a-f]{32}")
+OFFERPILOT_COLLECT_PLATFORMS = ("boss", "zhilian", "51job", "liepin")
+
+
+def _offerpilot_platform(value: Any, *, allow_all: bool = False) -> str:
+    platform = str(value or "boss").strip().lower()
+    allowed = OFFERPILOT_COLLECT_PLATFORMS + (("all",) if allow_all else ())
+    if platform not in allowed:
+        if allow_all:
+            raise ApiError("平台只能是 boss、zhilian、51job、liepin 或 all")
+        raise ApiError("平台只能是 boss、zhilian、51job 或 liepin")
+    return platform
+
+
+def get_offerpilot_conversations(mode: str = "user", platform: Any = "boss") -> dict[str, Any]:
+    """Read chat lists read-only.
+
+    ``platform="all"`` aggregates the four supported platforms; a failed
+    platform keeps its error in ``errors`` without hiding the others.  The
+    default stays ``boss`` so existing callers keep their contract.
+    """
+    platform = _offerpilot_platform(platform, allow_all=True)
+    try:
+        return offerpilot_runtime.list_conversations(platform)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        return {
+            "ok": False,
+            "available": False,
+            "platform": platform,
+            "conversations": [],
+            "count": 0,
+            "error": str(exc),
+        }
+    except ValueError as exc:
+        raise ApiError(str(exc), 409) from exc
+
+
+def get_offerpilot_conversation(mode: str, conversation_id: str, platform: Any = "boss") -> dict[str, Any]:
+    """Read one conversation's messages; the thread stays in memory.
+
+    With ``platform="all"`` the runtime resolves the platform from the cached
+    aggregated list, so the hashed conversation id is enough.
+    """
+    platform = _offerpilot_platform(platform, allow_all=True)
+    text = str(conversation_id or "").strip()
+    if not CONVERSATION_ID_RE.fullmatch(text):
+        raise ApiError("会话 id 无效")
+    try:
+        return offerpilot_runtime.get_thread(text, platform)
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        raise ApiError(str(exc), 409) from exc
+
+
+def send_offerpilot_reply(payload: dict[str, Any]) -> dict[str, Any]:
+    """Send one confirmed HR reply; the message body is never logged."""
+    text = payload.get("text")
+    if not isinstance(text, str):
+        raise ApiError("回复内容必须是文本")
+    conversation_id = str(payload.get("id") or payload.get("conversation_id") or "").strip()
+    if not CONVERSATION_ID_RE.fullmatch(conversation_id):
+        raise ApiError("会话 id 无效")
+    try:
+        result = offerpilot_runtime.send_reply(
+            conversation_id,
+            text,
+            confirm=payload.get("confirm"),
+            risk_acknowledged=payload.get("risk_acknowledged") is True,
+        )
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        status = 409 if "会话不在最近" in str(exc) else 400
+        raise ApiError(str(exc), status) from exc
+    store = get_store("user")
+    # Log the action and company only: never the reply body or HR name.
+    store.log("发送 HR 回复", str(result.get("company") or "未知公司"))
+    return {
+        "ok": True,
+        "conversation_id": result.get("conversation_id"),
+        "company": result.get("company"),
+        "message": "已发送 1 条 HR 回复；不回写岗位或投递记录",
+    }
+
+
 def upload_offerpilot_resume(payload: dict[str, Any]) -> dict[str, Any]:
-    """Store a resume for the embedded runtime's scoring step (user mode only)."""
-    mode = str(payload.get("mode") or payload.get("data_mode") or "user")
-    if mode != "user":
-        raise ApiError("演示模式不能上传简历；请切换到「我的 user」", 400)
+    """Store a resume for the embedded runtime's scoring step."""
     filename = str(payload.get("filename") or "").strip()
     if not filename:
         raise ApiError("缺少简历文件名")
@@ -1569,7 +1417,7 @@ def upload_offerpilot_resume(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError(str(exc), 503) from exc
     except ValueError as exc:
         raise ApiError(str(exc), 400) from exc
-    store = get_store(mode)
+    store = get_store("user")
     store.log("上传评分简历", f"{result.get('filename')}；仅保存在本机运行时目录")
     return {
         "ok": True,
@@ -1615,9 +1463,7 @@ def _offerpilot_options(payload: dict[str, Any]) -> dict[str, Any] | None:
     unexpected = sorted(set(raw) - OFFERPILOT_OPTION_KEYS)
     if unexpected:
         raise ApiError("采集设置包含不支持的字段：" + "、".join(unexpected))
-    platform = str(raw.get("platform") or "boss").strip().lower()
-    if platform != "boss":
-        raise ApiError("当前采集窗口只开放 BOSS 直聘；其他平台请使用静态 JSON 导入")
+    platform = _offerpilot_platform(raw.get("platform") or "boss")
     keywords = _offerpilot_text_list(raw.get("keywords"), "搜索关键词", 10)
     cities = _offerpilot_text_list(raw.get("cities"), "城市", 5)
     try:
@@ -1653,10 +1499,6 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("岗位自动化任务只接受 mode、data_mode、confirm、risk_acknowledged 和 options")
     if payload.get("action") not in (None, "offerpilot-start"):
         raise ApiError("动作与 OfferPilot 启动请求不匹配")
-    if data_mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
-    if data_mode == "demo":
-        raise ApiError("演示模式不启动真实采集；请切换到用户数据后再启动", 403)
     if task_mode not in OFFERPILOT_TASK_MODES:
         raise ApiError("仅允许 collect、monitor 或 full；发送任务不开放直接调用", 403)
     if payload.get("confirm") is not True:
@@ -1690,17 +1532,12 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
 
 def start_offerpilot_greet(payload: dict[str, Any]) -> dict[str, Any]:
     """Generate greetings for approved jobs. Never sends anything."""
-    data_mode = str(payload.get("mode") or payload.get("data_mode") or "user")
-    if data_mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
-    if data_mode == "demo":
-        raise ApiError("演示模式不能生成招呼语；请切换到「我的 user」", 403)
     ids = payload.get("ids")
     if not isinstance(ids, list) or not ids:
         raise ApiError("请先勾选至少一条已确认岗位")
     if len(ids) > 10:
         raise ApiError("一次最多为 10 条岗位生成招呼语")
-    store = get_store(data_mode)
+    store = get_store("user")
     queue = {str(row.get("id")): row for row in store.queue()}
     jobs = {str(job.get("id")): job for job in store.jobs()}
     vendor_ids: list[str] = []
@@ -1773,11 +1610,6 @@ def _delivery_item(job: dict[str, Any], job_id: str) -> dict[str, Any]:
 
 def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     """Send reviewed greetings for approved jobs through the runtime guards."""
-    data_mode = str(payload.get("mode") or payload.get("data_mode") or "user")
-    if data_mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
-    if data_mode == "demo":
-        raise ApiError("演示模式不能发送；请切换到「我的 user」", 403)
     ids = payload.get("ids")
     if not isinstance(ids, list) or not ids:
         raise ApiError("请先勾选至少一条已确认岗位")
@@ -1794,7 +1626,7 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("risk_acknowledged") is not True:
         raise ApiError("发送前必须确认平台自动化风险")
 
-    store = get_store(data_mode)
+    store = get_store("user")
     queue = {str(row.get("id")): row for row in store.queue()}
     jobs = {str(job.get("id")): job for job in store.jobs()}
     vendor_ids: list[str] = []
@@ -1978,10 +1810,6 @@ def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("启动前检查只接受 mode、data_mode 和 options")
     if payload.get("action") not in (None, "offerpilot-preflight"):
         raise ApiError("动作与 OfferPilot 启动前检查不匹配")
-    if data_mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
-    if data_mode == "demo":
-        raise ApiError("演示模式只读；切换到用户数据后再检查真实采集环境", 403)
     if task_mode not in OFFERPILOT_TASK_MODES:
         raise ApiError("仅允许 collect、monitor 或 full；发送任务不开放直接调用", 403)
     options = _offerpilot_options(payload)
@@ -1998,77 +1826,51 @@ def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": bool(result.get("ok")), **result}
 
 
-OFFERPILOT_APPROVAL_RAW = 71.0
-OFFERPILOT_APPROVAL_SCORE = 4.0
+MATCH_SCORE_MODEL = "match-coefficients-v3"
+MATCH_SCORE_SCALE_LABEL = "0-100（文档匹配分）"
 
 
-def _offerpilot_thresholds() -> tuple[float, float]:
-    """Read the two gates that must agree, each from its single source.
+def _offerpilot_score(raw_score: Any, coverage: Any = None) -> int | None:
+    """Return the document's 0–100 integer score, or ``None`` when unscored.
 
-    Returns ``(raw threshold on the scorer's 0–100 scale, workbench gate on the
-    queue's 0–5 scale)``.  The raw threshold is the runtime's
-    ``scoring.threshold``; the workbench gate is the approval queue's
-    ``score.approval_min``.  The score mapping is anchored on this pair, so a
-    job the runtime accepts always clears the queue gate as well.
+    No threshold is applied.  A runtime score of 0 is treated as "not scored"
+    unless the new scoring also stored a positive information coverage (a
+    genuine all-zero result still has known dimensions).
     """
-    workbench = OFFERPILOT_APPROVAL_SCORE
-    try:
-        workbench = float(approval_queue.load_config()["score"]["approval_min"])
-    except (KeyError, TypeError, ValueError):
-        pass
-    raw = OFFERPILOT_APPROVAL_RAW
-    try:
-        configured = float(offerpilot_runtime.get_score_threshold())
-    except Exception:
-        configured = 0
-    if configured > 0:
-        raw = configured
-    return raw, workbench
-
-
-def _offerpilot_scale_label(raw_threshold: float, workbench_threshold: float) -> str:
-    return f"0-100→0-5（{raw_threshold:g}→{workbench_threshold:g}）"
-
-
-def _offerpilot_score(
-    raw_score: Any,
-    raw_threshold: float = OFFERPILOT_APPROVAL_RAW,
-    workbench_threshold: float = OFFERPILOT_APPROVAL_SCORE,
-) -> float | None:
-    """Map OfferPilot's 0–100 score onto the workbench's 0–5 scale.
-
-    Anchored on the live gate pair: the runtime's scoring threshold maps
-    exactly onto the approval queue's ``approval_min``.  Values are capped at
-    5.0.  Scores already on the 0–5 scale pass through unchanged.
-    """
-    if not isinstance(raw_score, (int, float)) or isinstance(raw_score, bool) or raw_score <= 0:
+    if not isinstance(raw_score, (int, float)) or isinstance(raw_score, bool):
         return None
     value = float(raw_score)
-    if value <= 5:
-        return round(value, 1)
-    if raw_threshold <= 0:
-        raw_threshold = OFFERPILOT_APPROVAL_RAW
-    return min(5.0, round(value * workbench_threshold / raw_threshold, 1))
+    if not 0 <= value <= 100:
+        return None
+    has_coverage = (
+        isinstance(coverage, (int, float))
+        and not isinstance(coverage, bool)
+        and 0 <= float(coverage) <= 1
+    )
+    if value <= 0 and not (has_coverage and float(coverage) > 0):
+        return None
+    return int(round(value))
 
 
 def _rescale_imported_jobs(store: Store) -> int:
-    """Re-map previously imported OfferPilot scores to the anchored scale."""
+    """Move previously imported scores onto the document's 0–100 scale."""
     rows = store.all_jobs()  # rewrites jobs.json: must keep soft-deleted records
-    raw_threshold, workbench_threshold = _offerpilot_thresholds()
-    label = _offerpilot_scale_label(raw_threshold, workbench_threshold)
     changed = 0
     for row in rows:
         if not row.get("offerpilot_id"):
             continue
         raw = row.get("score_raw")
-        if not isinstance(raw, (int, float)) or isinstance(raw, bool) or raw <= 5:
+        coverage = row.get("score_coverage")
+        # Old imported rows stored the 0–5 mapped score plus the raw score.
+        # Restore the raw integer; rows without score_raw are left untouched.
+        if not isinstance(raw, (int, float)) or isinstance(raw, bool):
             continue
-        score = _offerpilot_score(raw, raw_threshold, workbench_threshold)
+        score = _offerpilot_score(raw, coverage)
         if score is None:
             continue
-        if row.get("score") != score or row.get("score_scale") != label:
+        if row.get("score") != score or row.get("score_scale") != MATCH_SCORE_SCALE_LABEL:
             row["score"] = score
-            row["score_scale"] = label
+            row["score_scale"] = MATCH_SCORE_SCALE_LABEL
             changed += 1
     if changed:
         store.set_jobs(rows)
@@ -2081,8 +1883,6 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
     rows = store.all_jobs()
     existing = {_job_fingerprint(row) for row in rows}
     by_id = {str(job.get("id")): job for job in runtime_jobs if isinstance(job, dict)}
-    raw_threshold, workbench_threshold = _offerpilot_thresholds()
-    scale_label = _offerpilot_scale_label(raw_threshold, workbench_threshold)
     added: list[str] = []
     duplicates = 0
     unscored = 0
@@ -2092,36 +1892,55 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
         if source is None:
             continue
         raw_score = source.get("score")
-        score = _offerpilot_score(raw_score, raw_threshold, workbench_threshold)
+        coverage = source.get("score_coverage")
+        score = _offerpilot_score(raw_score, coverage)
         if score is None:
             unscored += 1
+        platform = str(source.get("source_platform") or "boss").strip().lower()
+        if platform not in OFFERPILOT_COLLECT_PLATFORMS:
+            platform = "boss"
         record = {
             "company": source.get("company"),
             "title": source.get("title"),
             "city": source.get("city"),
             "salary_text": source.get("salary"),
-            "posted_at": source.get("created_at"),
-            "source_channel": "boss",
+            # 运行时岗位只带本地库的 created_at/updated_at，没有平台发布时间；
+            # 不把入库时间冒充 posted_at，否则超期判断和「来源更新时间」都会失真。
+            "posted_at": None,
+            "source_channel": platform,
+            "source_platform": platform,
             "raw_text": "",
             "score": score,
             "offerpilot_id": job_id,
             "score_raw": raw_score if score is not None else None,
-            "score_scale": scale_label if score is not None else None,
+            "score_scale": MATCH_SCORE_SCALE_LABEL if score is not None else None,
+            "scoring_model": MATCH_SCORE_MODEL if coverage is not None else None,
+            "score_coverage": coverage,
+            "mandatory_status": source.get("mandatory_status") or "unknown",
+            "hiring_status": source.get("hiring_status") or "unknown",
+            "mandatory_conditions": source.get("mandatory_conditions") or [],
         }
-        job = _normalize_job(record, index, "boss")
+        job = _normalize_job(record, index, platform)
         fingerprint = _job_fingerprint(job)
         if fingerprint in existing:
             duplicates += 1
-            # A job imported before OfferPilot scored it keeps score=None forever
-            # unless we backfill it here. Only fill an empty score; never overwrite.
+            # Backfill an unscored row; a row already carrying a document score
+            # is refreshed because re-scoring is the same rule, not a user edit.
             if score is not None:
                 for row in rows:
-                    if _job_fingerprint(row) == fingerprint and row.get("score") is None:
+                    if _job_fingerprint(row) != fingerprint:
+                        continue
+                    if row.get("score") is None or record["scoring_model"] == MATCH_SCORE_MODEL:
                         row["score"] = score
                         row["score_raw"] = raw_score
                         row["score_scale"] = record["score_scale"]
+                        row["scoring_model"] = record["scoring_model"]
+                        row["score_coverage"] = coverage
+                        row["mandatory_status"] = record["mandatory_status"]
+                        row["hiring_status"] = record["hiring_status"]
+                        row["mandatory_conditions"] = record["mandatory_conditions"]
                         backfilled += 1
-                        break
+                    break
             continue
         existing.add(fingerprint)
         rows.append(job)
@@ -2140,9 +1959,6 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
 
 
 def import_offerpilot_jobs(payload: dict[str, Any]) -> dict[str, Any]:
-    data_mode = str(payload.get("data_mode") or payload.get("mode") or "user")
-    if data_mode != "user":
-        raise ApiError("采集结果只能导入 user 岗位池；demo 数据不会写入真实岗位")
     ids = payload.get("ids")
     if not isinstance(ids, list) or not ids:
         raise ApiError("请先勾选至少一条采集结果")
@@ -2200,9 +2016,6 @@ def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
     missing education/experience warning and the approval score threshold.
     Nothing is sent; sending still needs the review popup and its confirm.
     """
-    data_mode = str(payload.get("data_mode") or payload.get("mode") or "user")
-    if data_mode != "user":
-        raise ApiError("自动流程只处理 user 数据；演示模式不会写入岗位", 403)
     task_id = str(payload.get("task_id") or "").strip()
     if task_id and not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", task_id):
         raise ApiError("任务 id 无效")
@@ -2247,7 +2060,8 @@ def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
     ]
     queued: dict[str, Any] = {
         "approved": [], "dropped": [], "duplicate": [], "risk_blocked": [],
-        "city_blocked": [], "incomplete": [], "unscored": [], "recent_duplicates": [],
+        "city_blocked": [], "mandatory_blocked": [], "closed_blocked": [],
+        "incomplete": [], "unscored": [], "recent_duplicates": [],
         "message": "没有需要入队的岗位",
     }
     if candidates:
@@ -2328,10 +2142,6 @@ def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
 
 def stop_offerpilot_task(task_id: str, data_mode: str = "user") -> dict[str, Any]:
     safe_id = str(task_id or "").strip()
-    if data_mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
-    if data_mode == "demo":
-        raise ApiError("演示模式没有真实采集任务", 403)
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", safe_id):
         raise ApiError("岗位自动化 task_id 无效")
     try:
@@ -2371,13 +2181,13 @@ def pipeline_contract() -> dict[str, Any]:
             "owns_credentials": True,
             "embedded": True,
             "separate_service_required": False,
-            "runtime_dir": "web/data/<mode>/offerpilot",
+            "runtime_dir": "web/data/user/offerpilot",
         },
         "event_schema": {
             "type": "object",
             "required": ["stage", "status"],
             "properties": {
-                "mode": {"type": "string", "enum": ["demo", "user"], "default": "user"},
+                "mode": {"type": "string", "enum": ["user"], "default": "user"},
                 "stage": {"type": "string", "enum": ["send", "monitor"]},
                 "status": {"type": "string", "enum": list(PIPELINE_EVENT_STATUSES)},
                 "job_id": {"type": "string", "description": "本地岗位 id（可选）"},
@@ -2566,6 +2376,13 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
                     "finished_at": item.get("finished_at"),
                 }
     queue_view = [dict(row) for row in queue]
+    # 判断置信度是独立结果（必备条件证据的充分度，缺失时取资料覆盖率），
+    # 与队列里的 high_confidence 阈值标记不是一回事；这里只给队列行追加字段。
+    all_jobs_by_id = {str(job.get("id")): job for job in jobs}
+    for row in queue_view:
+        source_job = all_jobs_by_id.get(str(row.get("id")))
+        row["fit_confidence"] = job_match.fit_confidence(source_job) if source_job else None
+    materials_by_vendor: dict[str, Any] = {}
     if boss_state.get("ok"):
         job_by_id = {str(job.get("id")): job for job in jobs}
         vendor_by_job: dict[str, str] = {}
@@ -2575,30 +2392,46 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
             vendor_id = str((job_by_id.get(str(row.get("id"))) or {}).get("offerpilot_id") or "").strip()
             if vendor_id:
                 vendor_by_job[str(row.get("id"))] = vendor_id
-        if vendor_by_job:
+        # jobs[] also carries materials, so preview every collected job once.
+        vendor_ids = list(dict.fromkeys(
+            [
+                str(job.get("offerpilot_id") or "").strip()
+                for job in filtered_jobs
+                if str(job.get("offerpilot_id") or "").strip()
+            ]
+            + list(vendor_by_job.values())
+        ))
+        by_vendor: dict[str, dict[str, Any]] = {}
+        for start in range(0, len(vendor_ids), 50):
             try:
-                preview = offerpilot_runtime.get_greetings(list(vendor_by_job.values())[:50])
+                preview = offerpilot_runtime.get_greetings(vendor_ids[start:start + 50])
             except Exception:
-                preview = {"ok": False, "greetings": []}
-            by_vendor = {
-                str(item.get("id")): item
-                for item in (preview.get("greetings") or [])
-                if isinstance(item, dict)
-            }
-            for row in queue_view:
-                vendor_id = vendor_by_job.get(str(row.get("id")))
-                item = by_vendor.get(vendor_id) if vendor_id else None
-                if item:
-                    row["greeting"] = {
-                        key: item.get(key)
-                        for key in ("status", "greeting", "selection", "style_issues", "reviewed", "ready")
-                    }
-                    greeting_text = str(row["greeting"].get("greeting") or "")
-                    if greeting_text:
-                        # Read-only: flags numbers with no match in the user's own facts.
-                        row["greeting"]["evidence_check"] = evidence_checker.check_text_against_facts(
-                            greeting_text, profile_context_text(profile) + "\n" + cv_text
-                        )
+                continue
+            for item in preview.get("greetings") or []:
+                if isinstance(item, dict):
+                    by_vendor[str(item.get("id"))] = item
+        materials_by_vendor = {
+            vendor_id: item.get("materials")
+            for vendor_id, item in by_vendor.items()
+            if isinstance(item.get("materials"), dict)
+        }
+        for row in queue_view:
+            vendor_id = vendor_by_job.get(str(row.get("id")))
+            item = by_vendor.get(vendor_id) if vendor_id else None
+            if item:
+                row["greeting"] = {
+                    key: item.get(key)
+                    for key in (
+                        "status", "greeting", "selection", "style_issues",
+                        "reviewed", "ready", "materials",
+                    )
+                }
+                greeting_text = str(row["greeting"].get("greeting") or "")
+                if greeting_text:
+                    # Read-only: flags numbers with no match in the user's own facts.
+                    row["greeting"]["evidence_check"] = evidence_checker.check_text_against_facts(
+                        greeting_text, profile_context_text(profile) + "\n" + cv_text
+                    )
     for row in queue_view:
         delivery = latest_by_job.get(str(row.get("id")))
         if delivery:
@@ -2620,7 +2453,7 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
         "planned_today": len(contact_plan["ranked"]),
     }
     return {
-        "mode": mode,
+        "mode": store.mode,
         "generated_at": _now(),
         "filter": {"period": query.get("period", "all"), "channel": query.get("channel", "all"), "state": query.get("state", "all")},
         "states": STATES,
@@ -2637,7 +2470,10 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
             "id", "company", "title", "city", "salary_label", "source_channel",
             "posted_at", "hard_filter", "warnings", "score", "state", "approval",
             "fingerprint", "raw_text", "date", "created_at",
-        )} | {"risk": risk_map.get(str(job.get("id")))} for job in filtered_jobs],
+        )} | {
+            "risk": risk_map.get(str(job.get("id"))),
+            "materials": materials_by_vendor.get(str(job.get("offerpilot_id") or "")),
+        } for job in filtered_jobs],
         "queue": queue_view,
         "mails": sliced["mails"],
         "debriefs": sliced["debriefs"],
@@ -2678,6 +2514,30 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
     }
 
 
+def decorate_job_analysis(
+    job: dict[str, Any],
+    profile: dict[str, Any] | None = None,
+    cv_text: str = "",
+    variants: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Return the additive, read-only analysis view for one job row.
+
+    Keys: ``standard`` (what the posting says), ``match`` (fit score,
+    confidence and risk kept separate), ``dossier`` (application package) and
+    ``traceability`` (requirement → verbatim profile evidence). Every value
+    comes from local data already on the row or in the profile; missing data
+    stays ``None`` and nothing is sent.
+    """
+    return {
+        "standard": job_standardize.standardize_job(job),
+        "match": job_match.match_job(job),
+        "dossier": job_dossier.build_dossier(
+            job, profile=profile, variants=variants, cv_text=cv_text
+        ),
+        "traceability": job_dossier.build_traceability(job, profile=profile),
+    }
+
+
 def parse_jd(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     text = _bounded_text(payload.get("text"), "JD 文本")
@@ -2688,15 +2548,23 @@ def parse_jd(payload: dict[str, Any]) -> dict[str, Any]:
     job = _normalize_job(parsed, 1, source)
     job["score"] = _score(payload)
     store = get_store(mode)
+    profile = store.profile()
+    cv_text = profile_context_text(profile) or (
+        CV_PATH.read_text(encoding="utf-8-sig") if CV_PATH.is_file() else ""
+    )
+    job_view = dict(job)
+    job_view.update(
+        decorate_job_analysis(job, profile=profile, cv_text=cv_text, variants=store.variants())
+    )
     rows = store.all_jobs()  # keeps soft-deleted records in jobs.json
     key = _job_fingerprint(job)
     if any(_job_fingerprint(row) == key for row in rows):
         store.log("拒绝重复岗位", job["title"], False)
-        return {"ok": False, "duplicate": True, "job": job, "message": "相同公司、岗位、城市、渠道的记录已存在"}
+        return {"ok": False, "duplicate": True, "job": job_view, "message": "相同公司、岗位、城市、渠道的记录已存在"}
     rows.append(job)
     store.set_jobs(rows)
     store.log("录入 JD", f"{job['company']} · {job['title']}")
-    return {"ok": True, "job": job, "message": "岗位已录入本地工作区"}
+    return {"ok": True, "job": job_view, "message": "岗位已录入本地工作区"}
 
 
 def import_jobs(payload: dict[str, Any]) -> dict[str, Any]:
@@ -2927,9 +2795,13 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     jobs = {str(job.get("id")): job for job in store.jobs()}
     ids, recent_duplicates = _split_recent_duplicates(store, jobs, ids)
     profile_cities = [str(city) for city in (store.profile().get("job_intent") or {}).get("cities") or [] if str(city).strip()]
-    candidates = []
+    doc_candidates: list[dict[str, Any]] = []
+    manual_only: set[str] = set()
+    dropped_ids: list[str] = []
     risk_blocked: list[str] = []
     city_blocked: list[dict[str, Any]] = []
+    mandatory_blocked: list[dict[str, Any]] = []
+    closed_blocked: list[dict[str, Any]] = []
     incomplete: list[dict[str, Any]] = []
     unscored: list[str] = []
     risk_map = _job_risk_map(list(jobs.values()))
@@ -2949,30 +2821,96 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         missing = _missing_intake_fields(job)
         if missing:
             incomplete.append({"id": job_id, "missing": missing})
+        # 评分规则里的“明确不满足”和“已关闭或确认失效”都移出默认推荐；
+        # 与低分岗位一样，只有用户手动加入并填写原因才进入队列。
+        not_recommended = ""
+        conditions = job.get("mandatory_conditions") if isinstance(job.get("mandatory_conditions"), list) else []
+        if job.get("mandatory_status") == "unsatisfied":
+            names = [
+                str(item.get("condition") or "").strip()
+                for item in conditions
+                if isinstance(item, dict) and item.get("status") == "明确不满足"
+            ]
+            not_recommended = "；".join(name for name in names if name)[:120] or "必备条件明确不满足"
+            mandatory_blocked.append({"id": job_id, "reason": not_recommended})
+        if job.get("hiring_status") == "closed":
+            closed_blocked.append({"id": job_id, "reason": "岗位已关闭或确认失效"})
+            not_recommended = not_recommended or "岗位已关闭或确认失效"
         score = _score(job)
-        if score is None and not allow_low:
-            # 未评分岗位需要用户明确手动加入；这里记下来，避免被静默丢弃。
-            unscored.append(job_id)
+        coverage = job.get("score_coverage")
+        doc_scored = (
+            job.get("scoring_model") == MATCH_SCORE_MODEL
+            or (job.get("offerpilot_id") and isinstance(coverage, (int, float)) and not isinstance(coverage, bool))
+        )
+        has_doc_score = doc_scored and score is not None and float(coverage or 0) > 0
+        # 入队只认文档评分：没有按文档评分的岗位（含旧六维度本地岗位）不自动入队。
+        if not has_doc_score:
+            if allow_low:
+                manual_only.add(job_id)
+            elif score is None or doc_scored:
+                # 未评分，或全部维度未知（覆盖率 0）的待确认岗位：
+                # 需要用户明确手动加入，这里记下来避免被静默丢弃。
+                unscored.append(job_id)
+            else:
+                # 旧评分（非文档模型）不再自动入队，也不冒充文档评分。
+                dropped_ids.append(job_id)
             continue
-        candidates.append({
+        if not_recommended and not allow_low:
+            continue
+        if not_recommended:
+            manual_only.add(job_id)
+            continue
+        candidate = {
             "id": job_id,
             "score": score,
             "company": job.get("company"),
             "title": job.get("title"),
             "Source_Channel": job.get("source_channel"),
             "created_at": _now(),
-        })
-    result = approval_queue.enqueue(candidates, store.files["queue"])
-    # 评分达标（>= approval_min）即视为筛选通过；不再要求人工输入确认语，
-    # 直接标记为 approved。人工确认只保留在最终发送前。
+        }
+        doc_candidates.append(candidate)
+
+    # 文档规则岗位：不再与任何数字阈值比较，只要已按文档评分（覆盖率 > 0）、
+    # 没有明确不满足的必备条件且岗位未关闭，就进入审批队列。
+    # 这里只给 approval_queue.enqueue 传内存中的 config 覆盖，不改 tools 配置文件。
+    doc_auto = doc_candidates
+    result: dict[str, Any] = {"accepted": [], "dropped": [], "duplicate": [], "count": 0}
+    if doc_auto:
+        doc_cfg = approval_queue.load_config()
+        doc_cfg = {
+            **doc_cfg,
+            "score": {
+                **doc_cfg.get("score", {}),
+                # 文档评分不与数字阈值比较，只需把入队线降到 0。
+                # high_threshold 保留工具里的真实配置：high_confidence 只是标记，
+                # 不参与入队、确认或投递判定，也不再在界面显示。
+                "approval_min": 0,
+            },
+        }
+        doc_result = approval_queue.enqueue(doc_auto, store.files["queue"], config=doc_cfg)
+        for key in ("accepted", "dropped", "duplicate"):
+            result[key].extend(doc_result[key])
+    result["dropped"].extend(dropped_ids)
+    result["count"] = len(approval_queue.load_queue(store.files["queue"]))
+    # 符合筛选规则的岗位直接标记为 approved；人工确认只保留在最终发送前。
     approved: list[str] = []
     if result["accepted"]:
         confirmed = approval_queue.confirm(result["accepted"], store.files["queue"])
         approved = confirmed.get("confirmed") or []
     manual: list[str] = []
     if allow_low:
-        threshold = float(approval_queue.load_config()["score"]["approval_min"])
-        low = [item for item in candidates if item["score"] is None or item["score"] < threshold]
+        low = [
+            {
+                "id": job_id,
+                "score": _score(jobs[job_id]) if jobs.get(job_id) else None,
+                "company": (jobs.get(job_id) or {}).get("company"),
+                "title": (jobs.get(job_id) or {}).get("title"),
+                "Source_Channel": (jobs.get(job_id) or {}).get("source_channel"),
+                "created_at": _now(),
+            }
+            for job_id in ids
+            if job_id in manual_only and job_id in jobs
+        ]
         manual = _append_manual_queue(store, low, override_reason)
         if manual:
             result["manual"] = manual
@@ -2982,23 +2920,37 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     result["approved"] = approved
     result["risk_blocked"] = risk_blocked
     result["city_blocked"] = city_blocked
+    result["mandatory_blocked"] = mandatory_blocked
+    result["closed_blocked"] = closed_blocked
     result["incomplete"] = incomplete
     result["unscored"] = unscored
     result["recent_duplicates"] = recent_duplicates
     store.log(
         "加入审批队列",
-        f"评分达标自动通过 {len(approved)} 条，手动加入 {len(manual)} 条（原因：{override_reason or '无'}）；"
-        f"未入队 {len(result['dropped']) + len(result['duplicate'])} 条；{RECENT_DUPLICATE_DAYS} 天内重复拦截 {len(recent_duplicates)} 条",
+        f"按规则自动通过 {len(approved)} 条，手动加入 {len(manual)} 条（原因：{override_reason or '无'}）；"
+        f"未入队 {len(result['dropped']) + len(result['duplicate'])} 条；"
+        f"必备条件不满足 {len(mandatory_blocked)} 条，已关闭 {len(closed_blocked)} 条；"
+        f"{RECENT_DUPLICATE_DAYS} 天内重复拦截 {len(recent_duplicates)} 条",
     )
     message = "已进入审批队列" if (result["accepted"] or result["duplicate"]) else "没有岗位入队"
     if approved:
-        message = f"{len(approved)} 条评分达标，已自动通过"
+        message = f"{len(approved)} 条已按文档规则评分并通过筛选，已自动通过"
     if manual:
-        message += f"；{len(manual)} 条评分不足，已按你的选择手动加入（标记为已通过）"
+        message += f"；{len(manual)} 条未自动通过，已按你的选择手动加入（标记为已通过）"
     if risk_blocked:
         message += f"；{len(risk_blocked)} 条疑似高风险岗位（收费/承诺类），已拦截不入队"
     if city_blocked:
         message += f"；{len(city_blocked)} 条城市不在目标城市内，已拦截不入队"
+    if mandatory_blocked:
+        message += (
+            f"；{len(mandatory_blocked)} 条必备条件明确不满足，已移出默认推荐"
+            + ("并按你的选择手动加入" if allow_low else "，需要时请点「手动加入」并填写原因")
+        )
+    if closed_blocked:
+        message += (
+            f"；{len(closed_blocked)} 条岗位已关闭或确认失效"
+            + ("并按你的选择手动加入" if allow_low else "，未自动入队")
+        )
     if incomplete:
         message += f"；{len(incomplete)} 条缺少学历或经验字段，已放行并提示，请人工核对"
     if unscored:
@@ -3054,9 +3006,6 @@ def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     or has ever appeared in a delivery batch is protected and skipped; a
     pending queue row for a deleted job is removed along with it.
     """
-    mode = str(payload.get("mode") or "user")
-    if mode not in Store.VALID_MODES:
-        raise ApiError("数据模式只能是 demo 或 user")
     ids = payload.get("ids")
     if not isinstance(ids, list) or not ids or not all(isinstance(item, str) and item.strip() for item in ids):
         raise ApiError("ids 必须是非空字符串列表")
@@ -3068,7 +3017,7 @@ def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
         if text not in safe_ids:
             safe_ids.append(text)
 
-    store = get_store(mode)
+    store = get_store("user")
     rows = store.all_jobs()
     by_id = {str(row.get("id")): row for row in rows}
     queue = store.queue()
@@ -3294,21 +3243,135 @@ def debrief(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def add_variant(payload: dict[str, Any]) -> dict[str, Any]:
+    """Append one experience variant to the store shared with tools/variants.py.
+
+    ``Store.variants()`` is ``web/data/user/variants.json``, the same JSON array
+    the CLI writes, so a variant added from either side is visible to both.
+    Existing response keys keep their meaning; ``variant_id``, ``created_at``
+    and ``job_id`` are additive.
+    """
+
     mode = str(payload.get("mode") or "user")
     project = _bounded_text(payload.get("project"), "项目名", 300).strip()
     text = _bounded_text(payload.get("text"), "经历原文", 20_000)
     if not project or not text.strip():
         raise ApiError("项目名和经历原文不能为空")
+    job_id = variants.normalize_job_id(payload.get("job_id"))
     store = get_store(mode)
+    store_path = store.files["variants"]
     rows = store.variants()
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     quality = resume_quality.check_experience_text(text)
-    if any(str(row.get("sha256")) == digest for row in rows):
-        return {"ok": False, "duplicate": True, "message": "相同经历变体已存在", "quality": quality}
-    rows.append({"id": "variant-" + digest[:12], "project": project, "created_at": _now(), "text": text, "sha256": digest})
+    for row in rows:
+        if (
+            variants.project_slug(row.get("project")) == variants.project_slug(project)
+            and str(row.get("sha256") or "") == digest
+            and variants.normalize_job_id(row.get("job_id")) == job_id
+        ):
+            return {
+                "ok": False,
+                "duplicate": True,
+                "message": "相同经历变体已存在",
+                "quality": quality,
+                "variant_id": row.get("id"),
+                "job_id": job_id,
+            }
+    record: dict[str, Any] = {
+        "id": variants.record_id(project, text, job_id),
+        "project": project,
+        "created_at": _now(),
+        "text": text,
+        "sha256": digest,
+    }
+    if job_id:
+        record["job_id"] = job_id
+    rows.append(record)
     store.set_variants(rows)
     store.log("保存经历变体", project[:80])
-    return {"ok": True, "message": "经历原文已保存；未修改 Master Resume", "quality": quality}
+    return {
+        "ok": True,
+        "message": "经历原文已保存；未修改 Master Resume",
+        "quality": quality,
+        "variant_id": record["id"],
+        "created_at": record["created_at"],
+        "job_id": job_id,
+        "store": str(store_path),
+    }
+
+
+COMPARE_VARIANT_MASTER_LIMIT = 200_000
+
+
+def _compare_master_text(payload: dict[str, Any]) -> tuple[str, str]:
+    """The master wording to compare against: explicit text, else the resume.
+
+    Read-only: the resume file is never written, and only its text is returned.
+    """
+
+    provided = payload.get("master_text")
+    if provided is not None:
+        return _bounded_text(provided, "母版原文", COMPARE_VARIANT_MASTER_LIMIT), "请求提供"
+    source = _profile_cv_source()
+    if source is None:
+        raise ApiError(
+            "未找到可对比的母版简历：workspace/resume.md 不存在，也没有已上传的 Markdown 简历",
+            404,
+        )
+    path, label = source
+    try:
+        return path.read_text(encoding="utf-8-sig"), label
+    except (OSError, UnicodeError) as exc:
+        raise ApiError(f"{label} 无法按 UTF-8 文本读取：{exc.__class__.__name__}", 400) from exc
+
+
+def compare_variant(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compare one stored variant's wording against the master resume, read-only.
+
+    Accepts ``variant_id``, or ``project``/``text`` to pick the record, plus an
+    optional ``master_text``.  Returns the paragraph differences verbatim; it
+    never rewrites, generates or stores anything.
+    """
+
+    mode = str(payload.get("mode") or "user")
+    store = get_store(mode)
+    rows = store.variants()
+    variant_id = _bounded_text(payload.get("variant_id") or "", "经历变体 id", 200).strip()
+    project = _bounded_text(payload.get("project") or "", "项目名", 300).strip()
+    job_id = variants.normalize_job_id(payload.get("job_id"))
+    given_text = payload.get("text")
+    inline_text = _bounded_text(given_text, "经历原文", 20_000) if given_text is not None else ""
+    target: dict[str, Any] | None = None
+    if variant_id:
+        target = next((row for row in rows if str(row.get("id") or "") == variant_id), None)
+    elif job_id:
+        matches = [
+            row for row in rows if variants.normalize_job_id(row.get("job_id")) == job_id
+        ]
+        matches.sort(key=lambda row: str(row.get("created_at") or ""))
+        target = matches[-1] if matches else None
+    elif project:
+        matches = [
+            row
+            for row in rows
+            if variants.project_slug(row.get("project")) == variants.project_slug(project)
+        ]
+        matches.sort(key=lambda row: str(row.get("created_at") or ""))
+        target = matches[-1] if matches else None
+    if target is None and not inline_text:
+        raise ApiError(
+            "未找到可对比的经历变体：请提供 variant_id、job_id，或 project 与 text", 404
+        )
+    variant_text = inline_text or str(target.get("text") or "")
+    master_text, master_source = _compare_master_text(payload)
+    result = variants.compare_variant(variant_text, master_text)
+    return {
+        "ok": True,
+        "variant_id": (target or {}).get("id"),
+        "project": (target or {}).get("project") or project or None,
+        "job_id": variants.normalize_job_id((target or {}).get("job_id")),
+        "master_source": master_source,
+        **result,
+    }
 
 
 def check_pdf(payload: dict[str, Any]) -> dict[str, Any]:
@@ -3339,7 +3402,7 @@ def check_pdf(payload: dict[str, Any]) -> dict[str, Any]:
 
 def dry_run(payload: dict[str, Any]) -> dict[str, Any]:
     row = {
-        "job_id": str(payload.get("job_id") or "web-demo")[:100],
+        "job_id": str(payload.get("job_id") or "web-dry-run")[:100],
         "company": str(payload.get("company") or "虚构公司")[:160],
         "title": str(payload.get("title") or "岗位")[:160],
         "status": str(payload.get("status") or "已采集")[:80],
@@ -3376,7 +3439,7 @@ def web_report(mode: str) -> dict[str, Any]:
         "# 离线网页工作台验收报告",
         "",
         f"- 生成时间：{_now()}",
-        f"- 数据模式：{mode}（{'明显虚构的演示数据' if mode == 'demo' else '用户本地数据'}）",
+        f"- 数据模式：{store.mode}（本机用户数据；产品只有这一个模式）",
         "- 运行边界：127.0.0.1、无外部 API、无真实邮箱/飞书、无自动投递。",
         "",
         "## 自动检查",
@@ -3385,7 +3448,7 @@ def web_report(mode: str) -> dict[str, Any]:
         f"- 当前数据：岗位 {snap['scope']['all_jobs']} 条、待确认 {snap['kpis']['pending']} 条、邮件 {len(store.mails())} 封、复盘 {len(store.debriefs())} 份。",
         f"- 状态机：{', '.join(STATES)}。",
         "- 网页功能：JD 录入、静态 JSON 导入、审批队列、显式确认、30 天去重、话术草稿、状态跃迁、邮件解析、ICS、Mock、复盘、变体、ATS 静态检查、飞书 dry-run、测试、报告与导出。",
-        "- 人工确认门：所有 >=4.0 的岗位默认 pending；显式输入确认语才标记 approved；approved 只表示可人工投递。",
+        "- 人工确认门：已按文档评分且没有明确不满足必备条件的岗位进入待确认；显式确认后才标记 approved；approved 只表示可人工投递。",
         "",
         "## 需人工验证",
         "",
@@ -3425,7 +3488,7 @@ def export_data(mode: str) -> dict[str, Any]:
     payload = {
         "_note": "本地离线工作台数据导出；不含凭据。导入前请自行审查第三方个人信息。",
         "exported_at": _now(),
-        "mode": mode,
+        "mode": store.mode,
         "jobs": store.jobs(),
         "queue": store.queue(),
         "mails": store.mails(),
@@ -3438,16 +3501,78 @@ def export_data(mode: str) -> dict[str, Any]:
         "activity": store.activity(200),
     }
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    path = store.write_download(f"workspace-{mode}-export", text, ".json")
+    path = store.write_download(f"workspace-{store.mode}-export", text, ".json")
     store.log("导出本地数据", path.name)
     return {"ok": True, "download": path.name, "bytes": len(text.encode("utf-8")), "message": "本地数据已导出"}
 
 
-def reset_demo() -> dict[str, Any]:
-    store = Store("demo")
-    seed_demo(store)
-    offerpilot_runtime.reset_runtime("demo")
-    return {"ok": True, "message": "演示数据已恢复；用户数据未改变"}
+# Local greeting drafts for ready jobs
+#
+# This is text generation only: it reuses tools/greeting.py, reads facts from
+# profile.json (or workspace/resume.md) plus structured JD fields, and writes
+# nothing except the ``greeting`` key of each matched job. It never calls a
+# model or HTTP API, never opens a browser, and never sends anything.
+
+GREETING_LINK_RE = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
+
+
+def _greeting_has_contact(text: str) -> bool:
+    """True when a draft carries a phone, email, WeChat id, or a link."""
+    if GREETING_LINK_RE.search(text):
+        return True
+    return any(pattern.search(text) for pattern in offerpilot_runtime.CONTACT_PATTERNS)
+
+
+def generate_job_greetings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Draft a greeting for every ready job that has none yet.
+
+    Only ``status == "ready"`` jobs with an empty ``greeting`` are considered
+    (optionally narrowed by ``ids``). Facts come from the local profile/resume
+    and structured JD fields; contacts and links are rejected rather than
+    written. ``approval-queue.json`` and every other job field stay untouched.
+    """
+    raw_ids = payload.get("ids")
+    wanted: set[str] | None = None
+    if raw_ids is not None:
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise ApiError("ids 必须是非空岗位 id 数组")
+        wanted = {_safe_id(item, "") for item in raw_ids}
+        wanted.discard("")
+        if not wanted:
+            raise ApiError("ids 里没有有效的岗位 id")
+    store = get_store("user")
+    profile_text = profile_context_text(store.profile())
+    cv_text = profile_text or (CV_PATH.read_text(encoding="utf-8-sig") if CV_PATH.is_file() else "")
+    if not cv_text.strip():
+        raise ApiError("个人资料与本地简历都为空，无法生成只含专业事实的招呼语", 409)
+    jobs = store.jobs()
+    generated = 0
+    skipped: list[dict[str, str]] = []
+    for job in jobs:
+        job_id = str(job.get("id") or "")
+        if str(job.get("status") or "") != "ready":
+            continue
+        if wanted is not None and job_id not in wanted:
+            continue
+        if str(job.get("greeting") or "").strip():
+            continue
+        draft = greeting.make_greeting(job, cv_text)
+        text = str(draft.get("greeting") or "").strip()
+        if not text:
+            skipped.append({"id": job_id, "reason": "岗位与资料中没有可用的专业事实"})
+            continue
+        if _greeting_has_contact(text):
+            skipped.append({"id": job_id, "reason": "草稿包含联系方式或链接，未写入"})
+            continue
+        job["greeting"] = text
+        generated += 1
+    if generated:
+        store.set_jobs(jobs)
+        store.log("生成岗位招呼语", f"{generated} 条；只生成，不发送")
+    message = f"已为 {generated} 条岗位写入招呼语草稿；只生成，不发送"
+    if skipped:
+        message += f"；{len(skipped)} 条跳过"
+    return {"ok": True, "generated": generated, "skipped": skipped, "message": message}
 
 
 ACTIONS = {
@@ -3456,6 +3581,7 @@ ACTIONS = {
     "enqueue": enqueue,
     "confirm": confirm_queue,
     "delete-jobs": delete_jobs,
+    "generate-job-greetings": generate_job_greetings,
     "prepare": prepare,
     "transition": transition,
     "parse-mail": parse_mail,
@@ -3464,6 +3590,7 @@ ACTIONS = {
     "add-question": add_bank_question,
     "debrief": debrief,
     "add-variant": add_variant,
+    "compare-variant": compare_variant,
     "check-pdf": check_pdf,
     "dry-run": dry_run,
     "pipeline-event": ingest_pipeline_event,
@@ -3474,6 +3601,7 @@ ACTIONS = {
     "offerpilot-deliver": start_offerpilot_deliver,
     "offerpilot-import": import_offerpilot_jobs,
     "offerpilot-automate": run_offerpilot_pipeline,
+    "offerpilot-reply": send_offerpilot_reply,
     "offerpilot-resume": upload_offerpilot_resume,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(
         str(payload.get("task_id") or ""),
