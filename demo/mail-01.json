@@ -1,8 +1,0 @@
-{
-  "_note": "完全虚构的测试数据；不含真实个人信息、凭据或真实会议链接。",
-  "message_id": "<demo-mail-01@test.invalid>",
-  "from": "hr@test.invalid",
-  "subject": "测试数据：面试邀请",
-  "body": "公司：虚构星河科技有限公司\n岗位：AI产品经理\n请于2026年11月20日14:30参加一面。会议 https://example.invalid/demo-meeting",
-  "date": "2026-11-14"
-}

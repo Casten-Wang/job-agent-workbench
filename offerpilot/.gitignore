@@ -1,0 +1,13 @@
+.env
+*.env.local
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+
+# Personal source material and local workbench data
+resume-source.md
+workspace/*
+!workspace/README.md
+web/data/
+

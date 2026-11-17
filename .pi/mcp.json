@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp",
+      "description": "Query public library documentation when developing this project. Do not send candidate answers, private code or credentials.",
+      "exposure": "direct",
+      "timeout": 60
+    }
+  }
+}

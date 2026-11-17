@@ -1,0 +1,49 @@
+/* Shared document styling for the workbench preview and standalone print page. */
+.resume-sheet {
+  --resume-ink: #18212b;
+  --resume-accent: #234e70;
+  --resume-muted: #596675;
+  --resume-rule: #cbd3dc;
+  box-sizing: border-box;
+  width: 100%; max-width: 210mm; min-height: 297mm;
+  margin: 0 auto; padding: 14mm 16mm 16mm;
+  background: #fff; color: var(--resume-ink); color-scheme: light;
+  font: 10.2pt/1.6 "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  text-align: left; letter-spacing: 0; overflow-wrap: anywhere;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.resume-sheet[data-resume-template="professional"]::before {
+  content: ""; display: block; height: 2pt; margin-bottom: 12pt; background: var(--resume-accent);
+}
+.resume-sheet[data-resume-template="classic"] { --resume-accent: #222; font-family: SimSun, "Songti SC", "Noto Serif CJK SC", serif; }
+.resume-sheet .resume-h1 { font: 700 24pt/1.3 "Microsoft YaHei", "PingFang SC", sans-serif; color: var(--resume-ink); margin: 0 0 3pt; padding: 0; }
+.resume-sheet .resume-h2 {
+  font: 700 11.2pt/1.5 "Microsoft YaHei", "PingFang SC", sans-serif;
+  letter-spacing: .06em; color: var(--resume-accent); margin: 13pt 0 6pt; padding: 0 0 3pt;
+  border: 0; border-bottom: .5pt solid var(--resume-rule); break-after: avoid;
+}
+.resume-sheet .resume-h3 { font: 700 10.7pt/1.6 "Microsoft YaHei", "PingFang SC", sans-serif; margin: 8pt 0 3pt; color: var(--resume-ink); padding: 0; break-after: avoid; }
+.resume-sheet p { margin: 0 0 5pt; white-space: pre-wrap; orphans: 3; widows: 3; }
+.resume-sheet .resume-role { color: var(--resume-accent); font-size: 10pt; font-weight: 700; margin-bottom: 4pt; }
+.resume-sheet .resume-contact { font-size: 9pt; line-height: 1.55; color: var(--resume-muted); margin-bottom: 4pt; }
+.resume-sheet .resume-meta { font-size: 9pt; color: var(--resume-muted); margin-bottom: 5pt; break-after: avoid; }
+.resume-sheet .resume-link { font-size: 9pt; color: var(--resume-accent); }
+.resume-sheet .resume-bullet { display: grid; grid-template-columns: 10pt minmax(0, 1fr); gap: 0; margin-bottom: 6pt; }
+.resume-sheet .resume-dot { color: var(--resume-accent); }
+.resume-sheet b { font-weight: 700; }
+.resume-sheet a { color: var(--resume-accent); text-decoration: underline; text-underline-offset: 2px; }
+.resume-sheet[data-resume-template="classic"] :is(.resume-h1,.resume-role,.resume-contact) { text-align: center; }
+.resume-print { margin: 0; padding: 28px 16px; background: #e9edf2; }
+.resume-print .resume-sheet { box-shadow: 0 4px 24px #18212b14; }
+.resume-print-note { box-sizing: border-box; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; max-width: 210mm; margin: 0 auto 14px; color: #596675; font: 13px/1.6 system-ui, sans-serif; }
+@media (max-width: 650px) {
+  .resume-sheet { padding: 24px; min-height: 0; }
+  .resume-sheet .resume-h1 { font-size: 23pt; }
+  .resume-print { padding: 16px 8px; }
+}
+@page { size: A4; margin: 14mm 16mm 16mm; }
+@media print {
+  .resume-print { padding: 0; background: #fff; }
+  .resume-print .resume-sheet { width: auto; max-width: none; min-height: 0; padding: 0; box-shadow: none; }
+  .resume-print-note { display: none; }
+}

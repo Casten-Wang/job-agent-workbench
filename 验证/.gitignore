@@ -1,0 +1,9 @@
+/MediaCrawler/
+/MediaCrawler-source/
+/.venv-mediacrawler/
+/.browsers/
+/.profiles/
+/logs/
+/output/
+/__pycache__/
+/*.zip

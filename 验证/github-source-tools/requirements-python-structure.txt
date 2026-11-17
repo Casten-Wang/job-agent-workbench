@@ -1,0 +1,7 @@
+graphifyy==0.9.109
+networkx==3.6.1
+numpy==2.4.6
+pyyaml==6.0.3
+rapidfuzz==3.14.6
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0

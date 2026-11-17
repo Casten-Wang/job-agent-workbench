@@ -1,0 +1,54 @@
+{
+  "_note": "TASK-06 离线默认值。CLI 只编排本地文件；投递、真实邮箱、飞书与录音转写均需人工执行。本文件不含凭据、真实个人信息或平台接口地址。",
+  "score": {
+    "high_threshold": 4.5,
+    "approval_min": 4.0,
+    "approval_max": 4.4,
+    "below_min_action": "drop"
+  },
+  "approval": {
+    "mode": "daily_batch",
+    "pending_status": "pending",
+    "approved_status": "approved",
+    "requires_explicit_confirm": true,
+    "queue_path": "tools/data/approval-queue.json",
+    "report_dir": "demo"
+  },
+  "greeting": {
+    "max_chars": 150,
+    "source_cv": "workspace/resume.md",
+    "facts_from_cv_only": true,
+    "no_fabricated_numbers": true
+  },
+  "prepare": {
+    "generate_task_checklist": true,
+    "generate_greeting_draft": true,
+    "generate_dedupe_result": true,
+    "generate_form_fields": true,
+    "no_submission": true
+  },
+  "degrade_log": "tools/data/degrade.log",
+  "demo": {
+    "jd_paths": [
+      "demo/demo-job-001.md",
+      "demo/demo-job-002.md",
+      "demo/demo-job-003.md"
+    ],
+    "mail_paths": [
+      "demo/mail-01.json",
+      "demo/mail-02.json"
+    ],
+    "transcript_path": "demo/transcript-01.md",
+    "report_path": "demo/REPORT.md",
+    "question_bank_path": "demo/question-bank.json",
+    "interview_dir": "demo/interviews",
+    "approval_queue_note": "演示使用临时审批队列，不写入用户本地队列，也不显式 confirm。"
+  },
+  "boundaries": {
+    "auto_submit": false,
+    "platform_scraping": false,
+    "browser_takeover": false,
+    "wechat_hook": false,
+    "external_api": false
+  }
+}

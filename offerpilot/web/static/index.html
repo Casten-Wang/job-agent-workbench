@@ -1,0 +1,1322 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>秋招规划师 · OfferPilot</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/offer-theme.css">
+  <link rel="stylesheet" href="/ui-signals.css">
+  <link rel="stylesheet" href="/workbench-agent.css">
+  <link rel="stylesheet" href="/workbench.css">
+  <link rel="stylesheet" href="/career-resume.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-follow" id="ambient-follow"></div>
+  </div>
+  <div class="offer-ticker offer-ticker-top" aria-hidden="true">
+    <div class="offer-track"><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span></div>
+  </div>
+  <div class="offer-ticker offer-ticker-bottom" aria-hidden="true">
+    <div class="offer-track offer-track-reverse"><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span><span>OFFER</span></div>
+  </div>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="工作台导航与设置">
+      <div class="brand">
+        <span class="brand-rule" aria-hidden="true"></span>
+        <div>
+          <p class="brand-title">秋招规划师</p>
+          <p class="brand-sub">OfferPilot · 本地工作台</p>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <p class="nav-group-label">核心流程</p>
+        <button class="nav-item is-active" type="button" data-hub="workbench" data-view="workbench" aria-current="page"><span class="nav-index" aria-hidden="true">01</span><span class="nav-text"><span>工作台</span><small>今天做什么</small></span></button>
+        <button class="nav-item" type="button" data-hub="find" data-view="collect"><span class="nav-index" aria-hidden="true">02</span><span class="nav-text"><span>求职主线</span><small>采集 · 审批 · 回复</small></span></button>
+        <p class="nav-group-label">成长工具</p>
+        <button class="nav-item" type="button" data-hub="profile" data-view="profile"><span class="nav-index" aria-hidden="true">03</span><span class="nav-text"><span>个人资料</span><small>事实源</small></span></button>
+        <button class="nav-item" type="button" data-hub="interview" data-view="interview"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>模拟面试</span><small>四张卡片</small></span></button>
+        <button class="nav-item" type="button" data-hub="push" data-view="push"><span class="nav-index" aria-hidden="true">05</span><span class="nav-text"><span>信息推送</span><small>通知预览</small></span></button>
+        <button class="nav-item" type="button" data-hub="resume" data-view="resume"><span class="nav-index" aria-hidden="true">06</span><span class="nav-text"><span>定制简历</span><small>ATS 检查</small></span></button>
+        <p class="nav-group-label">系统</p>
+        <button class="nav-item" type="button" data-hub="data" data-view="data"><span class="nav-index" aria-hidden="true">07</span><span class="nav-text"><span>数据与设置</span><small>导出 · 边界</small></span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-block">
+          <p class="control-label" id="mode-label">数据模式</p>
+          <div class="segmented" role="group" aria-labelledby="mode-label">
+            <button type="button" data-mode="demo" aria-pressed="true">演示 demo</button>
+            <button type="button" data-mode="user" aria-pressed="false">我的 user</button>
+          </div>
+          <p class="hint">demo 全部为虚构测试数据；user 只读写本机 <code>web/data/user</code>。</p>
+        </div>
+
+        <div class="sidebar-block">
+          <p class="control-label" id="theme-label">外观</p>
+          <div class="segmented segmented-3" role="group" aria-labelledby="theme-label">
+            <button type="button" data-theme-choice="auto" aria-pressed="true">跟随系统</button>
+            <button type="button" data-theme-choice="light" aria-pressed="false">浅色</button>
+            <button type="button" data-theme-choice="dark" aria-pressed="false">深色</button>
+          </div>
+        </div>
+
+        <p class="sidebar-boundary">不自动投递 · 不抓取平台 · 仅本机 OfferPilot</p>
+      </div>
+    </aside>
+
+    <div class="main-column" id="main">
+      <header class="topbar">
+        <div class="topbar-heading">
+          <h1>秋招规划师</h1>
+          <p class="mode-banner is-demo" id="mode-banner">演示模式：全部为虚构测试数据，仅用于验证工作台。</p>
+        </div>
+        <div class="topbar-meta">
+          <p class="meta-line" id="generated-at">尚未载入本地数据</p>
+          <p class="loading-note" id="loading-note" hidden>正在更新…</p>
+          <button class="button button-quiet" type="button" id="refresh-button">刷新数据</button>
+        </div>
+      </header>
+
+      <div class="status status-info" id="status" role="status" aria-live="polite">正在载入本地数据…</div>
+
+      <section class="filter-bar" aria-label="筛选条件">
+        <div class="filter-field">
+          <label for="filter-period">时间</label>
+          <select id="filter-period">
+            <option value="all">全部时间</option>
+            <option value="7d">近 7 天</option>
+            <option value="30d">近 30 天</option>
+            <option value="90d">近 90 天</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-channel">渠道</label>
+          <select id="filter-channel">
+            <option value="all">全部渠道</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-state">状态</label>
+          <select id="filter-state">
+            <option value="all">全部状态</option>
+          </select>
+        </div>
+        <p class="scope-line" id="scope-line">筛选结果会同时更新计数、图表、表格与活动。</p>
+      </section>
+
+      <div class="views" id="views" aria-busy="true">
+        <section class="view" id="view-workbench" data-view-panel="workbench" aria-labelledby="workbench-title">
+          <h2 class="view-title" id="workbench-title">工作台</h2>
+          <section id="wb-shell" class="wb-shell" aria-label="求职任务工作台" hidden>
+            <header class="wb-toolbar">
+              <div><button type="button" id="wb-home-button" class="button button-quiet">工作总览</button><span id="wb-breadcrumb" aria-live="polite"></span></div>
+              <div class="wb-toolbar-actions"><button type="button" id="wb-all-tools" class="button button-quiet">全部工具</button><button type="button" id="wb-settings-button" class="button button-quiet">连接与设置</button><button type="button" id="wb-assistant-toggle" class="button button-quiet" aria-expanded="false">对话助手</button></div>
+            </header>
+            <div class="wb-layout">
+              <div id="wb-main" class="wb-main" tabindex="-1">
+                <p id="wb-notice" class="wb-notice" role="status" aria-live="polite" hidden></p>
+                <div id="wb-approval-slot"></div><div id="wb-progress-slot"></div>
+                <section id="wb-home" aria-labelledby="wb-home-title">
+                  <div class="wb-heading"><h2 id="wb-home-title">工作总览</h2><button id="wb-refresh" type="button" class="button button-quiet">刷新</button></div>
+                  <section class="wb-next" aria-label="建议下一步"><span>下一步</span><h3 id="wb-next-title">正在读取本机工作区</h3><button id="wb-next" type="button" class="button" disabled>继续</button></section>
+                  <div id="wb-counts" class="wb-counts" aria-label="已有成果计数"></div>
+                  <section><h3>常用任务</h3><div id="wb-shortcuts" class="wb-shortcuts"></div></section>
+                  <div class="wb-home-columns"><section><h3>进行中的任务</h3><div id="wb-tasks"></div><h3>待你确认</h3><div id="wb-pending"></div></section><section><h3>最近成果</h3><div id="wb-results"></div></section></div>
+                  <p id="wb-setup-hint" class="wb-setup-hint" hidden></p>
+                </section>
+                <section id="wb-tools" aria-labelledby="wb-tools-title" hidden><h2 id="wb-tools-title">全部工具</h2><label for="wb-tool-filter">查找功能</label><input id="wb-tool-filter" type="search" placeholder="例如：导入、面经、简历"><div id="wb-tool-list"></div></section>
+                <section id="wb-application" aria-labelledby="wb-application-title" hidden><h2 id="wb-application-title">准备申请材料</h2><p>选择目标岗位和已确认经历，助手会准备简历与招呼语草稿。</p><div id="wb-context" class="wb-context"><label>目标岗位<select id="wb-context-job"><option value="">选择岗位</option></select></label><label>经历材料<select id="wb-context-material"><option value="">选择已确认经历</option></select></label><label>简历版本<select id="wb-context-version"><option value="">暂不选择</option></select></label><label>面试会话<select id="wb-context-interview"><option value="">暂不选择</option></select></label></div><div class="wb-actions"><button id="wb-prepare" type="button" class="button">准备简历与招呼语</button><button id="wb-add-experience" type="button" class="button button-quiet">补充经历</button><button id="wb-add-job" type="button" class="button button-quiet">录入岗位</button></div></section>
+                <section id="wb-material" aria-label="经历与资料整理" hidden><h2>整理真实经历</h2><div id="wb-material-host"></div></section>
+                <section id="wb-notes" aria-labelledby="wb-notes-title" hidden>
+                  <h2 id="wb-notes-title">面经收藏与更新订阅</h2><p>收藏你提供的单条小红书笔记，或定期检查这条笔记的更新。</p>
+                  <form id="wb-note-form" class="form-grid"><div class="form-field full"><label for="wb-note-url">单条笔记链接</label><input id="wb-note-url" type="url" required maxlength="4096" placeholder="粘贴笔记分享链接"></div><div class="form-field"><label for="wb-note-hours">检查间隔（小时）</label><input id="wb-note-hours" type="number" min="1" max="168" value="24" required></div><div class="form-field"><label for="wb-note-keywords">关键词（可选，逗号分隔）</label><input id="wb-note-keywords" type="text" maxlength="500"></div><div class="form-actions full"><button id="wb-note-collect" type="submit" class="button">收藏这条面经</button><button id="wb-note-subscribe" type="button" class="button button-quiet">订阅更新</button></div></form>
+                  <p id="wb-note-status" role="status" aria-live="polite"></p><article id="wb-note-document" hidden></article><div class="wb-heading"><h3>我的订阅</h3><button id="wb-note-refresh" type="button" class="button button-quiet">刷新订阅与消息</button></div><div id="wb-note-subscriptions"></div><h3>面经消息</h3><div id="wb-note-inbox"></div><button id="wb-note-more" type="button" class="button button-quiet" hidden>加载更多消息</button>
+                </section>
+                <section id="wb-settings" aria-labelledby="wb-settings-title" hidden><h2 id="wb-settings-title">连接与必要配置</h2><section><h3>模型连接</h3><p id="wb-model-status" role="status"></p><form id="wb-model-form"><label for="wb-model-key">Step 模型密钥</label><input id="wb-model-key" type="password" autocomplete="new-password" minlength="10" maxlength="1000" required><p class="hint">仅发送到本机配置接口，验证后加密保存，不进入对话或日志。</p><button id="wb-model-save" type="submit" class="button">验证并保存</button></form></section><section><h3>GitHub</h3><p>分析 GitHub 项目时再连接；手动整理经历无需 GitHub 账号。</p><button id="wb-connect-github" type="button" class="button button-quiet">打开 GitHub 连接</button></section><section><h3>招聘平台</h3><p id="wb-platform-status"></p><button id="wb-connect-platform" type="button" class="button button-quiet">打开采集与启动前检查</button></section><section><h3>工作台外观</h3><a href="/?workbench=legacy">使用原工作台</a><p class="hint">切换前请保存尚未提交的表单。</p></section></section>
+                <section id="wb-business-result" aria-label="业务处理结果" hidden></section>
+                <div id="wb-content-host"></div><div id="wb-result-host"></div>
+              </div>
+              <aside id="wb-assistant" class="wb-assistant" aria-label="求职对话助手"><div class="wb-heading"><h3>求职助手</h3><button id="wb-show-main" type="button" class="button button-quiet">返回操作区</button></div><details id="wb-history"><summary>历史会话</summary></details><div id="wb-assistant-host"></div></aside>
+            </div>
+          </section>
+          <nav class="wa-tabs" aria-label="工作台视图">
+            <button type="button" id="wa-tab-chat" class="is-active" aria-pressed="true">Agent 对话</button>
+            <button type="button" id="wa-tab-overview" aria-pressed="false">流程总览</button>
+          </nav>
+          <section id="wa-panel" class="wa-workspace" aria-label="Agent 对话工作台">
+            <aside class="wa-sessions" aria-label="求职目标会话">
+              <div class="wa-section-head"><h3>会话</h3><button type="button" id="wa-new" class="button button-quiet button-small" aria-label="新建求职目标">＋ 新建</button></div>
+              <div id="wa-session-list"></div>
+              <div class="wa-session-footer"><span class="wa-local-dot" aria-hidden="true"></span>本机工作区</div>
+            </aside>
+            <div class="wa-conversation">
+              <div class="wa-section-head"><h3 id="wa-title">新的求职目标</h3><span id="wa-status" role="status" aria-live="polite">准备开始</span></div>
+              <p id="wa-notice" class="wa-notice" role="status"></p>
+              <details id="wa-note-inbox" class="wa-note-inbox" hidden>
+                <summary><span id="wa-note-count" role="status" aria-atomic="true">面经消息</span></summary>
+                <p>收藏和订阅用户给出的单条链接；应用运行时检查更新，遇到登录或验证会暂停。</p>
+                <button type="button" id="wa-note-help" class="button button-quiet button-small">面经命令用法</button>
+                <button type="button" id="wa-note-check" class="button button-quiet button-small">运行自检</button>
+                <p id="wa-note-status" role="status"></p>
+                <div id="wa-note-messages"></div>
+              </details>
+              <div class="wa-thread">
+                <div id="wa-messages" class="wa-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="对话记录"></div>
+                <button type="button" id="wa-jump" class="button button-quiet button-small wa-jump" hidden>新回复 ↓</button>
+              </div>
+              <div id="wa-activity" class="wa-activity" role="status" hidden><span class="wa-quiet-dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="wa-activity-label">正在处理</span></div>
+              <div id="wa-recommendations" class="wa-recommendations"></div>
+              <div id="wa-approval" class="wa-approval" hidden></div>
+              <section id="wa-material-progress" class="wa-material-progress" aria-label="材料整理进度" hidden>
+                <strong id="wa-material-heading"></strong>
+                <p id="wa-material-status" class="wa-notice" role="status" aria-live="polite"></p>
+                <ol id="wa-material-steps" class="wa-material-steps" aria-label="整理阶段"></ol>
+                <div class="wa-composer-actions"><button type="button" id="wa-view-material" class="button button-quiet button-small" hidden>查看整理结果</button><button type="button" id="wa-retry-material" class="button button-quiet button-small" hidden>重新整理原材料</button></div>
+              </section>
+              <details id="wa-process" class="wa-process"><summary>执行过程 <span id="wa-event-count"></span></summary><ol id="wa-events"></ol></details>
+              <form id="wa-form" class="wa-composer">
+                <div id="wa-context" class="wa-context"></div>
+                <label for="wa-input" class="wa-input-label">发送给 OfferPilot</label>
+                <textarea id="wa-input" rows="2" maxlength="12000" placeholder="描述求职目标，或继续完善你的草稿…"></textarea>
+                <div class="wa-composer-actions"><button type="button" id="wa-toggle-material" class="button button-quiet button-small" aria-expanded="false" aria-controls="wa-material-form">＋ 材料</button><button type="button" id="wa-show-results" class="button button-quiet button-small">草稿与结果</button><span class="wa-key-hint">Shift + Enter 换行</span><button type="button" id="wa-stop" class="button button-quiet button-small" disabled hidden>停止</button><button type="submit" id="wa-send" class="button button-small" aria-label="发送消息">发送 ↑</button></div>
+              </form>
+              <form id="wa-material-form" class="wa-material-form" hidden>
+                <h4>补充材料</h4>
+                <p class="wa-notice">项目整理会生成背景、岗位匹配方向和带原文依据的核心贡献。核对并保存到经历库后，再按具体岗位生成简历和招呼语。</p>
+                <label for="wa-existing-material">已确认材料</label><select id="wa-existing-material"><option value="">选择已有项目或经历</option></select>
+                <button type="button" id="wa-use-material" class="button button-quiet button-small">直接用于申请草稿</button>
+                <label for="wa-attachment-kind">整理方式</label><select id="wa-attachment-kind"><option value="experience">项目或经历材料</option><option value="profile">简历提取为个人资料</option></select>
+                <label for="wa-material-name">经历名称 / 姓名</label><input id="wa-material-name" maxlength="120">
+                <label for="wa-material-role">目标岗位</label><input id="wa-material-role" maxlength="200" placeholder="例如：后端开发">
+                <label for="wa-material-text">新材料原文（选填）</label><textarea id="wa-material-text" rows="5" maxlength="20000" placeholder="粘贴新原文或上传文件；均为空时，重新整理上方选中的已确认材料。"></textarea>
+                <label for="wa-material-file">本地文件（最大 5 MB）</label><input id="wa-material-file" type="file" accept=".txt,.md,.pdf,.docx">
+                <label class="wa-check"><input id="wa-material-consent" type="checkbox">同意将去除联系方式后的专业材料交给模型整理，整理结果仍需我核对。</label>
+                <div class="wa-composer-actions"><button type="button" id="wa-open-github" class="button button-quiet button-small">连接 GitHub / 选择项目</button><button type="submit" id="wa-upload" class="button button-small">整理并预览</button></div>
+              </form>
+            </div>
+            <aside id="wa-results" class="wa-results" aria-label="任务结果" hidden>
+              <div class="wa-section-head"><h3>任务结果</h3><button type="button" id="wa-close-results" class="button button-quiet button-small">收起</button></div>
+              <label for="wa-artifact">整理结果与草稿修订</label><select id="wa-artifact"></select>
+              <section id="wa-material-result" hidden><div id="wa-material-document" class="wa-document"></div><div id="wa-material-approval-slot"></div></section>
+              <div id="wa-document" class="wa-document"></div>
+              <div id="wa-artifact-details">
+              <details><summary>修改差异</summary><pre id="wa-diff"></pre></details>
+              <details><summary>事实来源与复核</summary><div id="wa-sources"></div></details>
+              </div>
+              <div id="wa-result-actions" class="wa-result-actions"><button type="button" id="wa-save" class="button button-small">保存正式版本</button><button type="button" id="wa-copy" class="button button-quiet button-small">复制草稿</button><button type="button" id="wa-delivery" class="button button-quiet button-small">去发送复核</button></div>
+              <div id="wa-versions"></div>
+            </aside>
+          </section>
+          <div id="wa-overview" hidden>
+          <p class="view-lede">按顺序做四步：1 采集岗位，2 筛选岗位，3 通过岗位，4 回复 HR。采集和评分全自动；只有最后发出招呼语前需要你确认，任何环节都不会自动投递。</p>
+          <div class="workbench-quick-actions">
+            <button class="button" type="button" data-view-link="collect">开始采集岗位</button>
+            <button class="button button-quiet" type="button" data-view-link="jobs">查看岗位池</button>
+            <button class="button button-quiet" type="button" data-view-link="queue">打开审批队列</button>
+          </div>
+
+          <section class="panel pipeline-panel" aria-labelledby="pipeline-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="pipeline-title">核心流程</h3>
+                <p class="panel-note">节点显示本地数据计数；外部阶段在收到 Agent 回报前保持「待接入」。任何节点都不会自动发送或投递。</p>
+              </div>
+              <a class="button button-quiet button-small" href="/api/doc/pipeline-api" download="PIPELINE-API.md">接口文档</a>
+            </div>
+            <div class="pipeline" id="pipeline" aria-label="求职核心流程"></div>
+            <div class="pipeline-foot">
+              <p class="hint" id="pipeline-note">外部 Agent 接入：<code>POST /api/pipeline/event</code>；本工作台只记录回报，不发送、不投递。</p>
+              <span class="badge" id="pipeline-connection">外部 Agent 待接入</span>
+            </div>
+            <div class="external-events" id="pipeline-events" hidden></div>
+          </section>
+
+          <section class="panel belt-panel" aria-labelledby="belt-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="belt-title">9 状态工序带</h3>
+                <p class="panel-note">节点数字为当前筛选下的岗位数；点击节点按该状态筛选。箭头表示相邻工序，分支在焦点文字中列出。</p>
+              </div>
+              <p class="focus-line" id="belt-focus">当前焦点：全部状态</p>
+            </div>
+            <div class="belt" id="belt" role="group" aria-label="岗位状态工序带"></div>
+          </section>
+
+          <section class="kpi-section" aria-labelledby="kpi-title">
+            <h3 class="section-label" id="kpi-title">关键计数</h3>
+            <div class="kpi-row" id="kpi-row"></div>
+          </section>
+
+          <div class="chart-grid">
+            <section class="panel chart-panel" aria-labelledby="channel-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="channel-chart-title">渠道转化</h3>
+                  <p class="panel-note">投递、面试、Offer 为同量纲计数；转化率见下方数据表。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="channel-chart"></div>
+              <div class="chart-table" id="channel-table"></div>
+            </section>
+
+            <section class="panel chart-panel" aria-labelledby="quarter-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="quarter-chart-title">季度计数</h3>
+                  <p class="panel-note">只画同量纲的投递、面试、Offer 计数；8 轴混合数据保留在表格中。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="quarter-chart"></div>
+              <div class="chart-table" id="quarter-table"></div>
+            </section>
+
+            <section class="panel chart-panel" aria-labelledby="weakness-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="weakness-chart-title">弱点标签</h3>
+                  <p class="panel-note">来自本地复盘卡片的显式弱点标签计数，不评价真实能力。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="weakness-chart"></div>
+              <div class="chart-table" id="weakness-table"></div>
+            </section>
+
+            <section class="panel chart-panel" aria-labelledby="mail-chart-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="mail-chart-title">邮件意图</h3>
+                  <p class="panel-note">来自离线规则分类的本地邮件数量。</p>
+                </div>
+              </div>
+              <div class="chart-canvas" id="mail-chart"></div>
+              <div class="chart-table" id="mail-table"></div>
+            </section>
+          </div>
+
+          <section class="panel" aria-labelledby="activity-overview-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="activity-overview-title">最近动作</h3>
+                <p class="panel-note">本地操作日志，不随筛选变化。</p>
+              </div>
+            </div>
+            <div id="activity-overview"></div>
+          </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-collect" data-view-panel="collect" aria-labelledby="collect-title" hidden>
+          <h2 class="view-title" id="collect-title">采集岗位</h2>
+          <nav class="ui-hub-tabs" aria-label="求职主线">
+            <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">1 采集</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
+          </nav>
+          <p class="view-lede">按关键词和城市采集岗位，不会自动投递或发消息。</p>
+
+          <section class="panel offerpilot-panel" aria-labelledby="offerpilot-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="offerpilot-title">BOSS 直聘 · 岗位采集</h3>
+              </div>
+              <div class="offerpilot-head-actions">
+                <span class="badge badge-neutral" id="offerpilot-connection">未检测</span>
+                <button class="button button-quiet button-small" type="button" id="offerpilot-refresh">重新检测</button>
+              </div>
+            </div>
+
+            <form class="offerpilot-form collect-form" id="offerpilot-form">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="offerpilot-mode">任务类型</label>
+                  <select id="offerpilot-mode">
+                    <option value="collect">仅采集（推荐）</option>
+                    <option value="monitor">仅监控 HR 回复</option>
+                    <option value="full">采集 + AI 评分 + 招呼语（完整流程）</option>
+                  </select>
+                </div>
+                <div class="form-field" data-collect-search>
+                  <label for="collect-pace">采集节奏</label>
+                  <select id="collect-pace">
+                    <option value="cautious" selected>稳健（推荐）：每次随机等待 6–15 秒</option>
+                    <option value="standard">标准：每次随机等待 3–7.5 秒</option>
+                    <option value="fast">快速：每次随机等待 2–5 秒</option>
+                  </select>
+                </div>
+                <div class="form-field" data-collect-search>
+                  <label for="collect-keywords">搜索关键词（逗号分隔）</label>
+                  <input id="collect-keywords" type="text" autocomplete="off" placeholder="产品经理, AI产品经理">
+                </div>
+                <div class="form-field" data-collect-search>
+                  <label for="collect-cities">城市（逗号分隔）</label>
+                  <input id="collect-cities" type="text" autocomplete="off" placeholder="北京">
+                </div>
+                <div class="form-field" data-collect-search>
+                  <label for="collect-pages">每个关键词最多翻几页（1–10）</label>
+                  <input id="collect-pages" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
+                </div>
+              </div>
+              <div class="collect-resume resume-dropzone" id="collect-resume-drop" data-collect-search role="group" aria-label="拖入评分简历">
+                <div class="collect-resume-main">
+                  <strong>评分简历（必传）</strong>
+                  <p id="collect-resume-status">尚未读取简历状态。</p>
+                  <p>将简历拖到这里，或点击「上传简历」；支持 PDF、DOCX、MD，最大 5 MB。</p>
+                  <p class="resume-drop-status" aria-live="polite"></p>
+                </div>
+                <div class="collect-resume-actions">
+                  <input type="file" id="collect-resume-file" accept=".md,.docx,.pdf" hidden>
+                  <button class="button button-quiet button-small" type="button" id="collect-resume-upload">上传简历</button>
+                </div>
+              </div>
+              <label class="checkbox-label" hidden><input type="checkbox" id="collect-auto-score"> 采集后自动评分</label>
+              <div class="collect-summary" id="collect-summary" aria-live="polite"></div>
+              <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk"> 我知道自动化操作可能被平台限制账号</label>
+              <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
+              <div class="form-actions">
+                <button class="button button-quiet" type="button" id="collect-preflight">检查环境</button>
+                <button class="button" type="submit" id="offerpilot-start" disabled>开始采集</button>
+              </div>
+            </form>
+            <div class="action-result" id="offerpilot-result" hidden></div>
+
+            <section class="collect-checks-panel" aria-labelledby="collect-check-title">
+              <div class="panel-head">
+                <div>
+                  <h4 id="collect-check-title">启动前检查</h4>
+                  <p class="panel-note">错误项会阻止启动；修改条件后会自动重新检查。</p>
+                </div>
+              </div>
+              <div class="collect-checks" id="collect-checks"><p class="hint">填写条件后会自动检查，也可以点击「检查环境」重新检查。</p></div>
+            </section>
+
+            <details class="offerpilot-details collect-explain-details">
+              <summary>会采集什么、不会做什么</summary>
+              <ul class="collect-explain">
+                <li><strong>会：</strong>在 BOSS 搜索上述关键词与城市，读取岗位卡片和详情：标题、公司、城市、薪资、经验/学历与 JD 文本。</li>
+                <li><strong>会：</strong>写入本机 <code>web/data/user/offerpilot/data/offerpilot.db</code>，任务完成后自动导入岗位池。</li>
+                <li><strong>不会：</strong>不发送招呼语、不投递、不读取聊天记录、不上传简历；只有开启 AI 评分时才会调用你配置的模型。</li>
+              </ul>
+            </details>
+
+            <section class="offerpilot-card" aria-labelledby="offerpilot-task-title">
+              <h4 id="offerpilot-task-title">任务状态</h4>
+              <div id="offerpilot-task"><p class="hint">尚无任务回报。</p></div>
+              <p class="notice" id="offerpilot-error" hidden></p>
+            </section>
+
+            <section class="offerpilot-jobs" aria-labelledby="offerpilot-jobs-title">
+              <div class="panel-head">
+                <div>
+                  <h4 id="offerpilot-jobs-title">采集结果</h4>
+                  <p class="panel-note">任务完成后会自动导入岗位池；下面是本机岗位库的只读快照。未评分或评分低于 4.0 的岗位不能加入审批队列。</p>
+                </div>
+                <p class="panel-count" id="offerpilot-jobs-count">尚未读取</p>
+              </div>
+              <div class="offerpilot-jobs-actions">
+                <button class="button button-quiet button-small" type="button" id="offerpilot-import">导入全部到岗位池</button>
+                <button class="button button-quiet button-small" type="button" id="offerpilot-open-jobs">去岗位池挑选</button>
+              </div>
+              <details class="offerpilot-details">
+                <summary>查看只读明细</summary>
+                <div id="offerpilot-jobs-table"></div>
+              </details>
+            </section>
+
+            <details class="offerpilot-details">
+              <summary>连接与偏好详情</summary>
+              <dl class="integration-meta" id="offerpilot-state"></dl>
+            </details>
+          </section>
+        </section>
+
+        <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
+          <h2 class="view-title" id="jobs-title">岗位池</h2>
+          <nav class="ui-hub-tabs" aria-label="求职主线">
+            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
+          </nav>
+          <p class="view-lede">采集到的岗位会自动进入这里，并按你的简历评分。评分达到 4.0 的岗位会自动通过，进入「3 通过」。评分不足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
+          <p class="notice notice-accent" id="jobs-empty-hint">还没有岗位？先到 <button class="ui-link-button" type="button" data-view-link="collect">采集岗位</button> 按关键词采集，或在下方手动录入 JD。</p>
+
+          <section class="panel" aria-labelledby="jobs-table-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="jobs-table-title">岗位表</h3>
+                <p class="panel-note">状态更新只提供当前状态允许的 transitions；审批状态只表示人工确认结果。</p>
+              </div>
+              <p class="panel-count" id="jobs-count">显示 0 条</p>
+            </div>
+            <div class="action-result" id="jobs-action-result" hidden></div>
+            <div class="jobs-bulk-bar">
+              <label class="checkbox-label"><input type="checkbox" id="jobs-select-all" aria-label="全选当前列表"> 全选当前列表</label>
+              <span class="panel-count" id="jobs-selection-count">已选 0 条</span>
+              <button class="button button-small" type="button" id="jobs-bulk-enqueue" disabled>加入审批队列</button>
+            </div>
+            <div id="jobs-table"></div>
+          </section>
+
+          <details class="panel jobs-manual-entry">
+            <summary>手动录入 / 导入岗位</summary>
+          <div class="two-col">
+            <section class="panel" aria-labelledby="jd-entry-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="jd-entry-title">录入 JD</h3>
+                  <p class="panel-note">粘贴岗位描述，按本地规则解析；可选评分用于审批阈值。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="jd-form">
+                <div class="form-field full">
+                  <label for="jd-text">JD 原文</label>
+                  <textarea id="jd-text" rows="7" placeholder="粘贴岗位描述，建议保留「公司：」「岗位：」「城市：」「薪资：」等行。"></textarea>
+                </div>
+                <div class="form-field">
+                  <label for="jd-channel">渠道</label>
+                  <input id="jd-channel" type="text" value="manual_paste" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="form-field">
+                  <label for="jd-score">评分（可选，0–5）</label>
+                  <input id="jd-score" type="number" min="0" max="5" step="0.1" inputmode="decimal" placeholder="4.2">
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="jd-submit">解析并录入</button>
+                  <p class="hint">只解析文本；重复的公司、岗位、城市、渠道会被拒绝。</p>
+                </div>
+              </form>
+              <div class="action-result" id="jd-result" hidden></div>
+            </section>
+
+            <details class="panel advanced-panel">
+              <summary>高级：导入 OfferPilot 静态 JSON</summary>
+              <div class="panel-head">
+                <div>
+                  <h3 id="import-title">导入 OfferPilot 静态 JSON</h3>
+                  <p class="panel-note">只接受本机粘贴的静态导出 JSON；不登录、不抓取。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="import-form">
+                <div class="form-field full">
+                  <label for="import-json">JSON 内容</label>
+                  <textarea id="import-json" rows="10" placeholder='{"jobs": [{"company": "…", "title": "…", "city": "…"}]}' spellcheck="false"></textarea>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="import-submit">导入静态岗位池</button>
+                  <p class="hint">重复项自动跳过；错误会以中文提示。</p>
+                </div>
+              </form>
+              <div class="action-result" id="import-result" hidden></div>
+            </details>
+          </div>
+          </details>
+
+        </section>
+
+        <section class="view" id="view-queue" data-view-panel="queue" aria-labelledby="queue-title" hidden>
+          <h2 class="view-title" id="queue-title">审批队列</h2>
+          <nav class="ui-hub-tabs" aria-label="求职主线">
+            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="queue" aria-current="page">3 通过</button>
+            <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
+          </nav>
+          <p class="view-lede">评分达标的岗位已自动通过。这里只需处理手动加入的岗位；「今日安排」显示每天可联系的顺序，超出额度的岗位会顺延。</p>
+          <p class="notice notice-accent" id="queue-policy">真正发送前会再给你看一遍文案，由你确认后才发出。</p>
+
+          <section class="panel" aria-labelledby="pending-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="pending-title">待你确认</h3>
+              </div>
+              <p class="panel-count" id="queue-pending-count">0 条待确认</p>
+            </div>
+            <div class="queue-toolbar">
+              <label class="checkbox-label"><input type="checkbox" id="queue-select-all" aria-label="全选待确认"> 全选待确认</label>
+              <span class="panel-count" id="queue-selection-count">已选 0 条</span>
+            </div>
+            <div id="queue-pending-table"></div>
+            <div class="queue-toolbar">
+              <button class="button button-small" type="button" id="queue-confirm-button" disabled>通过所选</button>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="approved-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="approved-title">已通过，可以回复</h3>
+              </div>
+              <p class="panel-count" id="queue-approved-count">0 条已确认</p>
+            </div>
+            <div class="queue-toolbar">
+              <label class="checkbox-label"><input type="checkbox" id="queue-approved-select-all" aria-label="全选已确认"> 全选已确认</label>
+              <span class="panel-count" id="queue-approved-selection-count">已选 0 条</span>
+              <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
+              <button class="button button-small" type="button" id="queue-send-greetings" disabled>复核并发送</button>
+            </div>
+            <div id="queue-approved-table"></div>
+            <div class="queue-greetings" id="queue-greetings"></div>
+            <div class="queue-delivery-panel" id="queue-delivery-panel" hidden>
+              <div class="queue-delivery-head">
+                <strong>复核并发送</strong>
+                <button class="button button-quiet button-small" type="button" id="queue-delivery-cancel">取消</button>
+              </div>
+              <p class="queue-delivery-summary" id="queue-delivery-summary"></p>
+              <ul class="queue-delivery-list" id="queue-delivery-list"></ul>
+              <div class="form-field">
+                <label for="queue-delivery-confirm">输入确认语</label>
+                <input id="queue-delivery-confirm" type="text" autocomplete="off" spellcheck="false">
+              </div>
+              <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk"> 我知道自动化操作可能被平台限制账号</label>
+              <div class="queue-delivery-actions">
+                <button class="button" type="button" id="queue-delivery-start" disabled>开始发送</button>
+              </div>
+              <p class="hint">发送时间固定在 09:00–16:00，每天有上限，中间会随机停顿；遇到验证码或限流会立即停止。</p>
+            </div>
+            <div class="queue-delivery-results" id="queue-delivery-results"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-mail" data-view-panel="mail" aria-labelledby="mail-title" hidden>
+          <h2 class="view-title" id="mail-title">HR 回复</h2>
+          <nav class="ui-hub-tabs" aria-label="求职主线">
+            <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
+            <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
+            <button class="ui-hub-tab" type="button" data-view="queue">3 通过</button>
+            <button class="ui-hub-tab is-active" type="button" data-view="mail" aria-current="page">4 回复</button>
+          </nav>
+          <p class="view-lede">粘贴邮件内容，用离线规则识别意图、公司与岗位；不连接真实邮箱。识别出明确时间时可生成 .ics。</p>
+
+          <section class="panel" aria-labelledby="mail-parse-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="mail-parse-title">解析邮件</h3>
+                <p class="panel-note">主题与正文按不可信数据展示；缺失字段保持为空，不猜测。</p>
+              </div>
+            </div>
+            <form class="form-grid" id="mail-form">
+              <div class="form-field full">
+                <label for="mail-subject">主题</label>
+                <input id="mail-subject" type="text" autocomplete="off" placeholder="面试邀请 / 笔试通知 / 录用通知">
+              </div>
+              <div class="form-field full">
+                <label for="mail-body">正文</label>
+                <textarea id="mail-body" rows="7" placeholder="粘贴邮件正文；若有明确时间，可生成 .ics。"></textarea>
+              </div>
+              <div class="form-field">
+                <label for="mail-from">发件人</label>
+                <input id="mail-from" type="text" autocomplete="off" placeholder="hr@example.invalid">
+              </div>
+              <div class="form-field">
+                <label for="mail-date">日期</label>
+                <input id="mail-date" type="date">
+              </div>
+              <div class="form-field full">
+                <label for="mail-message-id">Message-ID（可选）</label>
+                <input id="mail-message-id" type="text" autocomplete="off" spellcheck="false" placeholder="<id@example.invalid>">
+              </div>
+              <div class="form-field full form-actions">
+                <button class="button" type="submit" id="mail-submit">解析邮件</button>
+                <p class="hint">相同 Message-ID 会提示重复，不覆盖原记录。</p>
+              </div>
+            </form>
+            <div class="action-result" id="mail-result" hidden></div>
+          </section>
+
+          <section class="panel" aria-labelledby="mail-list-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="mail-list-title">已解析邮件</h3>
+                <p class="panel-note">只有识别出明确 event_time 的邮件才可生成 .ics；不猜测日期。</p>
+              </div>
+            </div>
+            <div id="mail-action-result"></div>
+            <div id="mail-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-profile" data-view-panel="profile" aria-labelledby="profile-title" hidden>
+          <h2 class="view-title" id="profile-title">个人资料</h2>
+          <p class="view-lede">这里是工作台的结构化事实源：基本信息、求职偏好、教育/工作/项目经历与技能。保存后只写入本机 <code>web/data/&lt;mode&gt;/profile.json</code>；招呼语、模拟面试与定制简历会优先读取这里的专业信息，联系方式不会进入草稿。</p>
+
+          <section class="panel integration-panel" aria-labelledby="profile-api-title">
+            <div class="integration-head">
+              <span class="integration-mark" aria-hidden="true">05</span>
+              <div>
+                <h3 id="profile-api-title">个人资料接口 · 已开放</h3>
+                <p>其他本地模块可读取结构化资料；写入走统一动作入口，仍需本人在页面上确认。</p>
+              </div>
+              <span class="badge badge-good">本地可用</span>
+            </div>
+            <dl class="integration-meta">
+              <div><dt>读取</dt><dd><code>GET /api/profile?mode=user</code> 返回资料与完整度；不包含任何凭据</dd></div>
+              <div><dt>写入</dt><dd><code>POST /api/action</code> → <code>{"action":"save-profile","mode":"user","profile":{...}}</code></dd></div>
+              <div><dt>导入</dt><dd><code>import-profile-cv</code> 由 Agent 提取整份简历及经历，核对后保存</dd></div>
+              <div><dt>边界</dt><dd>仅 loopback；联系方式不进入招呼语/题单；不自动投递</dd></div>
+            </dl>
+            <p><a class="button button-quiet button-small" href="/api/doc/profile-api" download="PROFILE-API.md">下载接口文档</a></p>
+          </section>
+
+          <section class="panel" aria-labelledby="profile-form-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="profile-form-title">资料编辑</h3>
+                <p class="panel-note">演示模式只含虚构资料；真实资料请切换到「我的 user」后填写。带 * 的字段用于完整度判断。</p>
+              </div>
+              <div class="profile-head-actions">
+                <button class="button button-quiet button-small" type="button" id="profile-import">从本地简历导入</button>
+                <input id="profile-import-file" type="file" accept=".pdf,.docx,.md,.txt" aria-label="选择本地简历文件" hidden>
+                <span class="badge badge-neutral" id="profile-completeness-badge">未填写</span>
+              </div>
+            </div>
+
+            <div class="profile-meter" id="profile-meter" aria-live="polite"></div>
+            <div class="action-result" id="profile-result" hidden></div>
+            <div class="resume-dropzone" id="profile-resume-drop" role="button" tabindex="0" aria-label="拖入简历或点击选择文件" aria-disabled="true">
+              <strong>将简历拖到这里，或点击选择文件</strong>
+              <p class="panel-note">支持 PDF、DOCX、Markdown、TXT，最大 5 MB。文件在本机读取，全文交由已配置的 Agent 解析；扫描件 PDF 请先转为文字。</p>
+              <p class="resume-drop-status" aria-live="polite"></p>
+            </div>
+            <details id="profile-import-preview" hidden>
+              <summary>查看解析出的简历原文</summary>
+              <pre id="profile-import-text" class="profile-import-text"></pre>
+            </details>
+
+            <form id="profile-form">
+              <h4 class="profile-section-title">基本信息</h4>
+              <div class="form-grid">
+                <div class="form-field"><label for="profile-name">姓名 *</label><input id="profile-name" type="text" autocomplete="name"></div>
+                <div class="form-field"><label for="profile-city">所在城市 *</label><input id="profile-city" type="text" autocomplete="address-level2"></div>
+                <div class="form-field"><label for="profile-email">邮箱 *</label><input id="profile-email" type="email" autocomplete="email"></div>
+                <div class="form-field"><label for="profile-phone">电话</label><input id="profile-phone" type="tel" autocomplete="tel"></div>
+                <div class="form-field"><label for="profile-wechat">微信</label><input id="profile-wechat" type="text" autocomplete="off"></div>
+                <div class="form-field"><label for="profile-links">作品集 / GitHub / 链接</label><input id="profile-links" type="text" autocomplete="url" placeholder="多个链接用逗号分隔"></div>
+              </div>
+
+              <h4 class="profile-section-title">求职偏好</h4>
+              <div class="form-grid">
+                <div class="form-field"><label for="profile-titles">目标岗位 *（逗号分隔）</label><input id="profile-titles" type="text" placeholder="产品经理, 产品助理"></div>
+                <div class="form-field"><label for="profile-target-cities">目标城市 *（逗号分隔）</label><input id="profile-target-cities" type="text" placeholder="上海, 杭州"></div>
+                <div class="form-field"><label for="profile-salary-min">期望月薪下限</label><input id="profile-salary-min" type="number" min="0" step="1000" inputmode="numeric" placeholder="15000"></div>
+                <div class="form-field"><label for="profile-salary-max">期望月薪上限</label><input id="profile-salary-max" type="number" min="0" step="1000" inputmode="numeric" placeholder="25000"></div>
+                <div class="form-field">
+                  <label for="profile-job-type">求职类型</label>
+                  <select id="profile-job-type">
+                    <option value="全职">全职</option>
+                    <option value="实习">实习</option>
+                    <option value="兼职">兼职</option>
+                    <option value="合同">合同</option>
+                  </select>
+                </div>
+                <div class="form-field"><label for="profile-availability">到岗时间</label><input id="profile-availability" type="text" placeholder="一个月内 / 随时"></div>
+              </div>
+
+              <h4 class="profile-section-title">教育经历</h4>
+              <div class="profile-list" id="profile-education"></div>
+              <button class="button button-quiet button-small profile-add" type="button" data-profile-add="education">添加教育经历</button>
+
+              <h4 class="profile-section-title">工作 / 实习经历</h4>
+              <div class="profile-list" id="profile-experiences"></div>
+              <button class="button button-quiet button-small profile-add" type="button" data-profile-add="experiences">添加工作经历</button>
+
+              <h4 class="profile-section-title">项目经历</h4>
+              <div class="profile-list" id="profile-projects"></div>
+              <button class="button button-quiet button-small profile-add" type="button" data-profile-add="projects">添加项目经历</button>
+
+              <h4 class="profile-section-title">技能与简介</h4>
+              <div class="form-grid">
+                <div class="form-field full"><label for="profile-tools">工具 / 技能 *（逗号分隔，至少 3 个）</label><input id="profile-tools" type="text" placeholder="Axure, Visio, Excel"></div>
+                <div class="form-field full"><label for="profile-strengths">优势标签（逗号分隔）</label><input id="profile-strengths" type="text" placeholder="需求分析, 用户调研, 数据分析"></div>
+                <div class="form-field full"><label for="profile-summary">个人简介 *（至少 20 字）</label><textarea id="profile-summary" rows="5" placeholder="用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
+                <div class="form-field full"><label for="profile-excluded">排除词（逗号分隔）</label><input id="profile-excluded" type="text" placeholder="外包, 驻场"></div>
+              </div>
+
+              <label class="checkbox-label profile-truth"><input type="checkbox" id="profile-truth" required> 我已核对以上信息并确认真实，可由本工作台用于生成招呼语、题单与简历草稿。</label>
+
+              <div class="form-actions profile-submit-row">
+                <button class="button" type="submit" id="profile-save">保存个人资料</button>
+                <p class="hint">核对并勾选真实性确认后，保存到本机。</p>
+              </div>
+            </form>
+          </section>
+
+        </section>
+
+        <section class="view" id="view-interview" data-view-panel="interview" aria-labelledby="interview-title" hidden>
+          <h2 class="view-title" id="interview-title">模拟面试</h2>
+          <p class="view-lede">进入后先看到四张卡片。文字模拟面试是前端 Mock，不请求真实后端。知识库只在「题库与面经」维护。Mock 题单只从本地题库取题，题目不进入本场材料。结束后的准备度复盘和原逐字稿复盘都在「面试复盘」，不堆在模拟面试对话下面。</p>
+
+          <div class="pipeline interview-hub" id="interview-hub" aria-label="模拟面试四张卡片"></div>
+
+          <div class="interview-module" id="interview-module-chat" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel chat-panel" id="interview-chat" aria-labelledby="chat-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="chat-title">文字模拟面试</h3>
+                  <p class="panel-note">开始前只选择轮次、时长、岗位和 JD。页面只显示规则、问题和回答；准备问题期间不会展示内部规划。</p>
+                </div>
+                <p class="chat-progress" id="chat-progress">剩余 30 分钟</p>
+              </div>
+
+              <div class="chat-setup" id="chat-setup">
+                <form class="form-grid" id="chat-setup-form">
+                  <fieldset class="form-field full chat-choice-set">
+                    <legend>轮次</legend>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="hr"> HR</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="business" checked> 业务专业</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="tech"> 技术口述</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="manager"> 主管</label>
+                  </fieldset>
+                  <fieldset class="form-field full chat-choice-set">
+                    <legend>时长</legend>
+                    <label class="checkbox-label"><input type="radio" name="chat-duration" value="20"> 20 分钟</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-duration" value="30" checked> 30 分钟</label>
+                  </fieldset>
+                  <div class="form-field">
+                    <label for="chat-job">岗位（可选）</label>
+                    <select id="chat-job">
+                      <option value="">不选岗位</option>
+                    </select>
+                  </div>
+                  <div class="form-field full">
+                    <label for="chat-jd">岗位 JD（可选）</label>
+                    <textarea id="chat-jd" rows="4" placeholder="粘贴 JD。不粘贴且不选岗位时，本轮是通用岗位模拟。"></textarea>
+                  </div>
+                </form>
+                <p class="hint" id="chat-generic-note">本轮是通用岗位模拟</p>
+                <p class="hint" id="chat-role-line" hidden></p>
+                <p class="chat-web-notice" id="chat-web-notice" hidden></p>
+                <p class="chat-error" id="chat-error" hidden></p>
+              </div>
+
+              <p class="chat-rules" id="chat-rules" hidden></p>
+
+              <div class="chat-log" id="chat-log" role="log" aria-live="polite"></div>
+
+              <div class="chat-composer">
+                <label class="chat-sr-only" for="chat-answer">回答</label>
+                <textarea id="chat-answer" rows="3" placeholder="输入这一问的回答。空白内容不会发送。"></textarea>
+                <div class="chat-composer-actions">
+                  <button class="button" type="button" id="chat-primary">开始这场面试</button>
+                  <button class="button button-quiet" type="button" id="chat-restart" hidden>重新开始</button>
+                </div>
+              </div>
+              <div class="chat-sr-only">
+                <button type="button" id="chat-mock-interrupt">模拟半句中断</button>
+                <button type="button" id="chat-mock-timeup">模拟时长用完</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="interview-module" id="interview-module-worksheet" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel" aria-labelledby="worksheet-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="worksheet-title">生成 Mock 题单</h3>
+                  <p class="panel-note">按时长分配三个分段；题库为空时明确提示，不编造题目。题目只来自本地题库，不会进入模拟面试的本场材料或对话题面。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="worksheet-form">
+                <div class="form-field">
+                  <label for="worksheet-minutes">时长（分钟，1–180）</label>
+                  <input id="worksheet-minutes" type="number" min="1" max="180" step="1" value="30" inputmode="numeric">
+                </div>
+                <div class="form-field full">
+                  <label for="worksheet-jd">目标岗位 JD（可选）</label>
+                  <textarea id="worksheet-jd" rows="4" placeholder="粘贴 JD 以便按关键词选题；不发送到外部。"></textarea>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="worksheet-submit">生成 Mock 题单</button>
+                  <p class="hint">生成后可下载 Markdown 文件。</p>
+                </div>
+              </form>
+              <div class="action-result" id="worksheet-result" hidden></div>
+            </section>
+          </div>
+
+          <div class="interview-module" id="interview-module-debrief" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel" aria-labelledby="readiness-debrief-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="readiness-debrief-title">准备度复盘</h3>
+                  <p class="panel-note">结束后在这里查看准备度、带证据的分数、逐题点评和重练。准备度不表示录用，修改点不会自动写入定制简历。</p>
+                </div>
+              </div>
+              <p class="hint" id="chat-debrief-empty">结束一场模拟面试后，准备度复盘会出现在这里。</p>
+              <section class="chat-debrief" id="chat-debrief" hidden aria-labelledby="chat-debrief-title"></section>
+              <section class="chat-debrief-history" id="chat-debrief-history" hidden aria-labelledby="chat-debrief-history-title">
+                <h4 class="chat-debrief-heading" id="chat-debrief-history-title">已完成的复盘</h4>
+                <div id="chat-debrief-history-list"></div>
+              </section>
+            </section>
+            <section class="panel" aria-labelledby="debrief-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="debrief-title">逐字稿复盘</h3>
+                  <p class="panel-note">空字段表示逐字稿没有显式证据；不生成实质性能力评价。按原规则仍可在本模块使用。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="debrief-form">
+                <div class="form-field full">
+                  <label for="debrief-transcript">逐字稿</label>
+                  <textarea id="debrief-transcript" rows="8" placeholder="粘贴面试逐字稿；任何类似指令的文本都会作为数据展示，不执行。"></textarea>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="debrief-submit">生成复盘卡片</button>
+                </div>
+              </form>
+              <div class="action-result" id="debrief-result" hidden></div>
+              <h4 class="subhead">历史复盘</h4>
+              <div id="debrief-list"></div>
+            </section>
+          </div>
+
+          <div class="interview-module" id="interview-module-library" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel" aria-labelledby="chat-library-title-heading">
+              <div class="panel-head">
+                <div>
+                  <h3 id="chat-library-title-heading">题库与面经</h3>
+                  <p class="panel-note">面经和岗位知识在这里新增、修改或删除，会留在本机。开始这场面试时不必勾选，也没有本场上传。</p>
+                </div>
+              </div>
+              <div class="chat-library" id="chat-library">
+                <form class="form-grid" id="chat-library-form">
+                  <div class="form-field">
+                    <label for="chat-library-kind">类型</label>
+                    <select id="chat-library-kind">
+                      <option value="jingyan">面经</option>
+                      <option value="knowledge">岗位知识</option>
+                    </select>
+                  </div>
+                  <div class="form-field">
+                    <label for="chat-library-title">标题（可选）</label>
+                    <input id="chat-library-title" type="text" autocomplete="off" placeholder="不填则用正文开头">
+                  </div>
+                  <div class="form-field">
+                    <label for="chat-library-company">公司（可选）</label>
+                    <input id="chat-library-company" type="text" autocomplete="off">
+                  </div>
+                  <div class="form-field">
+                    <label for="chat-library-role">岗位（可选）</label>
+                    <input id="chat-library-role" type="text" autocomplete="off">
+                  </div>
+                  <div class="form-field full">
+                    <label for="chat-library-body">正文</label>
+                    <textarea id="chat-library-body" rows="4" placeholder="粘贴面经或岗位知识正文。空正文不能保存。"></textarea>
+                  </div>
+                  <div class="form-field full form-actions">
+                    <button class="button button-quiet" type="button" id="chat-library-save" disabled>保存到知识库</button>
+                    <button class="button button-quiet" type="button" id="chat-library-cancel" hidden>取消修改</button>
+                  </div>
+                </form>
+                <p class="chat-error" id="chat-library-error" hidden></p>
+                <div class="chat-library-lists">
+                  <div>
+                    <p class="section-label">面经</p>
+                    <div id="chat-jingyan-list"></div>
+                  </div>
+                  <div>
+                    <p class="section-label">岗位知识</p>
+                    <div id="chat-knowledge-list"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="panel" aria-labelledby="bank-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="bank-title">补充题库</h3>
+                  <p class="panel-note">题目写入当前模式的本地题库，只供 Mock 题单使用，不会进入模拟面试对话。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="bank-form">
+                <div class="form-field full">
+                  <label for="bank-question">题目</label>
+                  <input id="bank-question" type="text" autocomplete="off" placeholder="例如：请说明一次需求取舍。">
+                </div>
+                <div class="form-field">
+                  <label for="bank-section">分段</label>
+                  <select id="bank-section">
+                    <option value="业务拆解">业务拆解</option>
+                    <option value="项目深挖">项目深挖</option>
+                    <option value="压力测试">压力测试</option>
+                  </select>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="bank-submit">加入题库</button>
+                </div>
+              </form>
+              <div class="action-result" id="bank-result" hidden></div>
+              <h4 class="subhead">当前题库</h4>
+              <div id="bank-list"></div>
+            </section>
+          </div>
+          <div id="interview-deferred-tools" hidden>
+
+          <section class="panel career-user-panel" id="cu-interview-panel" hidden aria-labelledby="cu-interview-title">
+            <div class="panel-head"><h3 id="cu-interview-title">我的项目面试</h3><span class="badge" id="cu-session-status">尚未开始</span></div>
+            <p class="hint" id="cu-session-meta">在定制简历页选择并确认项目后开始。</p>
+            <p class="career-message" id="cu-interview-message" role="status" aria-live="polite"></p>
+            <h4 class="career-question" id="cu-question" tabindex="-1"></h4>
+            <form id="cu-answer-form" class="form-grid">
+              <div class="form-field full"><label for="cu-answer">你的回答</label><textarea id="cu-answer" rows="6" maxlength="12000"></textarea></div>
+              <div class="form-actions full career-actions">
+                <button class="button" id="cu-submit" type="submit">提交回答</button>
+                <button class="button button-quiet" type="button" data-cu-command="request_hint">给我提示</button>
+                <button class="button button-quiet" type="button" data-cu-command="open_book">查看本题源码</button>
+                <button class="button button-quiet" type="button" data-cu-command="skip">跳过本题</button>
+                <button class="button button-quiet" type="button" data-cu-command="pause">暂停</button>
+                <button class="button button-quiet" type="button" data-cu-command="resume">继续</button>
+                <button class="button button-quiet" type="button" data-cu-command="retry">重试未完成操作</button>
+                <button class="button button-quiet" type="button" data-cu-command="finish">结束并复盘</button>
+                <button class="button button-quiet" type="button" id="cu-refresh-session">刷新 / 恢复</button>
+              </div>
+            </form>
+            <div id="cu-source" hidden></div>
+            <section id="cu-recap" class="career-recap" hidden aria-label="个人面试复盘"></section>
+            <button class="button" type="button" id="cu-to-draft" hidden>生成本次简历预览</button>
+          </section>
+
+
+          <section class="panel integration-panel career-panel" aria-labelledby="interview-agent-title">
+            <div class="integration-head">
+              <span class="integration-mark" aria-hidden="true">06</span>
+              <div>
+                <h3 id="interview-agent-title">项目核验面试</h3>
+                <p>与定制简历页沿用同一轮练习。公开样例不计入个人经历，反馈为待确认建议。</p>
+              </div>
+              <span class="badge badge-neutral" id="career-session-status">尚未开始</span>
+            </div>
+            <p class="notice">当前是公开项目练习，不是基于个人简历的正式面试。回答将发送至 Step 模型生成反馈，请勿填写个人信息。</p>
+            <div class="form-actions career-actions">
+              <button class="button button-quiet" type="button" id="career-back-resume" data-view-link="resume">选择项目 / 开始核验</button>
+              <button class="button button-quiet" type="button" id="career-refresh">恢复 / 刷新本轮</button>
+            </div>
+            <p id="career-message" class="career-message" role="status" aria-live="polite">请先在定制简历页开始公开样例核验。</p>
+            <div id="career-session" hidden>
+              <p class="card-meta" id="career-session-meta"></p>
+              <h4 id="career-question" class="career-question" tabindex="-1"></h4>
+              <p class="hint" id="career-evidence-range"></p>
+              <form id="career-answer-form" class="form-grid">
+                <div class="form-field full">
+                  <label for="career-answer">你的回答</label>
+                  <textarea id="career-answer" rows="6" maxlength="12000" aria-describedby="career-answer-note" placeholder="用自己的话说明实现、原因和边界。"></textarea>
+                  <p class="hint" id="career-answer-note">可以跳过、暂停，或先查看源码；查阅资料与提示会记录为辅助作答。</p>
+                </div>
+                <div class="form-actions full career-actions">
+                  <button class="button" type="submit" id="career-submit">提交回答</button>
+                  <button class="button button-quiet" type="button" data-career-command="request_hint">给我提示</button>
+                  <button class="button button-quiet" type="button" data-career-command="open_book">查看源码</button>
+                  <button class="button button-quiet" type="button" data-career-command="skip">跳过本题</button>
+                  <button class="button button-quiet" type="button" data-career-command="pause">暂停</button>
+                  <button class="button button-quiet" type="button" data-career-command="resume" hidden>继续练习</button>
+                  <button class="button button-quiet" type="button" data-career-command="retry" hidden>重试未完成操作</button>
+                  <button class="button button-quiet" type="button" data-career-command="finish">结束并生成复盘</button>
+                </div>
+              </form>
+              <div id="career-source" hidden></div>
+            </div>
+            <section id="career-recap" class="career-recap" aria-label="本轮项目核验复盘" hidden></section>
+          </section>
+
+          </div>
+        </section>
+
+        <section class="view" id="view-push" data-view-panel="push" aria-labelledby="push-title" hidden>
+          <h2 class="view-title" id="push-title">信息推送</h2>
+          <p class="view-lede">把岗位状态、面试提醒与 HR 回复整理成通知。当前只生成 dry-run 载荷，不连接真实推送服务。</p>
+
+
+          <section class="panel integration-panel" aria-labelledby="push-agent-title">
+            <div class="integration-head">
+              <span class="integration-mark" aria-hidden="true">07</span>
+              <div>
+                <h3 id="push-agent-title">推送 Agent · 接口预留</h3>
+                <p>外部推送 Agent 可订阅本地状态事件并决定发送渠道；工作台只保留载荷预览与边界说明。</p>
+              </div>
+              <span class="badge badge-neutral">待接入</span>
+            </div>
+            <dl class="integration-meta">
+              <div><dt>输入</dt><dd>岗位状态、面试时间、HR 回复分类</dd></div>
+              <div><dt>输出</dt><dd>通知文案与渠道载荷（当前 dry-run）</dd></div>
+              <div><dt>边界</dt><dd>不保存凭据；不发起外部 HTTP 请求</dd></div>
+            </dl>
+          </section>
+
+          <section class="panel" aria-labelledby="dry-run-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="dry-run-title">飞书 dry-run 载荷</h3>
+                <p class="panel-note">只显示将要发送的 JSON 结构；没有发出 HTTP 请求，也没有配置凭据。</p>
+              </div>
+            </div>
+            <form class="form-grid" id="dry-run-form">
+              <div class="form-field">
+                <label for="dry-job-id">岗位 ID</label>
+                <input id="dry-job-id" type="text" value="web-demo" autocomplete="off">
+              </div>
+              <div class="form-field">
+                <label for="dry-company">公司</label>
+                <input id="dry-company" type="text" value="虚构公司" autocomplete="off">
+              </div>
+              <div class="form-field">
+                <label for="dry-title">岗位</label>
+                <input id="dry-title" type="text" value="产品经理" autocomplete="off">
+              </div>
+              <div class="form-field">
+                <label for="dry-status">状态</label>
+                <input id="dry-status" type="text" value="已采集" autocomplete="off">
+              </div>
+              <div class="form-field">
+                <label for="dry-channel">渠道</label>
+                <input id="dry-channel" type="text" value="manual_paste" autocomplete="off">
+              </div>
+              <div class="form-field full form-actions">
+                <button class="button" type="submit" id="dry-run-button">生成 dry-run 载荷</button>
+              </div>
+            </form>
+            <pre class="code-block" id="dry-run-result" hidden></pre>
+          </section>
+        </section>
+
+        <section class="view" id="view-resume" data-view-panel="resume" aria-labelledby="resume-title" hidden>
+          <h2 class="view-title" id="resume-title">定制简历</h2>
+          <p class="view-lede">围绕单个岗位整理可核实的经历原文，并做 ATS 静态可读性检查。不修改 Master Resume，不编造数字。</p>
+
+          <section class="panel career-user-panel" id="cu-resume-panel" aria-labelledby="cu-title">
+            <div class="panel-head"><div><h3 id="cu-title">从真实经历到定制简历</h3><p class="panel-note">选择导入方式 → 整理与确认经历 → 预览 → 保存并导出</p></div><span class="badge" id="cu-connection">经历导入</span></div>
+            <p class="notice" id="cu-mode-note">请切换到“我的 user”，导入自己的项目、实习经历或作品集。</p>
+            <button class="button" type="button" id="cu-switch-user">切到我的 user</button>
+            <div id="cu-personal" hidden>
+              <p class="hint">生成简历会使用你在个人资料中确认的信息。<button class="button button-quiet" type="button" data-view-link="profile">填写 / 更新个人资料</button></p>
+              <fieldset class="cu-source-choice"><legend>选择导入方式</legend>
+                <label><input type="radio" name="cu-source-type" value="github"><span><strong>GitHub 项目</strong><small>从仓库读取实现，整理技术项目的核心贡献。</small></span></label>
+                <label><input type="radio" name="cu-source-type" value="manual" checked><span><strong>自主导入经历 / 作品集</strong><small>适合产品、运营、设计等岗位，填写实习、工作或作品说明。</small></span></label>
+              </fieldset>
+              <p class="career-message" id="cu-message" role="status" aria-live="polite">请选择导入方式。</p>
+              <section class="notice" aria-labelledby="cu-knowledge-title">
+                <h4 id="cu-knowledge-title">项目知识库</h4>
+                <p id="cu-knowledge-status" role="status" aria-live="polite">正在检查本机项目资料…</p>
+                <a href="/api/career-user/knowledge/sources?mode=user" target="_blank" rel="noopener noreferrer">查看资料与覆盖范围</a>
+              </section>
+              <div id="cu-github-panel" hidden>
+              <details id="cu-setup">
+                <summary>首次配置 GitHub 登录应用</summary>
+                <p>创建一次自己的 OAuth App，然后填写公开的 Client ID。日后直接点击“连接 GitHub”。</p>
+                <p><a href="https://github.com/settings/applications/new" target="_blank" rel="noopener noreferrer">在 GitHub 创建 OAuth App</a></p>
+                <dl class="detail-list"><dt>Application name</dt><dd>OfferPilot Local</dd><dt>Homepage URL</dt><dd><code>http://127.0.0.1:8766</code></dd><dt>Authorization callback URL</dt><dd><code>http://127.0.0.1:8766</code></dd><dt>创建后</dt><dd>在应用设置中勾选 Enable Device Flow</dd></dl>
+                <form id="cu-config-form" class="form-grid"><div class="form-field full"><label for="cu-client-id">Client ID（公开标识，不要填写 Secret 或令牌）</label><input id="cu-client-id" type="text" maxlength="100" autocomplete="off" required></div><div class="form-actions full"><button class="button" type="submit">保存登录应用配置</button></div></form>
+                <p class="hint">OAuth 的 repo 范围由 GitHub 提供，包含仓库读写权限；OfferPilot 只使用读取接口，不提交或推送代码。组织仓库还受组织授权限制。</p>
+              </details>
+              <div class="career-actions"><button class="button" id="cu-connect" type="button">连接 GitHub</button><button class="button button-quiet" id="cu-reload" type="button">刷新连接与仓库</button><button class="button button-quiet" id="cu-disconnect" type="button" hidden>断开本机连接</button></div>
+              <div class="notice" id="cu-device" hidden><p>请在 GitHub 输入验证码：<strong id="cu-device-code"></strong></p><a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">打开 GitHub 授权页面</a><p class="hint" id="cu-device-status">等待你在 GitHub 确认，本页将自动检查状态。</p></div>
+              <details id="cu-repository-section" hidden open aria-label="GitHub 仓库列表"><summary>选择或更换 GitHub 项目</summary><p class="hint">展示账号获准访问的公开、私有和组织仓库。每页 50 个；本期每次处理一个项目，不会自动分析全部仓库。</p><div id="cu-repositories"></div><button class="button button-quiet" id="cu-more-repositories" type="button" hidden>加载更多仓库</button></details>
+              <details id="cu-browser" hidden><summary id="cu-browser-title">仓库文件</summary><div id="cu-files"></div><button class="button button-quiet" type="button" id="cu-more-files" hidden>更多文件</button><pre id="cu-file-text" class="career-code" hidden></pre></details>
+              <form id="cu-project-form" class="form-grid" hidden>
+                <div class="form-field full"><label for="cu-repository">选中的仓库</label><input id="cu-repository" type="text" readonly required></div>
+                <div class="form-field full"><label for="cu-role">目标岗位</label><input id="cu-role" type="text" maxlength="200" required placeholder="例如：初级 Python 后端工程师"></div>
+                <div class="form-field full"><label for="cu-jd">岗位 JD（建议填写）</label><textarea id="cu-jd" rows="4" maxlength="15000"></textarea></div>
+                <div class="form-field full"><label for="cu-contribution">你实际负责的工作与协作边界</label><textarea id="cu-contribution" rows="5" maxlength="4000" required placeholder="说明本人实现、第三方代码、团队分工和 AI 辅助；尚无证明的成果数字暂不填写。"></textarea></div>
+                <label class="full cu-check"><input type="checkbox" id="cu-contribution-confirmed" required>我确认上面的职责陈述，不把仓库归属直接当成独立完成的证明。</label>
+                <label class="full cu-check"><input type="checkbox" id="cu-model-consent" required>允许将所选源码片段、职责和 JD 发给 Step 模型，用于整理简历经历；不会发送 GitHub 令牌。</label>
+                <div class="form-actions full"><button class="button" id="cu-prepare" type="submit">读取项目并整理经历</button></div>
+              </form>
+              </div>
+              <section id="cu-experience-panel">
+                <h4>自主导入经历 / 作品集</h4><p class="hint">无需 GitHub。每次整理一段经历，填写你实际做过的工作；文件与链接可作为补充。</p>
+                <form id="cu-experience-form" class="form-grid">
+                  <div class="form-field"><label for="cu-exp-kind">经历类型</label><select id="cu-exp-kind"><option value="internship">实习经历</option><option value="work">工作经历</option><option value="project">项目经历</option><option value="portfolio">作品集</option></select></div>
+                  <div class="form-field"><label for="cu-exp-name">经历 / 项目名称</label><input id="cu-exp-name" type="text" maxlength="120" required placeholder="例如：新用户引导改版"></div>
+                  <div class="form-field"><label for="cu-exp-organization">公司 / 团队（选填）</label><input id="cu-exp-organization" type="text" maxlength="120" placeholder="填写实际公司、团队或独立项目"></div>
+                  <div class="form-field"><label for="cu-exp-position">本人职位 / 项目角色（选填）</label><input id="cu-exp-position" type="text" maxlength="120" placeholder="例如：产品实习生"></div>
+                  <div class="form-field"><label for="cu-exp-start">开始时间（选填）</label><input id="cu-exp-start" type="text" maxlength="40" placeholder="例如：2026.06"></div>
+                  <div class="form-field"><label for="cu-exp-end">结束时间（选填）</label><input id="cu-exp-end" type="text" maxlength="40" placeholder="例如：2026.08 或至今"></div>
+                  <div class="form-field full"><label for="cu-exp-role">目标岗位</label><input id="cu-exp-role" type="text" maxlength="200" required placeholder="例如：产品经理、用户运营、交互设计师"></div>
+                  <div class="form-field full"><label for="cu-exp-context">背景与要解决的问题</label><textarea id="cu-exp-context" rows="3" maxlength="4000" required placeholder="面向哪些用户？遇到了什么问题？为什么要做这件事？"></textarea></div>
+                  <div class="form-field full"><label for="cu-exp-contribution">你具体做了什么</label><textarea id="cu-exp-contribution" rows="5" maxlength="4000" required placeholder="例如：如何访谈用户、取舍需求、设计方案、推进评审或验证效果。说明本人工作、团队分工与辅助工具。"></textarea></div>
+                  <div class="form-field full"><label for="cu-exp-outcome">实际成果与交付（选填）</label><textarea id="cu-exp-outcome" rows="3" maxlength="4000" placeholder="写实际交付、反馈与有依据的数据；没有可靠数字可留空，不必编造增长率。"></textarea></div>
+                  <div class="form-field full"><label for="cu-exp-portfolio-url">作品集链接（选填）</label><input id="cu-exp-portfolio-url" type="url" maxlength="1000" placeholder="https://"><p class="hint">链接作为简历引用保留；请在下方补充需要整理的文字。</p></div>
+                  <details class="full"><summary>补充材料与岗位要求（选填）</summary>
+                    <div class="form-field"><label for="cu-exp-file">从文件提取文字</label><input id="cu-exp-file" type="file" accept=".pdf,.docx,.md,.txt"><button class="button button-quiet" id="cu-extract-text" type="button">提取到下方原文</button><p class="hint">支持有文字层的 PDF、DOCX、Markdown、TXT，最大 5 MB。先在本机提取并核对，确认整理时才发送给模型。</p><p id="cu-extract-status" role="status" aria-live="polite"></p></div>
+                    <div class="form-field"><label for="cu-exp-source-text">补充材料原文</label><textarea id="cu-exp-source-text" rows="6" maxlength="20000" placeholder="粘贴作品说明、需求文档、复盘或访谈摘要；也可从文件提取。请删除与本次简历无关的信息。"></textarea></div>
+                    <div class="form-field"><label for="cu-exp-jd">目标岗位 JD</label><textarea id="cu-exp-jd" rows="4" maxlength="15000"></textarea></div>
+                  </details>
+                  <label class="full cu-check"><input type="checkbox" id="cu-exp-confirmed" required>我确认这些是本人真实经历，已区分个人贡献与团队成果。</label>
+                  <label class="full cu-check"><input type="checkbox" id="cu-exp-consent" required>允许将上述经历、补充原文与岗位要求发给 Step 模型，用于整理简历。</label>
+                  <div class="form-actions full"><button class="button" id="cu-prepare-experience" type="submit">整理经历并核对表述</button></div>
+                </form>
+              </section>
+              <section id="cu-project-review" hidden><h4>确认实际属于你的经历表述</h4><p class="career-message" id="cu-project-positioning"></p><p class="career-message" id="cu-project-summary"></p><p class="hint" id="cu-coverage"></p><div id="cu-claims"></div><p class="hint">只勾选你实际负责且愿意在简历中陈述的工作。模型整理的表述仍需你核对。</p><button class="button" id="cu-start-readiness" type="button">确认所选经历，生成简历预览</button></section>
+              <section id="cu-resume-preview" hidden><h4>简历预览</h4><fieldset class="cu-template-choice"><legend>选择简历模板 · A4 单栏</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级 · 克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文 · 黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据导入材料和本人确认生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
+              <section id="cu-saved-resume" hidden><h4>已保存的简历版本</h4><p class="hint" id="cu-version-label"></p><div class="career-actions"><button class="button button-quiet" id="cu-download" type="button">下载 Markdown</button><button class="button button-quiet" id="cu-download-pdf" type="button">下载 PDF</button><button class="button button-quiet" id="cu-print" type="button">打印 / 导出 PDF</button><button class="button button-quiet" id="cu-regenerate" type="button">用最新个人资料生成新版</button><button class="button" id="cu-start-formal" type="button" hidden>基于此版本开始正式模拟面试</button></div></section>
+              <section id="cu-history" hidden><h4>简历版本记录</h4><div id="cu-versions"></div></section>
+            </div>
+          </section>
+
+
+          <section class="panel integration-panel career-panel" aria-labelledby="resume-agent-title">
+            <div class="integration-head">
+              <span class="integration-mark" aria-hidden="true">08</span>
+              <div>
+                <h3 id="resume-agent-title">写简历前，先核验项目</h3>
+                <p>先用公开样例体验：理解项目 → 回答源码问题 → 查看复盘与补强建议。</p>
+              </div>
+              <span class="badge badge-neutral" id="career-connection">检查连接中</span>
+            </div>
+            <dl class="integration-meta">
+              <div><dt>公开样例</dt><dd>pallets/itsdangerous · Python</dd></div>
+              <div><dt>核验重点</dt><dd>时间戳签名、过期检查与实现边界</dd></div>
+              <div><dt>固定版本</dt><dd><code>672971d66a2e</code> · 不计入个人经历</dd></div>
+            </dl>
+            <p class="notice" id="career-resume-note" role="status" aria-live="polite">正在检查公开样例服务。</p>
+            <div class="form-actions career-actions">
+              <button class="button" type="button" id="career-start" disabled>开始项目核验</button>
+              <button class="button button-quiet" type="button" id="career-continue" hidden>继续 / 查看本轮</button>
+              <button class="button button-quiet" type="button" id="career-connect">重新检查连接</button>
+              <button class="button button-quiet" type="button" id="career-demo-mode" hidden>切到演示模式</button>
+            </div>
+          </section>
+
+          <div class="two-col">
+            <section class="panel" aria-labelledby="ats-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="ats-title">ATS 简历可读性检查</h3>
+                  <p class="panel-note">本地选择 PDF，前端读成 Base64 后交给本机检查；不上传外部服务。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="ats-form">
+                <div class="form-field full resume-dropzone" id="ats-resume-drop" role="group" aria-label="拖入 ATS 检查 PDF">
+                  <label for="ats-file">PDF 文件（最大 5 MB）</label>
+                  <input id="ats-file" type="file" accept="application/pdf,.pdf">
+                  <p class="hint">将 PDF 拖到这里，或选择文件，再点击「检查 PDF」。</p>
+                  <p class="resume-drop-status" aria-live="polite"></p>
+                </div>
+                <div class="form-field full">
+                  <label for="ats-keywords">关键词（逗号分隔）</label>
+                  <input id="ats-keywords" type="text" placeholder="需求分析, 数据分析, Axure" autocomplete="off">
+                  <p class="hint">可留空；留空只检查 PDF 文字层，关键词覆盖仍需人工核查。</p>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="ats-submit">检查 PDF</button>
+                  <p class="hint">只做静态可读性预检，不渲染、不 OCR。</p>
+                </div>
+              </form>
+              <p class="notice" id="ats-note">needs_manual_check 不是通过；无法提取文字层时仍需人工核查。</p>
+              <div class="action-result" id="ats-result" hidden></div>
+            </section>
+
+            <section class="panel" aria-labelledby="variant-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="variant-title">保存经历变体</h3>
+                  <p class="panel-note">只保存你手动改写的原文；不修改 Master Resume，不生成数字。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="variant-form">
+                <div class="form-field full">
+                  <label for="variant-project">项目名</label>
+                  <input id="variant-project" type="text" autocomplete="off" placeholder="项目或经历名称">
+                </div>
+                <div class="form-field full">
+                  <label for="variant-text">经历原文</label>
+                  <textarea id="variant-text" rows="6" placeholder="粘贴你手动改写的经历原文。"></textarea>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="variant-submit">保存经历变体</button>
+                </div>
+              </form>
+              <div class="action-result" id="variant-result" hidden></div>
+              <h4 class="subhead">已保存变体</h4>
+              <div id="variant-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
+          <h2 class="view-title" id="data-title">数据与设置</h2>
+          <p class="view-lede">运行本地测试、生成验收报告、导出或重置演示数据。数据模式与外观在左侧设置区切换。</p>
+
+          <section class="panel" aria-labelledby="ops-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="ops-title">本地操作</h3>
+                <p class="panel-note">测试与报告都在本进程内运行；导出只包含本地工作台数据。</p>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="button" type="button" id="run-tests-button">运行测试</button>
+              <button class="button" type="button" id="web-report-button">生成网页验收报告</button>
+              <button class="button" type="button" id="export-button">导出 JSON</button>
+              <button class="button button-danger" type="button" id="reset-demo-button">重置演示数据</button>
+            </div>
+            <p class="hint" id="reset-note">只重置 demo 数据，不触碰 user 数据。</p>
+            <div class="action-result" id="ops-result" hidden></div>
+          </section>
+
+          <section class="panel" aria-labelledby="downloads-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="downloads-title">下载列表</h3>
+                <p class="panel-note">准备清单、ICS、题单、验收报告与导出文件都保存在当前模式目录。</p>
+              </div>
+            </div>
+            <div id="downloads-table"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="boundaries-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="boundaries-title">运行边界</h3>
+                <p class="panel-note">这些边界是产品约束，不是可切换的配置。</p>
+              </div>
+            </div>
+            <div id="boundaries-table"></div>
+            <h4 class="subhead">本地配置摘要</h4>
+            <div id="config-summary"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="activity-data-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="activity-data-title">最近操作</h3>
+                <p class="panel-note">本地操作日志，最多显示最近 30 条。</p>
+              </div>
+            </div>
+            <div id="activity-data"></div>
+          </section>
+        </section>
+      </div>
+
+      <footer class="footer">
+        <p>秋招规划师 · OfferPilot 本地工作台。approved 仅表示可人工投递；发送仍保留人工确认。</p>
+        <p>演示数据均为虚构测试数据；用户数据保存在本机 <code>web/data/user</code>。</p>
+      </footer>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+  <script src="/ui-signals.js"></script>
+  <script src="/career-agent.js"></script>
+  <script src="/career-user.js"></script>
+  <script src="/workbench-agent.js"></script>
+  <script src="/workbench.js"></script>
+</body>
+</html>

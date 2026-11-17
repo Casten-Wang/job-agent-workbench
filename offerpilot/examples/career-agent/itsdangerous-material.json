@@ -1,0 +1,239 @@
+{
+  "claims": [
+    {
+      "claim_id": "demo_itsdangerous_signed_value_expiry_v1",
+      "evidence_ids": [
+        "410fe78b09794308039a1ca6",
+        "e51ab555cf6d2fdfdf24c532",
+        "ce5839091804745f7595e76b",
+        "c4beec6deb513d790833b224",
+        "42ed21a1e042e4c5b997a186",
+        "bbfe3119b23dfd4c80de6851",
+        "ed4b0b0b1f2caf24af879aad"
+      ],
+      "personal_contribution": "unconfirmed",
+      "text": "项目支持消息签名和验签，并可通过时间戳与 max_age 检查签名时效。"
+    }
+  ],
+  "evaluation_basis": "Model-prepared draft facts; source references verified, not a unique standard answer",
+  "evidence": [
+    {
+      "blob_sha": "e324dc03da90d9002200b68088f501df62777cd6",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "410fe78b09794308039a1ca6",
+      "extraction_kind": "extracted",
+      "line_end": 225,
+      "line_start": 215,
+      "path": "src/itsdangerous/signer.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "60ed0257b341bc703a8f9e3d4441c91548d4a23c36a47ab0714a509d4ef23584",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/signer.py#L215-L225",
+      "text": "    def get_signature(self, value: str | bytes) -> bytes:\n        \"\"\"Returns the signature for the given value.\"\"\"\n        value = want_bytes(value)\n        key = self.derive_key()\n        sig = self.algorithm.get_signature(key, value)\n        return base64_encode(sig)\n\n    def sign(self, value: str | bytes) -> bytes:\n        \"\"\"Signs the given string.\"\"\"\n        value = want_bytes(value)\n        return value + self.sep + self.get_signature(value)"
+    },
+    {
+      "blob_sha": "e324dc03da90d9002200b68088f501df62777cd6",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "e51ab555cf6d2fdfdf24c532",
+      "extraction_kind": "extracted",
+      "line_end": 258,
+      "line_start": 227,
+      "path": "src/itsdangerous/signer.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "60ed0257b341bc703a8f9e3d4441c91548d4a23c36a47ab0714a509d4ef23584",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/signer.py#L227-L258",
+      "text": "    def verify_signature(self, value: str | bytes, sig: str | bytes) -> bool:\n        \"\"\"Verifies the signature for the given value.\"\"\"\n        try:\n            sig = base64_decode(sig)\n        except Exception:\n            return False\n\n        value = want_bytes(value)\n\n        for secret_key in reversed(self.secret_keys):\n            key = self.derive_key(secret_key)\n\n            if self.algorithm.verify_signature(key, value, sig):\n                return True\n\n        return False\n\n    def unsign(self, signed_value: str | bytes) -> bytes:\n        \"\"\"Unsigns the given string.\"\"\"\n        signed_value = want_bytes(signed_value)\n\n        if self.sep not in signed_value:\n            raise BadSignature(f\"No {self.sep!r} found in value\")\n\n        value, sig = signed_value.rsplit(self.sep, 1)\n\n        if self.verify_signature(value, sig):\n            return value\n\n        raise BadSignature(f\"Signature {sig!r} does not match\", payload=value)\n\n    def validate(self, signed_value: str | bytes) -> bool:"
+    },
+    {
+      "blob_sha": "52deeeab44f09c1c7f54438c9f48f54d61366085",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "ce5839091804745f7595e76b",
+      "extraction_kind": "extracted",
+      "line_end": 55,
+      "line_start": 45,
+      "path": "src/itsdangerous/timed.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "3afbf6050e8b73605931d1e516f374835456979e4319c098bfe5f284f120c6c5",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/timed.py#L45-L55",
+      "text": "    def sign(self, value: str | bytes) -> bytes:\n        \"\"\"Signs the given string and also attaches time information.\"\"\"\n        value = want_bytes(value)\n        timestamp = base64_encode(int_to_bytes(self.get_timestamp()))\n        sep = want_bytes(self.sep)\n        value = value + sep + timestamp\n        return value + sep + self.get_signature(value)\n\n    # Ignore overlapping signatures check, return_timestamp is the only\n    # parameter that affects the return type.\n"
+    },
+    {
+      "blob_sha": "52deeeab44f09c1c7f54438c9f48f54d61366085",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "c4beec6deb513d790833b224",
+      "extraction_kind": "extracted",
+      "line_end": 158,
+      "line_start": 137,
+      "path": "src/itsdangerous/timed.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "3afbf6050e8b73605931d1e516f374835456979e4319c098bfe5f284f120c6c5",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/timed.py#L137-L158",
+      "text": "        # Check timestamp is not older than max_age\n        if max_age is not None:\n            age = self.get_timestamp() - ts_int\n\n            if age > max_age:\n                raise SignatureExpired(\n                    f\"Signature age {age} > {max_age} seconds\",\n                    payload=value,\n                    date_signed=self.timestamp_to_datetime(ts_int),\n                )\n\n            if age < 0:\n                raise SignatureExpired(\n                    f\"Signature age {age} < 0 seconds\",\n                    payload=value,\n                    date_signed=self.timestamp_to_datetime(ts_int),\n                )\n\n        if return_timestamp:\n            return value, self.timestamp_to_datetime(ts_int)\n\n        return value"
+    },
+    {
+      "blob_sha": "e324dc03da90d9002200b68088f501df62777cd6",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "42ed21a1e042e4c5b997a186",
+      "extraction_kind": "extracted",
+      "line_end": 241,
+      "line_start": 227,
+      "path": "src/itsdangerous/signer.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "60ed0257b341bc703a8f9e3d4441c91548d4a23c36a47ab0714a509d4ef23584",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/signer.py#L227-L241",
+      "text": "    def verify_signature(self, value: str | bytes, sig: str | bytes) -> bool:\n        \"\"\"Verifies the signature for the given value.\"\"\"\n        try:\n            sig = base64_decode(sig)\n        except Exception:\n            return False\n\n        value = want_bytes(value)\n\n        for secret_key in reversed(self.secret_keys):\n            key = self.derive_key(secret_key)\n\n            if self.algorithm.verify_signature(key, value, sig):\n                return True\n"
+    },
+    {
+      "blob_sha": "52deeeab44f09c1c7f54438c9f48f54d61366085",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "bbfe3119b23dfd4c80de6851",
+      "extraction_kind": "extracted",
+      "line_end": 51,
+      "line_start": 22,
+      "path": "src/itsdangerous/timed.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "3afbf6050e8b73605931d1e516f374835456979e4319c098bfe5f284f120c6c5",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/timed.py#L22-L51",
+      "text": "class TimestampSigner(Signer):\n    \"\"\"Works like the regular :class:`.Signer` but also records the time\n    of the signing and can be used to expire signatures. The\n    :meth:`unsign` method can raise :exc:`.SignatureExpired` if the\n    unsigning failed because the signature is expired.\n    \"\"\"\n\n    def get_timestamp(self) -> int:\n        \"\"\"Returns the current timestamp. The function must return an\n        integer.\n        \"\"\"\n        return int(time.time())\n\n    def timestamp_to_datetime(self, ts: int) -> datetime:\n        \"\"\"Convert the timestamp from :meth:`get_timestamp` into an\n        aware :class`datetime.datetime` in UTC.\n\n        .. versionchanged:: 2.0\n            The timestamp is returned as a timezone-aware ``datetime``\n            in UTC rather than a naive ``datetime`` assumed to be UTC.\n        \"\"\"\n        return datetime.fromtimestamp(ts, tz=timezone.utc)\n\n    def sign(self, value: str | bytes) -> bytes:\n        \"\"\"Signs the given string and also attaches time information.\"\"\"\n        value = want_bytes(value)\n        timestamp = base64_encode(int_to_bytes(self.get_timestamp()))\n        sep = want_bytes(self.sep)\n        value = value + sep + timestamp\n        return value + sep + self.get_signature(value)"
+    },
+    {
+      "blob_sha": "52deeeab44f09c1c7f54438c9f48f54d61366085",
+      "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "evidence_id": "ed4b0b0b1f2caf24af879aad",
+      "extraction_kind": "extracted",
+      "line_end": 167,
+      "line_start": 137,
+      "path": "src/itsdangerous/timed.py",
+      "personal_contribution": "unconfirmed",
+      "repository_id": 1945034,
+      "sha256": "3afbf6050e8b73605931d1e516f374835456979e4319c098bfe5f284f120c6c5",
+      "source_kind": "source_text",
+      "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/timed.py#L137-L167",
+      "text": "        # Check timestamp is not older than max_age\n        if max_age is not None:\n            age = self.get_timestamp() - ts_int\n\n            if age > max_age:\n                raise SignatureExpired(\n                    f\"Signature age {age} > {max_age} seconds\",\n                    payload=value,\n                    date_signed=self.timestamp_to_datetime(ts_int),\n                )\n\n            if age < 0:\n                raise SignatureExpired(\n                    f\"Signature age {age} < 0 seconds\",\n                    payload=value,\n                    date_signed=self.timestamp_to_datetime(ts_int),\n                )\n\n        if return_timestamp:\n            return value, self.timestamp_to_datetime(ts_int)\n\n        return value\n\n    def validate(self, signed_value: str | bytes, max_age: int | None = None) -> bool:\n        \"\"\"Only validates the given signed value. Returns ``True`` if\n        the signature exists and is valid.\"\"\"\n        try:\n            self.unsign(signed_value, max_age=max_age)\n            return True\n        except BadSignature:\n            return False"
+    }
+  ],
+  "is_demo": true,
+  "material_id": "mat_6c05373d57d03a107d49806c",
+  "project_snapshot_id": "github:1945034:672971d66a2ef9f85151e53283113f33d642dabd",
+  "questions": [
+    {
+      "claim_id": "demo_itsdangerous_signed_value_expiry_v1",
+      "evidence_ids": [
+        "410fe78b09794308039a1ca6"
+      ],
+      "expected_facts": [
+        "返回原始 value、分隔符与签名。",
+        "这段实现保留原始消息，不能把签名说成消息加密。"
+      ],
+      "question_id": "demo_q1",
+      "text": "Signer.sign 返回的数据由哪些部分组成？它是否隐藏原始消息？请结合返回语句解释。",
+      "ua_learning_support": [
+        {
+          "evidence_id": "410fe78b09794308039a1ca6",
+          "explanation": "get_signature 先派生密钥、调用所选算法，再把签名做 Base64 编码；sign 返回原 value、分隔符与该签名。原文仍在返回值中，所以这条实现不是消息加密。",
+          "lineRange": [
+            215,
+            225
+          ],
+          "path": "src/itsdangerous/signer.py",
+          "section_index": 4,
+          "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/signer.py#L215-L225",
+          "title": "生成带签名消息",
+          "tourOrder": 3
+        }
+      ]
+    },
+    {
+      "claim_id": "demo_itsdangerous_signed_value_expiry_v1",
+      "evidence_ids": [
+        "410fe78b09794308039a1ca6",
+        "e51ab555cf6d2fdfdf24c532",
+        "42ed21a1e042e4c5b997a186"
+      ],
+      "expected_facts": [
+        "验签按 secret_keys 的反向顺序尝试。",
+        "某个密钥验签通过即返回 True，全部失败返回 False。"
+      ],
+      "question_id": "demo_q2",
+      "text": "验签为什么可能尝试多个 secret_key？请先描述代码行为，再区分源码事实与对设计意图的推测。",
+      "ua_learning_support": [
+        {
+          "evidence_id": "42ed21a1e042e4c5b997a186",
+          "explanation": "verify_signature 先解码签名，格式失败便返回 False，再从最新密钥向旧密钥依次派生并验证。任何一把密钥验证成功就返回 True，全部失败才返回 False，这与签名只使用最新密钥的行为相配合。",
+          "lineRange": [
+            227,
+            241
+          ],
+          "path": "src/itsdangerous/signer.py",
+          "section_index": 5,
+          "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/signer.py#L227-L241",
+          "title": "按多把密钥验签",
+          "tourOrder": 3
+        }
+      ]
+    },
+    {
+      "claim_id": "demo_itsdangerous_signed_value_expiry_v1",
+      "evidence_ids": [
+        "ce5839091804745f7595e76b",
+        "c4beec6deb513d790833b224",
+        "bbfe3119b23dfd4c80de6851",
+        "ed4b0b0b1f2caf24af879aad"
+      ],
+      "expected_facts": [
+        "时间戳先拼到 value 后再计算签名。",
+        "给定 max_age 时 age 超上限或小于零会抛出 SignatureExpired。",
+        "max_age 为 None 时不进入该年龄检查分支。"
+      ],
+      "question_id": "demo_q3",
+      "text": "TimestampSigner 中时间戳是否参与签名？传入 max_age 后，过期和未来时间分别走什么分支？不传 max_age 呢？",
+      "ua_learning_support": [
+        {
+          "evidence_id": "bbfe3119b23dfd4c80de6851",
+          "explanation": "TimestampSigner 取整数时间并提供 UTC 时间转换，在 sign 中把编码后的时间戳先拼到 value，再对整个结果计算签名。时间信息因此位于被签名的数据内，而不是签名后额外附加的无保护字段。",
+          "lineRange": [
+            22,
+            51
+          ],
+          "path": "src/itsdangerous/timed.py",
+          "section_index": 0,
+          "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/timed.py#L22-L51",
+          "title": "时间戳进入签名",
+          "tourOrder": 5
+        },
+        {
+          "evidence_id": "ed4b0b0b1f2caf24af879aad",
+          "explanation": "只有 max_age 不为 None 时才计算 age，大于上限或小于零都抛 SignatureExpired；未传 max_age 就不进入这段年龄检查。validate 复用 unsign 并把签名异常转为 False，因此不能把未设置时效的调用解释成已经限制有效期。",
+          "lineRange": [
+            137,
+            167
+          ],
+          "path": "src/itsdangerous/timed.py",
+          "section_index": 3,
+          "source_url": "https://github.com/pallets/itsdangerous/blob/672971d66a2ef9f85151e53283113f33d642dabd/src/itsdangerous/timed.py#L137-L167",
+          "title": "可选年龄检查",
+          "tourOrder": 5
+        }
+      ]
+    }
+  ],
+  "resume_version_id": null,
+  "schema_version": 1,
+  "source_commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+  "source_repository": "pallets/itsdangerous",
+  "warnings": [
+    "Public example, not the current user's personal experience.",
+    "No candidate answers or ability assessment have been made."
+  ]
+}

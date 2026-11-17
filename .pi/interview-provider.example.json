@@ -1,0 +1,6 @@
+{
+  "provider": "gpt-proxy",
+  "model": "REPLACE_WITH_EXACT_MODEL_ID",
+  "api": "openai-responses",
+  "base_url": "https://YOUR_PROVIDER/v1"
+}
