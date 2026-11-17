@@ -24,6 +24,8 @@ if str(WEB_DIR) not in sys.path:
 sys.dont_write_bytecode = True
 
 import backend  # noqa: E402  (known local module in WEB_DIR)
+import agent_capabilities  # noqa: E402
+import career_agent_runtime  # noqa: E402
 
 STATIC_DIR = WEB_DIR / "static"
 MAX_BODY_BYTES = 8 * 1024 * 1024
@@ -152,6 +154,13 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
         try:
+            if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
+                result, status = career_agent_runtime.dispatch("GET", path, query)
+                self._json(result, status)
+                return
+            if path == "/api/agent/capabilities":
+                self._json(agent_capabilities.snapshot())
+                return
             if path == "/api/health":
                 offerpilot = backend.get_offerpilot_state(query.get("mode", "user"))
                 self._json({
@@ -278,6 +287,28 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         try:
             payload = self._read_json_body()
+            if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
+                query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
+                result, status = career_agent_runtime.dispatch("POST", path, query, payload)
+                self._json(result, status)
+                return
+            if path == "/api/interview/stream":
+                events = backend.interview_stream_events(payload)
+                first = next(events)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-store, max-age=0")
+                self.send_header("Connection", "close")
+                self.send_header("X-Accel-Buffering", "no")
+                self._security_headers()
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(backend.interview_chat.encode_sse(first[0], first[1]))
+                    self.wfile.flush()
+                    for event, data in events:
+                        self.wfile.write(backend.interview_chat.encode_sse(event, data))
+                        self.wfile.flush()
+                return
             if path == "/api/action":
                 action = str(payload.get("action") or "")
                 handler = backend.ACTIONS.get(action)
