@@ -317,6 +317,23 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                     return
                 self._json(handler(payload))
                 return
+            if path == "/api/interview/stream":
+                events = backend.interview_stream_events(payload)
+                first = next(events)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-store, max-age=0")
+                self.send_header("Connection", "close")
+                self.send_header("X-Accel-Buffering", "no")
+                self._security_headers()
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(backend.interview_chat.encode_sse(first[0], first[1]))
+                    self.wfile.flush()
+                    for event, data in events:
+                        self.wfile.write(backend.interview_chat.encode_sse(event, data))
+                        self.wfile.flush()
+                return
             if path == "/api/offerpilot/preflight":
                 self._json(backend.preflight_offerpilot_task(payload))
                 return

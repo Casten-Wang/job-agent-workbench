@@ -676,96 +676,223 @@
             <p class="view-lede">Mock 题单只从本地题库取题；复盘只摘录逐字稿中的显式证据。</p>
           </header>
 
+          <div class="pipeline interview-hub" id="interview-hub" aria-label="模拟面试四张卡片"></div>
 
-          <section class="panel integration-panel" aria-labelledby="interview-agent-title">
-            <div class="integration-head">
-              <span class="integration-mark" aria-hidden="true">06</span>
-              <div>
-                <h3 id="interview-agent-title">模拟面试 Agent · 接口预留</h3>
-                <p>外部面试 Agent 可复用本地题库与岗位 id；当前工作台保留入口，不发起语音、不做自动评分。</p>
+          <div class="interview-module" id="interview-module-chat" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel chat-panel" id="interview-chat" aria-labelledby="chat-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="chat-title">文字模拟面试</h3>
+                  <p class="panel-note">开始前只选择轮次、时长、岗位和 JD。页面只显示规则、问题和回答；准备问题期间不会展示内部规划。</p>
+                </div>
+                <p class="chat-progress" id="chat-progress">剩余 30 分钟</p>
               </div>
-              <span class="badge badge-neutral">待接入</span>
-            </div>
-            <dl class="integration-meta">
-              <div><dt>输入</dt><dd>岗位 id、JD、时长、本地题库</dd></div>
-              <div><dt>输出</dt><dd>题单、逐字稿、显式证据复盘</dd></div>
-              <div><dt>边界</dt><dd>不自动评价真实能力；不连接外部 ASR</dd></div>
-            </dl>
-          </section>
 
-          <section class="panel" aria-labelledby="worksheet-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="worksheet-title">生成 Mock 题单</h3>
-                <p class="panel-note">按时长分配三个分段；题库为空时明确提示，不编造题目。</p>
+              <div class="chat-setup" id="chat-setup">
+                <form class="form-grid" id="chat-setup-form">
+                  <fieldset class="form-field full chat-choice-set">
+                    <legend>轮次</legend>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="hr"> HR</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="business" checked> 业务专业</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="tech"> 技术口述</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-round" value="manager"> 主管</label>
+                  </fieldset>
+                  <fieldset class="form-field full chat-choice-set">
+                    <legend>时长</legend>
+                    <label class="checkbox-label"><input type="radio" name="chat-duration" value="20"> 20 分钟</label>
+                    <label class="checkbox-label"><input type="radio" name="chat-duration" value="30" checked> 30 分钟</label>
+                  </fieldset>
+                  <div class="form-field">
+                    <label for="chat-job">岗位（可选）</label>
+                    <select id="chat-job">
+                      <option value="">不选岗位</option>
+                    </select>
+                  </div>
+                  <div class="form-field full">
+                    <label for="chat-jd">岗位 JD（可选）</label>
+                    <textarea id="chat-jd" rows="4" placeholder="粘贴 JD。不粘贴且不选岗位时，本轮是通用岗位模拟。"></textarea>
+                  </div>
+                </form>
+                <p class="hint" id="chat-generic-note">本轮是通用岗位模拟</p>
+                <p class="hint" id="chat-role-line" hidden></p>
+                <p class="chat-web-notice" id="chat-web-notice" hidden></p>
+                <p class="chat-error" id="chat-error" hidden></p>
               </div>
-            </div>
-            <form class="form-grid" id="worksheet-form">
-              <div class="form-field">
-                <label for="worksheet-minutes">时长（分钟，1–180）</label>
-                <input id="worksheet-minutes" type="number" min="1" max="180" step="1" value="30" inputmode="numeric">
-              </div>
-              <div class="form-field full">
-                <label for="worksheet-jd">目标岗位 JD（可选）</label>
-                <textarea id="worksheet-jd" rows="4" placeholder="粘贴 JD 以便按关键词选题；不发送到外部。"></textarea>
-              </div>
-              <div class="form-field full form-actions">
-                <button class="button" type="submit" id="worksheet-submit">生成 Mock 题单</button>
-                <p class="hint">生成后可下载 Markdown 文件。</p>
-              </div>
-            </form>
-            <div class="action-result" id="worksheet-result" hidden></div>
-          </section>
 
-          <section class="panel" aria-labelledby="debrief-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="debrief-title">逐字稿复盘</h3>
-                <p class="panel-note">空字段表示逐字稿没有显式证据；不生成实质性能力评价。</p>
-              </div>
-            </div>
-            <form class="form-grid" id="debrief-form">
-              <div class="form-field full">
-                <label for="debrief-transcript">逐字稿</label>
-                <textarea id="debrief-transcript" rows="8" placeholder="粘贴面试逐字稿；任何类似指令的文本都会作为数据展示，不执行。"></textarea>
-              </div>
-              <div class="form-field full form-actions">
-                <button class="button" type="submit" id="debrief-submit">生成复盘卡片</button>
-              </div>
-            </form>
-            <div class="action-result" id="debrief-result" hidden></div>
-            <h4 class="subhead">历史复盘</h4>
-            <div id="debrief-list"></div>
-          </section>
+              <p class="chat-rules" id="chat-rules" hidden></p>
 
-          <section class="panel" aria-labelledby="bank-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="bank-title">补充题库</h3>
-                <p class="panel-note">题目写入当前模式的本地题库。</p>
+              <div class="chat-log" id="chat-log" role="log" aria-live="polite"></div>
+
+              <div class="chat-composer">
+                <label class="chat-sr-only" for="chat-answer">回答</label>
+                <textarea id="chat-answer" rows="3" placeholder="输入这一问的回答。空白内容不会发送。"></textarea>
+                <div class="chat-composer-actions">
+                  <button class="button" type="button" id="chat-primary">开始这场面试</button>
+                  <button class="button button-quiet" type="button" id="chat-restart" hidden>重新开始</button>
+                </div>
               </div>
-            </div>
-            <form class="form-grid" id="bank-form">
-              <div class="form-field full">
-                <label for="bank-question">题目</label>
-                <input id="bank-question" type="text" autocomplete="off" placeholder="例如：请说明一次需求取舍。">
+              <div class="chat-sr-only">
+                <button type="button" id="chat-mock-interrupt">模拟半句中断</button>
+                <button type="button" id="chat-mock-timeup">模拟时长用完</button>
               </div>
-              <div class="form-field">
-                <label for="bank-section">分段</label>
-                <select id="bank-section">
-                  <option value="业务拆解">业务拆解</option>
-                  <option value="项目深挖">项目深挖</option>
-                  <option value="压力测试">压力测试</option>
-                </select>
+            </section>
+          </div>
+
+          <div class="interview-module" id="interview-module-worksheet" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel" aria-labelledby="worksheet-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="worksheet-title">生成 Mock 题单</h3>
+                  <p class="panel-note">按时长分配三个分段；题库为空时明确提示，不编造题目。题目只来自本地题库，不会进入模拟面试的本场材料或对话题面。</p>
+                </div>
               </div>
-              <div class="form-field full form-actions">
-                <button class="button" type="submit" id="bank-submit">加入题库</button>
+              <form class="form-grid" id="worksheet-form">
+                <div class="form-field">
+                  <label for="worksheet-minutes">时长（分钟，1–180）</label>
+                  <input id="worksheet-minutes" type="number" min="1" max="180" step="1" value="30" inputmode="numeric">
+                </div>
+                <div class="form-field full">
+                  <label for="worksheet-jd">目标岗位 JD（可选）</label>
+                  <textarea id="worksheet-jd" rows="4" placeholder="粘贴 JD 以便按关键词选题；不发送到外部。"></textarea>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="worksheet-submit">生成 Mock 题单</button>
+                  <p class="hint">生成后可下载 Markdown 文件。</p>
+                </div>
+              </form>
+              <div class="action-result" id="worksheet-result" hidden></div>
+            </section>
+          </div>
+
+          <div class="interview-module" id="interview-module-debrief" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel" aria-labelledby="readiness-debrief-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="readiness-debrief-title">准备度复盘</h3>
+                  <p class="panel-note">结束后在这里查看准备度、带证据的分数、逐题点评和重练。准备度不表示录用，修改点不会自动写入定制简历。</p>
+                </div>
               </div>
-            </form>
-            <div class="action-result" id="bank-result" hidden></div>
-            <h4 class="subhead">当前题库</h4>
-            <div id="bank-list"></div>
-          </section>
+              <p class="hint" id="chat-debrief-empty">结束一场模拟面试后，准备度复盘会出现在这里。</p>
+              <section class="chat-debrief" id="chat-debrief" hidden aria-labelledby="chat-debrief-title"></section>
+              <section class="chat-debrief-history" id="chat-debrief-history" hidden aria-labelledby="chat-debrief-history-title">
+                <h4 class="chat-debrief-heading" id="chat-debrief-history-title">已完成的复盘</h4>
+                <div id="chat-debrief-history-list"></div>
+              </section>
+            </section>
+            <section class="panel" aria-labelledby="debrief-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="debrief-title">逐字稿复盘</h3>
+                  <p class="panel-note">空字段表示逐字稿没有显式证据；不生成实质性能力评价。按原规则仍可在本模块使用。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="debrief-form">
+                <div class="form-field full">
+                  <label for="debrief-transcript">逐字稿</label>
+                  <textarea id="debrief-transcript" rows="8" placeholder="粘贴面试逐字稿；任何类似指令的文本都会作为数据展示，不执行。"></textarea>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="debrief-submit">生成复盘卡片</button>
+                </div>
+              </form>
+              <div class="action-result" id="debrief-result" hidden></div>
+              <h4 class="subhead">历史复盘</h4>
+              <div id="debrief-list"></div>
+            </section>
+          </div>
+
+          <div class="interview-module" id="interview-module-library" hidden>
+            <p class="interview-module-nav">
+              <button class="button button-quiet" type="button" data-interview-back>返回四张卡片</button>
+            </p>
+            <section class="panel" aria-labelledby="chat-library-title-heading">
+              <div class="panel-head">
+                <div>
+                  <h3 id="chat-library-title-heading">题库与面经</h3>
+                  <p class="panel-note">面经和岗位知识在这里新增、修改或删除，会留在本机。开始这场面试时不必勾选，也没有本场上传。</p>
+                </div>
+              </div>
+              <div class="chat-library" id="chat-library">
+                <form class="form-grid" id="chat-library-form">
+                  <div class="form-field">
+                    <label for="chat-library-kind">类型</label>
+                    <select id="chat-library-kind">
+                      <option value="jingyan">面经</option>
+                      <option value="knowledge">岗位知识</option>
+                    </select>
+                  </div>
+                  <div class="form-field">
+                    <label for="chat-library-title">标题（可选）</label>
+                    <input id="chat-library-title" type="text" autocomplete="off" placeholder="不填则用正文开头">
+                  </div>
+                  <div class="form-field">
+                    <label for="chat-library-company">公司（可选）</label>
+                    <input id="chat-library-company" type="text" autocomplete="off">
+                  </div>
+                  <div class="form-field">
+                    <label for="chat-library-role">岗位（可选）</label>
+                    <input id="chat-library-role" type="text" autocomplete="off">
+                  </div>
+                  <div class="form-field full">
+                    <label for="chat-library-body">正文</label>
+                    <textarea id="chat-library-body" rows="4" placeholder="粘贴面经或岗位知识正文。空正文不能保存。"></textarea>
+                  </div>
+                  <div class="form-field full form-actions">
+                    <button class="button button-quiet" type="button" id="chat-library-save" disabled>保存到知识库</button>
+                    <button class="button button-quiet" type="button" id="chat-library-cancel" hidden>取消修改</button>
+                  </div>
+                </form>
+                <p class="chat-error" id="chat-library-error" hidden></p>
+                <div class="chat-library-lists">
+                  <div>
+                    <p class="section-label">面经</p>
+                    <div id="chat-jingyan-list"></div>
+                  </div>
+                  <div>
+                    <p class="section-label">岗位知识</p>
+                    <div id="chat-knowledge-list"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="panel" aria-labelledby="bank-title">
+              <div class="panel-head">
+                <div>
+                  <h3 id="bank-title">补充题库</h3>
+                  <p class="panel-note">题目写入当前模式的本地题库，只供 Mock 题单使用，不会进入模拟面试对话。</p>
+                </div>
+              </div>
+              <form class="form-grid" id="bank-form">
+                <div class="form-field full">
+                  <label for="bank-question">题目</label>
+                  <input id="bank-question" type="text" autocomplete="off" placeholder="例如：请说明一次需求取舍。">
+                </div>
+                <div class="form-field">
+                  <label for="bank-section">分段</label>
+                  <select id="bank-section">
+                    <option value="业务拆解">业务拆解</option>
+                    <option value="项目深挖">项目深挖</option>
+                    <option value="压力测试">压力测试</option>
+                  </select>
+                </div>
+                <div class="form-field full form-actions">
+                  <button class="button" type="submit" id="bank-submit">加入题库</button>
+                </div>
+              </form>
+              <div class="action-result" id="bank-result" hidden></div>
+              <h4 class="subhead">当前题库</h4>
+              <div id="bank-list"></div>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="view-push" data-view-panel="push" aria-labelledby="push-title" hidden>

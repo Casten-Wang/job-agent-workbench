@@ -54,6 +54,7 @@ import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
 import interview_chat  # noqa: E402
 import mock_interview  # noqa: E402
+import interview_chat  # noqa: E402
 import precheck  # noqa: E402
 import state_machine  # noqa: E402
 import variants  # noqa: E402
@@ -3264,8 +3265,6 @@ def add_bank_question(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "id": digest, "message": "题目已加入本地题库"}
 
 
-
-
 def interview_ai_configured(mode: str) -> bool:
     """True only when the embedded OfferPilot config actually has an AI key."""
     try:
@@ -3535,6 +3534,8 @@ def interview_start(payload: dict[str, Any]) -> dict[str, Any]:
         public["jingyan_is_not_official"] = True
     public["message"] = "规则已准备，正在根据简历准备问题"
     return public
+
+
 def _stream_interview_question(
     system_prompt: str,
     user_text: str,
@@ -3858,6 +3859,7 @@ def interview_stream_events(payload: dict[str, Any]) -> Any:
             "error",
             {"message": interview_chat.stream_error_message(intent, str(session.get("user_status") or "preparing"))},
         )
+
 
 def debrief(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
