@@ -22,19 +22,20 @@
 | --- | --- | --- |
 | 工作台 / 六段流程 | `GET /api/pipeline`、`POST /api/pipeline/event`、`GET /api/state` | `web/static/index.html` 的 `#view-workbench`；`app.js` 的 `renderPipeline`、`renderBelt`、`renderKpis`、`render*Chart`、`renderActivity`；`backend.py` 的 `PIPELINE_STAGES`、`pipeline_contract`、`pipeline_status`、`ingest_pipeline_event` |
 | 岗位池 / 审批 / HR 回复 | `parse-jd`、`import-jobs`、`enqueue`、`confirm`、`parse-mail`、`generate-ics` | `index.html` 的 `#view-jobs`、`#view-queue`、`#view-mail`；`app.js` 的 `renderJobs`、`renderQueue`、`renderMails`、`renderQueueGreetings`、`generateQueueGreetings`、`renderDeliveryResults`、`openDeliveryPanel`、`startQueueDelivery`、`enqueueJobs`、`syncJobsSelection` 及对应 submit 处理；`backend.py` 的 `parse_jd`、`import_jobs`、`enqueue`、`confirm_queue`、`parse_mail`、`generate_ics` |
-| 岗位自动化内嵌后端（OfferPilot） | `GET /api/offerpilot/state`、`GET /api/offerpilot/jobs`、`POST /api/offerpilot/preflight`、`POST /api/offerpilot/tasks`、`POST /api/offerpilot/tasks/<id>/stop`、`offerpilot-import`、`offerpilot-resume`、`offerpilot-greet`、`offerpilot-deliver` | `vendor/offerpilot/`（上游源码、`LICENSE`、`pyproject.toml`、示例配置）；`web/offerpilot_runtime.py`；`requirements-offerpilot.txt`；`run_web.sh`；`index.html` 的 `#view-collect`（采集岗位页签与向导）与其中的 `.offerpilot-panel`；`app.js` 的 `renderOfferPilot*`、`loadOfferPilotJobs`、`refreshOfferPilot`、`startOfferPilotTask`、`stopOfferPilotTask`、`buildOfferPilotOptions`、`runOfferPilotPreflight`、`importOfferPilotJobs`、`renderCollect*`、`syncCollect*`、`applyOfferPilotPrefs`、`uploadOfferPilotResume`；`backend.py` 的 `_demo_offerpilot_*`、`_offerpilot_options`、`get_offerpilot_*`、`preflight_offerpilot_task`、`start/stop_offerpilot_task`、`start_offerpilot_greet`、`start_offerpilot_deliver`、`_sync_deliveries`、`import_offerpilot_jobs`、`_import_offerpilot_records`；`server.py` 的 `/api/offerpilot/*` 路由；对应测试 |
-| 个人资料 | `GET /api/profile`、`save-profile`、`import-profile-cv` | `index.html` 的 `#view-profile`；`app.js` 的 `PROFILE_LIST_CONFIG`、`renderProfile*`、`populateProfileForm`、`collectProfileForm`、`saveProfileForm`、`importProfileFromCv`；`backend.py` 的 `default_profile`、`normalize_profile`、`profile_*`、`save_profile`、`import_profile_cv`、`_demo_profile` |
+| 岗位自动化内嵌后端（OfferPilot） | `GET /api/offerpilot/state`、`GET /api/offerpilot/jobs`、`POST /api/offerpilot/preflight`、`POST /api/offerpilot/tasks`、`POST /api/offerpilot/tasks/<id>/stop`、`offerpilot-import`、`offerpilot-resume`、`offerpilot-greet`、`offerpilot-deliver` | `vendor/offerpilot/`（上游源码、`LICENSE`、`pyproject.toml`、示例配置）；`web/offerpilot_runtime.py`；`requirements-offerpilot.txt`；`run_web.sh`；`index.html` 的 `#view-collect`（采集岗位页签与向导）与其中的 `.offerpilot-panel`；`app.js` 的 `renderOfferPilot*`、`loadOfferPilotJobs`、`refreshOfferPilot`、`startOfferPilotTask`、`stopOfferPilotTask`、`buildOfferPilotOptions`、`runOfferPilotPreflight`、`importOfferPilotJobs`、`renderCollect*`、`syncCollect*`、`applyOfferPilotPrefs`、`uploadOfferPilotResume`；`backend.py` 的 `_offerpilot_options`、`get_offerpilot_*`、`preflight_offerpilot_task`、`start/stop_offerpilot_task`、`start_offerpilot_greet`、`start_offerpilot_deliver`、`_sync_deliveries`、`import_offerpilot_jobs`、`_import_offerpilot_records`；`server.py` 的 `/api/offerpilot/*` 路由；对应测试 |
+| 个人资料 | `GET /api/profile`、`save-profile`、`import-profile-cv` | `index.html` 的 `#view-profile`；`app.js` 的 `PROFILE_LIST_CONFIG`、`renderProfile*`、`populateProfileForm`、`collectProfileForm`、`saveProfileForm`、`importProfileFromCv`；`backend.py` 的 `default_profile`、`normalize_profile`、`profile_*`、`save_profile`、`import_profile_cv` |
 | 模拟面试 | `worksheet`、`add-question`、`debrief` | `index.html` 的 `#view-interview`；`app.js` 的 `renderInterview` 与 worksheet / debrief / bank 表单处理；`backend.py` 的 `worksheet`、`add_bank_question`、`debrief`；`tools/mock_interview.py`、`tools/interview_debrief.py`、`tools/interview_analytics.py` |
 | 信息推送 | `dry-run` | `index.html` 的 `#view-push`；`app.js` 的 dry-run 表单处理与 `renderDryRun`（如有）；`backend.py` 的 `dry_run`；`tools/feishu_adapter.py` |
 | 定制简历 | `add-variant`、`check-pdf` | `index.html` 的 `#view-resume`；`app.js` 的 `renderVariants`、ATS 与经历变体处理；`backend.py` 的 `add_variant`、`check_pdf`；`tools/variants.py`、`tools/ats_check.py` |
-| 数据与设置 | `GET /api/state` 的下载/配置字段、`export`、`run-tests`、`web-report`、`reset-demo` | `index.html` 的 `#view-data`；`app.js` 的 `renderData`、`renderConfig`、`renderBoundaries` 与对应按钮；`backend.py` 的 `export_data`、`run_tests`、`web_report`、`reset_demo` |
+| 数据与设置 | `GET /api/state` 的下载/配置字段、`export`、`run-tests`、`web-report` | `index.html` 的 `#view-data`；`app.js` 的 `renderData`、`renderConfig`、`renderBoundaries` 与对应按钮；`backend.py` 的 `export_data`、`run_tests`、`web_report` |
+| 对话助理（Agent 对话，尚未合入 `main`） | `GET /api/agent/capabilities`、`/api/workbench-agent/*`、`/api/resume-agent/*`、`/api/interview-agent/*`、`/api/career-user/*`（来自分支 `8d3a41c`） | 合入后再补全：`index.html` 的 `#view-agent`（待建）；`app.js` 中 `agent-` 前缀的函数（待建）；后端运行时与路由文件（以合入结果为准） |
 
 ### 修改规则
 
 1. **先定位再改**：在 `index.html` 用 `id="view-*"` 定位页面区段，在 `app.js` 用函数名/注释块定位逻辑，在 `backend.py` 用动作函数名定位。不要按行号改。
 2. **只做加法**：新增字段、函数、DOM 节点优先追加；不要重命名或删除其他模块的 `id`、`data-*`、API 字段。
 3. **不改别人的数据形状**：`snapshot`、`pipeline`、`profile` 等返回对象只允许新增键；删除/改名视为破坏性变更，必须同步改契约文档与测试，并在 PR/提交说明中标注。
-4. **不动导航编号与顺序**：七个入口的顺序与编号是共享外壳（原 03 审批队列、04 HR 回复已并入 02 求职主线页签）；新增模块必须由维护者统一分配编号。
+4. **导航编号与顺序由维护者（用户）决定**：入口顺序与编号属于共享外壳，改动前须经用户确认。当前 `main` 有 7 个入口：01 首页、02 岗位流水线、03 个人资料、04 定制简历、05 模拟面试、06 信息推送、07 数据与设置（原 03 审批队列、04 HR 回复已并入 02 求职主线页签）。已决定的目标顺序为 8 个入口：01 首页、02 对话助理（Agent 对话）、03 岗位流水线、04 个人资料、05 定制简历、06 模拟面试、07 信息推送、08 数据与设置。Agent 对话入口尚未接入 `main`，在接入前以当前 7 个入口为准；名称已确定为「对话助理」，「求职主线」已改名为「岗位流水线」。新增模块仍须由维护者统一分配编号。
 5. **不改共享工具**：`tools/` 下被多个模块引用的 `filters.py`、`approval_queue.py`、`state_machine.py`、`precheck.py` 等，除非本模块就是它的所有者，否则只读不改。
 6. **测试归属**：每个模块的改动至少补一条对应测试；不要为了让测试通过而放宽其他模块的断言。
 
@@ -77,9 +78,9 @@
 
 ## 5. 数据与隐私
 
-- `demo` 模式只能放明显虚构的数据；不得把真实姓名、电话、邮箱、微信写进 `_demo_profile()` 或 demo 种子。
+- 产品现在只有 `user` 模式，`demo` 模式已移除。仓库内的测试夹具与示例数据只能是明显虚构的内容，不得含真实姓名、电话、邮箱、微信。
 - `user` 模式的 `profile.json`、`jobs.json`、`mails.json` 等只在本机；`web/data/` 永不提交。
-- OfferPilot 岗位自动化的运行时（`config.yaml`、凭据、`data/offerpilot.db`、简历）同样只在本机：demo 用 `web/data/demo/offerpilot/`，user 用 `web/data/user/offerpilot/`，两者都在 gitignore 的 `web/data/` 下。
+- OfferPilot 岗位自动化的运行时（`config.yaml`、凭据、`data/offerpilot.db`、简历）同样只在本机：位于 gitignore 的 `web/data/user/offerpilot/`。
 - 生成招呼语、题单、报告时，联系方式（电话/邮箱/微信/链接）不得进入草稿；只使用专业事实。
 - 公开仓库只包含代码、虚构 demo、内嵌组件源码与文档；`.venv/`、`workspace/` 下的个人资料、`web/data/` 永不提交。提交前用 `git status` 与 `git ls-files` 自查敏感路径。
 
@@ -94,7 +95,7 @@ git ls-files workspace/
 git ls-files vendor/offerpilot/LICENSE vendor/offerpilot/pyproject.toml
 ```
 
-第 4 条应无输出；第 5 条只应列出 `workspace/README.md`；第 6 条应同时列出内嵌组件的许可与包定义。若改动涉及界面，另在 `http://127.0.0.1:8766/` 做一次桌面与手机宽度回归（user 模式确认内嵌后端「已就绪」与只读岗位数，demo 模式确认「演示只读」且启动禁用）。
+第 4 条应无输出；第 5 条只应列出 `workspace/README.md`；第 6 条应同时列出内嵌组件的许可与包定义。若改动涉及界面，另在 `http://127.0.0.1:8766/` 做一次桌面与手机宽度回归（确认内嵌后端「已就绪」与岗位数）。
 
 ## 7. 会话模型别名
 
