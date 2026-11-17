@@ -38,8 +38,8 @@ from offerpilot.collection import pacing
 from offerpilot.collection.base import CollectionError, CollectorHooks
 from offerpilot.collection.models import JobCandidate, PlatformCollectionRequest, PlatformCollectionResult
 from offerpilot.db import (
+    combos_to_skip,
     delete_page_progress,
-    get_collected_combos,
     get_page_progress,
     mark_combo_collected,
     prune_collected_combos,
@@ -449,8 +449,11 @@ class LiepinCollector:
         score, reason = salary_filter_result(candidate.salary, profile)
         return None if score > 0 else reason
 
-    def _resume_ttl_hours(self) -> int:
-        """断点续采有效期（默认 24h），与 51job 同规则。"""
+    def _resume_ttl_hours(self) -> int | None:
+        """词级断点续采有效期（小时）；None 表示不按时间窗口整词跳过（默认）。
+
+        与 51job 同规则：只有 config 显式把 resume_ttl_hours 设为正数时才启用。
+        """
         search_cfg: dict[str, Any] = {}
         platforms = self.config.get("platforms", {})
         if isinstance(platforms, dict) and isinstance(platforms.get("liepin"), dict):
@@ -459,26 +462,30 @@ class LiepinCollector:
                 search_cfg = pf["search"]
         elif isinstance(self.config.get("search"), dict):
             search_cfg = self.config["search"]
-        raw = search_cfg.get("resume_ttl_hours", 24)
+        if "resume_ttl_hours" not in search_cfg:
+            return None
         try:
-            return max(1, min(int(raw or 24), 720))
+            value = int(search_cfg.get("resume_ttl_hours"))
         except (TypeError, ValueError):
-            return 24
+            return None
+        if value <= 0:
+            return None
+        return min(value, 720)
 
     def collect(self, request: PlatformCollectionRequest, hooks: CollectorHooks) -> PlatformCollectionResult:
         for city in request.cities:
             if not request.city_codes.get(city):
                 return PlatformCollectionResult(self.platform, "failed", "no_valid_city", f"猎聘城市编码未配置：{city}")
 
-        # 词级断点续采：跳过最近 N 小时内已完成的 (city, keyword) 组合。
+        # 词级断点续采：默认不跳过（手动采集每次都重新采集）；只有 config 显式
+        # 设置 resume_ttl_hours 为正数时，才跳过该窗口内已完成的 (city, keyword)。
+        ttl_hours = self._resume_ttl_hours()
         collected_combos: set[tuple[str, str]] = set()
         if self.safety_conn is not None:
             all_keywords = set(request.keywords)
             prune_collected_combos(self.safety_conn, "liepin", all_keywords)
             prune_page_progress(self.safety_conn, "liepin", all_keywords)
-            collected_combos = get_collected_combos(
-                self.safety_conn, "liepin", within_hours=self._resume_ttl_hours()
-            )
+            collected_combos = combos_to_skip(self.safety_conn, "liepin", ttl_hours)
 
         throttle_cfg = self.config.get("throttle", {}) if isinstance(self.config.get("throttle"), dict) else {}
         send_windows = throttle_cfg.get("send_windows", ["09:00-16:00"])
@@ -494,11 +501,11 @@ class LiepinCollector:
             for keyword in request.keywords:
                 if (city, keyword) in collected_combos:
                     hooks.on_event(phase="completed_keyword", keyword=keyword, city=city,
-                                   message=f"猎聘 {keyword} 断点续采：{self._resume_ttl_hours()}h 内已完成，整词跳过")
+                                   message=f"猎聘 {keyword} 断点续采：{ttl_hours}h 内已完成，整词跳过")
                     continue
-                # 页级断点：从上次采到页码的下一页继续
+                # 页级断点：从上次采到页码的下一页继续（与词级跳过无关）
                 saved_page = (
-                    get_page_progress(self.safety_conn, "liepin", city, keyword, within_hours=self._resume_ttl_hours())
+                    get_page_progress(self.safety_conn, "liepin", city, keyword, within_hours=ttl_hours)
                     if self.safety_conn is not None
                     else 0
                 )

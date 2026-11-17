@@ -39,8 +39,8 @@ from offerpilot.collection import pacing
 from offerpilot.collection.base import CollectionBlockedError, CollectorHooks
 from offerpilot.collection.models import JobCandidate, PlatformCollectionRequest, PlatformCollectionResult
 from offerpilot.db import (
+    combos_to_skip,
     delete_page_progress,
-    get_collected_combos,
     get_page_progress,
     job_identity_exists,
     mark_combo_collected,
@@ -754,8 +754,13 @@ class Job51Collector:
         )
 
     # ---------------------------------------------------------------- collect
-    def _resume_ttl_hours(self) -> int:
-        """57hybrid：断点续采有效期。同时兼容旧 config.search 与新 config.platforms.51job.search。"""
+    def _resume_ttl_hours(self) -> int | None:
+        """词级断点续采有效期（小时）；None 表示不按时间窗口整词跳过。
+
+        采集由用户在前台手动触发，默认每次都重新采集全部 (city, keyword)。
+        同时兼容旧 config.search 与新 config.platforms.51job.search：只有显式把
+        resume_ttl_hours 设为正数时，才恢复「窗口内已完成则跳过」的旧行为。
+        """
         search_cfg = {}
         platforms = self.config.get("platforms", {}) if isinstance(self.config.get("platforms"), dict) else {}
         pf = platforms.get("51job", {}) if isinstance(platforms.get("51job"), dict) else {}
@@ -763,11 +768,15 @@ class Job51Collector:
             search_cfg = pf["search"]
         elif isinstance(self.config.get("search"), dict):
             search_cfg = self.config["search"]
-        raw = search_cfg.get("resume_ttl_hours", 24)
+        if "resume_ttl_hours" not in search_cfg:
+            return None
         try:
-            return max(1, min(int(raw or 24), 720))
+            value = int(search_cfg.get("resume_ttl_hours"))
         except (TypeError, ValueError):
-            return 24
+            return None
+        if value <= 0:
+            return None
+        return min(value, 720)
 
     def collect(
         self, request: PlatformCollectionRequest, hooks: CollectorHooks
@@ -778,16 +787,16 @@ class Job51Collector:
                 return PlatformCollectionResult(self.platform, "failed", "no_valid_city",
                                                 f"51job 城市编码未配置：{city}")
 
-        # 词级断点续采：跳过最近 N 小时内已完成的 (city, keyword) 组合。
-        # 超过有效期（默认 24h）的旧断点视为过期，重新采集（招聘岗位每天都有新增）。
+        # 词级断点续采：默认不跳过（手动采集每次都重新采集）；只有 config 显式
+        # 设置 resume_ttl_hours 为正数时，才跳过该窗口内已完成的 (city, keyword)。
         # 孤儿断点（关键词被增删后残留）顺带清理，避免脏数据累积。
         collected_combos: set[tuple[str, str]] = set()
         if self.safety_conn is not None:
             all_keywords = set(request.keywords)
             prune_collected_combos(self.safety_conn, "51job", all_keywords)
             prune_page_progress(self.safety_conn, "51job", all_keywords)
-            collected_combos = get_collected_combos(
-                self.safety_conn, "51job", within_hours=self._resume_ttl_hours()
+            collected_combos = combos_to_skip(
+                self.safety_conn, "51job", self._resume_ttl_hours()
             )
 
         # 反检测前置：时间窗口 + 随机休息日（复用 OfferPilot throttle 配置）
@@ -836,9 +845,9 @@ class Job51Collector:
                 for kw in request.keywords:
                     if hooks.stop_event is not None and hooks.stop_event.is_set():
                         return PlatformCollectionResult(self.platform, "stopped", "user_stopped", "用户已停止")
-                    # 词级断点跳过：24h 内已完成的组合整词跳过
+                    # 词级断点跳过：仅当 config 显式开启 resume_ttl_hours 时才会命中
                     if (city, kw) in collected_combos:
-                        self._log(hooks, f"51job {kw} 断点续采：24h 内已完成，整词跳过",
+                        self._log(hooks, f"51job {kw} 断点续采：{self._resume_ttl_hours()}h 内已完成，整词跳过",
                                   phase="completed_keyword", keyword=kw, city=city)
                         continue
                     try:
