@@ -148,13 +148,35 @@ class DegradeAndOrchestratorTests(unittest.TestCase):
             self.assertEqual(illegal["error"], "illegal-transition")
 
     def test_demo_generates_report_with_all_steps_and_no_approved_or_submitted_state(self):
-        with contextlib.redirect_stdout(io.StringIO()):
-            result = orchestrator.cmd_demo(
-                orchestrator.build_parser().parse_args(["demo"]),
-                orchestrator.load_config(),
-                [],
-            )
-        text = Path(result["report"]).read_text(encoding="utf-8")
+        # Everything the demo writes goes to a temporary directory: running the
+        # suite must not modify demo/REPORT.md, the demo queue or the transcript.
+        with tempfile.TemporaryDirectory(prefix="task06-demo-") as folder:
+            base = Path(folder)
+            demo_queue_path = base / "approval-queue-demo.json"
+            cfg = orchestrator.load_config()
+            demo = dict(cfg["demo"])
+            demo["report_path"] = str(base / "REPORT.md")
+            demo["interview_dir"] = str(base / "interviews")
+            cfg = dict(cfg, demo=demo)
+
+            def resolve_into_temp(value):
+                text = str(value).replace("\\", "/")
+                if text.endswith("demo/approval-queue-demo.json"):
+                    return demo_queue_path
+                path = Path(value)
+                return path if path.is_absolute() else PROJECT_ROOT / path
+
+            with mock.patch.object(orchestrator, "_resolve", side_effect=resolve_into_temp), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                result = orchestrator.cmd_demo(
+                    orchestrator.build_parser().parse_args(["demo"]),
+                    cfg,
+                    [],
+                )
+            self.assertTrue(demo_queue_path.is_file())
+            text = Path(result["report"]).read_text(encoding="utf-8")
+            demo_queue = json.loads(demo_queue_path.read_text(encoding="utf-8"))
+            self.assertTrue((base / "interviews" / "demo-transcript.md").is_file())
         self.assertTrue(result["ok"])
         self.assertEqual(result["steps"], 7)
         self.assertFalse(result["auto_submit"])
@@ -164,7 +186,6 @@ class DegradeAndOrchestratorTests(unittest.TestCase):
         self.assertIn("未实现", text)
         self.assertIn("未显式 confirm", text)
         self.assertNotIn('"status": "approved"', text)
-        demo_queue = json.loads((PROJECT_ROOT / "demo" / "approval-queue-demo.json").read_text(encoding="utf-8"))
         self.assertEqual([row["status"] for row in demo_queue], ["pending", "pending"])
 
 
