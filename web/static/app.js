@@ -146,7 +146,26 @@ const state = {
   jobsSelection: new Set(),
   queueApprovedSelection: new Set(),
   queueDeliveryIds: [],
-  profileDirty: false
+  profileDirty: false,
+  interviewChat: {
+    session: null,
+    internal: null,
+    materials: [],
+    interruptNext: false,
+    streamAbort: null,
+    timerId: null,
+    materialSeq: 1,
+    libraryEditingId: null,
+    card: null,
+    debriefHistory: [],
+    drill: null,
+    profileBackup: null,
+    webSearch: {
+      configured: false,
+      results: []
+    }
+  },
+  interviewModule: null
 };
 
 const dom = {
@@ -298,6 +317,37 @@ const dom = {
   bankSubmit: document.getElementById('bank-submit'),
   bankResult: document.getElementById('bank-result'),
   bankList: document.getElementById('bank-list'),
+  interviewHub: document.getElementById('interview-hub'),
+  chatPanel: document.getElementById('interview-chat'),
+  chatProgress: document.getElementById('chat-progress'),
+  chatJob: document.getElementById('chat-job'),
+  chatJd: document.getElementById('chat-jd'),
+  chatLibrary: document.getElementById('chat-library'),
+  chatLibraryError: document.getElementById('chat-library-error'),
+  chatLibraryForm: document.getElementById('chat-library-form'),
+  chatLibraryKind: document.getElementById('chat-library-kind'),
+  chatLibraryTitle: document.getElementById('chat-library-title'),
+  chatLibraryCompany: document.getElementById('chat-library-company'),
+  chatLibraryRole: document.getElementById('chat-library-role'),
+  chatLibraryBody: document.getElementById('chat-library-body'),
+  chatLibrarySave: document.getElementById('chat-library-save'),
+  chatLibraryCancel: document.getElementById('chat-library-cancel'),
+  chatJingyanList: document.getElementById('chat-jingyan-list'),
+  chatKnowledgeList: document.getElementById('chat-knowledge-list'),
+  chatGenericNote: document.getElementById('chat-generic-note'),
+  chatRoleLine: document.getElementById('chat-role-line'),
+  chatWebNotice: document.getElementById('chat-web-notice'),
+  chatError: document.getElementById('chat-error'),
+  chatRules: document.getElementById('chat-rules'),
+  chatLog: document.getElementById('chat-log'),
+  chatAnswer: document.getElementById('chat-answer'),
+  chatPrimary: document.getElementById('chat-primary'),
+  chatRestart: document.getElementById('chat-restart'),
+  chatDebrief: document.getElementById('chat-debrief'),
+  chatDebriefHistory: document.getElementById('chat-debrief-history'),
+  chatDebriefHistoryList: document.getElementById('chat-debrief-history-list'),
+  chatMockInterrupt: document.getElementById('chat-mock-interrupt'),
+  chatMockTimeup: document.getElementById('chat-mock-timeup'),
   variantForm: document.getElementById('variant-form'),
   variantProject: document.getElementById('variant-project'),
   variantText: document.getElementById('variant-text'),
@@ -715,10 +765,104 @@ function showView(name) {
   // 时间/渠道/状态筛选只作用于工作台快照，其他入口显示会变成无关噪音。
   if (dom.filterBar) dom.filterBar.hidden = name !== 'workbench';
   window.scrollTo({ top: 0, behavior: 'auto' });
+  if (name === 'interview') showInterviewModule(null);
   if (name === 'collect') {
     if (state.offerpilotConnected && !state.offerpilotJobsLoaded) loadOfferPilotJobs();
     if (state.offerpilotConnected) maybeRunOfferPilotPreflight();
   }
+}
+
+const INTERVIEW_MODULES = ['chat', 'worksheet', 'debrief', 'library'];
+
+function interviewHubCards() {
+  const snapshot = state.snapshot || {};
+  const bank = snapshot.question_bank && Array.isArray(snapshot.question_bank.questions)
+    ? snapshot.question_bank.questions
+    : [];
+  const debriefs = Array.isArray(snapshot.debriefs) ? snapshot.debriefs : [];
+  const history = Array.isArray(state.interviewChat.debriefHistory) ? state.interviewChat.debriefHistory : [];
+  const session = state.interviewChat.session;
+  const active = Boolean(session && session.user_status && session.user_status !== 'idle');
+  const remaining = remainingMinutesFromSession(session);
+  return [
+    {
+      id: 'chat',
+      title: '模拟面试',
+      owner: '本场对话',
+      description: '选择轮次、时长、岗位或 JD 后开始文字模拟。',
+      count: active ? remaining : 0,
+      unit: '分钟',
+      status: active ? 'connected' : 'ready'
+    },
+    {
+      id: 'worksheet',
+      title: 'Mock 题单',
+      owner: '本地题库',
+      description: '只从本机题库取题，题目不进入模拟面试对话。',
+      count: bank.length,
+      unit: '题',
+      status: 'ready'
+    },
+    {
+      id: 'debrief',
+      title: '面试复盘',
+      owner: '本机复盘',
+      description: '准备度复盘和逐字稿复盘都在这里，不堆在模拟面试对话下面。',
+      count: debriefs.length + history.length + (state.interviewChat.card ? 1 : 0),
+      unit: '份',
+      status: (state.interviewChat.card || history.length) ? 'connected' : 'ready'
+    },
+    {
+      id: 'library',
+      title: '题库与面经',
+      owner: '本机知识库',
+      description: '新增、修改或删除面经和岗位知识，开始面试时不必勾选。',
+      count: Array.isArray(state.interviewChat.materials) ? state.interviewChat.materials.length : 0,
+      unit: '条',
+      status: 'ready'
+    }
+  ];
+}
+
+function renderInterviewHub() {
+  if (!dom.interviewHub) return;
+  clear(dom.interviewHub);
+  interviewHubCards().forEach((card, index) => {
+    const statusLabel = PIPELINE_STATUS_LABELS[card.status] || '本地可用';
+    const node = el('button', {
+      className: `pipeline-node owner-local status-${card.status}`,
+      attrs: {
+        type: 'button',
+        'data-interview-module': card.id,
+        'aria-label': `${card.title}，${card.count} ${card.unit}，${statusLabel}；打开${card.title}`
+      }
+    }, [
+      el('span', { className: 'pipeline-top' }, [
+        el('span', { className: 'pipeline-index', text: String(index + 1).padStart(2, '0') }),
+        el('span', { className: 'pipeline-owner', text: card.owner })
+      ]),
+      el('span', { className: 'pipeline-name', text: card.title }),
+      el('span', { className: 'pipeline-desc', text: card.description }),
+      el('span', { className: 'pipeline-count' }, [
+        el('strong', { text: String(card.count) }),
+        el('span', { text: card.unit })
+      ]),
+      el('span', { className: 'pipeline-status', text: statusLabel })
+    ]);
+    node.addEventListener('click', () => showInterviewModule(card.id));
+    dom.interviewHub.append(node);
+  });
+}
+
+function showInterviewModule(module) {
+  const next = INTERVIEW_MODULES.includes(module) ? module : null;
+  state.interviewModule = next;
+  if (dom.interviewHub) dom.interviewHub.hidden = Boolean(next);
+  INTERVIEW_MODULES.forEach((name) => {
+    const node = document.getElementById(`interview-module-${name}`);
+    if (node) node.hidden = next !== name;
+  });
+  if (!next) renderInterviewHub();
 }
 
 function clearTransientResults() {
@@ -754,6 +898,8 @@ function switchMode(mode) {
   dom.filterPeriod.value = 'all';
   clearTransientResults();
   syncModeButtons();
+  resetInterviewChat();
+  loadChatLibrary();
   loadState({ announce: true });
 }
 
@@ -3017,6 +3163,1806 @@ function renderMails(snapshot) {
   });
 }
 
+/* Interview chat (frontend Mock; field shapes match start/stream/reply/library) */
+
+const CHAT_ROUND_LABELS = {
+  hr: 'HR',
+  business: '业务专业',
+  tech: '技术口述',
+  manager: '主管'
+};
+const CHAT_INCOMPLETE_NOTE = '这一问没有说完';
+const CHAT_NO_RESUME = '请先在个人资料里填写实习或项目，再开始面试。';
+const CHAT_EMPTY_ANSWER = '请填写回答';
+const CHAT_EMPTY_MATERIAL = '请粘贴面经或岗位知识正文';
+const CHAT_LIBRARY_SAVED = '已保存到本机知识库，之后可以修改或删除。开始面试时不必再勾选。';
+const CHAT_WEB_UNAVAILABLE = '这次没有联网补充。面试继续。不会改用套话，也不会编造公司业务或简历里没有的经历。';
+const CHAT_WEB_WRITTEN = '已根据公司或岗位从网上补充，并写入知识库（标明来自联网），之后可以改。面经和联网结果不是公司官方标准，也不是你做过的事。';
+const CHAT_LIBRARY_KEY_PREFIX = 'offerpilot.interviewLibrary.';
+const CHAT_WEB_SEED = {
+  id: 'lib-web-seed',
+  kind: 'jingyan',
+  title: '示例联网面经',
+  body: '联网示例公司的虚构场景：先做注册再做支付，面经只用来估计可能问什么。',
+  company: '联网示例公司',
+  role: '示例联网岗位',
+  source: 'web',
+  source_label: '来自联网',
+  jingyan_is_not_official: true,
+  source_urls: ['https://example.invalid/interview-note'],
+  created_at: '2026-11-17T00:00:00.000Z',
+  updated_at: '2026-11-17T00:00:00.000Z'
+};
+const CHAT_PEER_SEED = {
+  id: 'lib-peer-seed',
+  kind: 'jingyan',
+  title: '同业产品面经',
+  body: '其他公司产品岗位常问需求取舍和范围控制。这条只用来理解能力，不是目标公司的业务，也不是候选人做过的事。',
+  company: '同业示例公司',
+  role: '产品经理',
+  source: 'user',
+  source_label: '',
+  match_tier: 'peer_same_role',
+  jingyan_is_not_official: true,
+  created_at: '2026-11-17T00:00:00.000Z',
+  updated_at: '2026-11-17T00:00:00.000Z'
+};
+const CHAT_PEER_LABEL = '来自其他公司的同类岗位';
+const CHAT_WEB_LABEL = '来自联网';
+const CHAT_ROLE_AFFIXES = [
+  '实习', '校招', '社招', '应届', '校招生', '暑期', '春招', '秋招',
+  '初级', '中级', '高级', '资深', '专家', '助理',
+  'intern', 'junior', 'senior', 'staff'
+];
+const CHAT_GENERIC_ROLE_TOKENS = [
+  '工程师', '开发', '专员', '经理', '岗位', '岗', 'engineer', 'developer'
+];
+const CHAT_ROLE_DIRECTIONS = [
+  '产品', '运营', '设计', '前端', '后端', '全栈', '客户端', '移动',
+  'ios', 'android', '测试', '数据', '算法', '机器学习', '策略', '研发',
+  '销售', '市场', '人力', 'hr', '财务', '法务', '增长', '投放', '内容',
+  '游戏', '安全', '运维', '分析', '研究', '咨询',
+  'backend', 'frontend', 'fullstack', 'product', 'algorithm'
+];
+const CHAT_NOT_AN_OFFER = '准备度只表示练习准备程度，不表示录用。';
+const CHAT_RESUME_DISCLAIMER = '这些修改点不会自动写入定制简历';
+const CHAT_MISSING_EVIDENCE = '证据不足';
+const CHAT_READINESS_LABELS = {
+  ready: '已准备好练习这一轮',
+  almost_ready: '接近准备好，还差一两处补齐',
+  needs_practice: '还需要针对缺口再练',
+  insufficient_evidence: '这场回答里可核对的证据不足'
+};
+const CHAT_SCORE_LABELS = {
+  hr: ['沟通表达', '协作推进', '职业动机'],
+  business: ['需求取舍', '业务理解', '结果表达'],
+  tech: ['方案落地', '范围控制', '结果表达'],
+  manager: ['优先级判断', '带团队交付', '结果表达']
+};
+
+function chatRoundValue() {
+  const picked = document.querySelector('input[name="chat-round"]:checked');
+  const value = picked ? picked.value : 'business';
+  return CHAT_ROUND_LABELS[value] ? value : 'business';
+}
+
+function chatDurationValue() {
+  const picked = document.querySelector('input[name="chat-duration"]:checked');
+  const minutes = Number(picked && picked.value);
+  return minutes === 20 ? 20 : 30;
+}
+
+function chatHasResumeEvidence(profile) {
+  const source = profile && typeof profile === 'object' ? profile : {};
+  const experiences = Array.isArray(source.experiences) ? source.experiences : [];
+  const projects = Array.isArray(source.projects) ? source.projects : [];
+  const hasExperience = experiences.some((row) => row && (row.company || row.title || row.summary));
+  const hasProject = projects.some((row) => row && (row.name || row.summary));
+  return hasExperience || hasProject;
+}
+
+function chatSelectedJob() {
+  const jobs = state.snapshot && Array.isArray(state.snapshot.jobs) ? state.snapshot.jobs : [];
+  const id = dom.chatJob ? String(dom.chatJob.value || '') : '';
+  if (!id) return null;
+  return jobs.find((job) => String(job.id) === id) || null;
+}
+
+function chatGenericRole() {
+  const jd = dom.chatJd ? String(dom.chatJd.value || '').trim() : '';
+  return !jd && !chatSelectedJob();
+}
+
+function chatLibraryStorageKey(mode) {
+  return `${CHAT_LIBRARY_KEY_PREFIX}${mode || state.mode}`;
+}
+
+function chatNormalizeKey(text) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u3000]/g, '')
+    .replace(/[/\-·_（）()\s]/g, '');
+}
+
+function chatFieldMatch(left, right) {
+  const a = chatNormalizeKey(left);
+  const b = chatNormalizeKey(right);
+  if (a.length < 2 || b.length < 2) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function chatStripRoleAffixes(text) {
+  let value = chatNormalizeKey(text);
+  CHAT_ROLE_AFFIXES.forEach((affix) => {
+    const token = chatNormalizeKey(affix);
+    if (token) value = value.split(token).join('');
+  });
+  return value;
+}
+
+function chatExtractDirections(text) {
+  const norm = chatNormalizeKey(text);
+  if (!norm) return [];
+  return CHAT_ROLE_DIRECTIONS.filter((word) => {
+    const token = chatNormalizeKey(word);
+    return token && norm.includes(token);
+  });
+}
+
+function chatSameRole(left, right) {
+  const a = chatStripRoleAffixes(left);
+  const b = chatStripRoleAffixes(right);
+  if (a.length < 2 || b.length < 2) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function chatSimilarRole(left, right) {
+  const leftDirs = chatExtractDirections(left).filter((word) => !CHAT_GENERIC_ROLE_TOKENS.includes(word));
+  const rightDirs = new Set(chatExtractDirections(right).filter((word) => !CHAT_GENERIC_ROLE_TOKENS.includes(word)));
+  return leftDirs.some((word) => rightDirs.has(word));
+}
+
+function chatItemRoleText(item) {
+  return String((item && item.role) || '').trim() || String((item && item.title) || '').trim();
+}
+
+function chatHasStartTarget() {
+  const jd = dom.chatJd ? String(dom.chatJd.value || '').trim() : '';
+  return Boolean(chatSelectedJob() || jd);
+}
+
+function chatIsQuestionBankItem(item) {
+  if (!item || typeof item !== 'object') return true;
+  if (item.kind !== 'jingyan' && item.kind !== 'knowledge') return true;
+  if (item.source === 'question_bank' || item.worksheet) return true;
+  return false;
+}
+
+function chatQuestionBankTexts() {
+  const snapshot = state.snapshot || {};
+  const bank = snapshot.question_bank && Array.isArray(snapshot.question_bank.questions)
+    ? snapshot.question_bank.questions
+    : [];
+  return bank.map((row) => String((row && row.question) || '').trim()).filter(Boolean);
+}
+
+function matchChatLibraryForSession() {
+  const job = chatSelectedJob();
+  const jd = dom.chatJd ? String(dom.chatJd.value || '').trim() : '';
+  const company = job ? String(job.company || '').trim() : '';
+  const role = job ? String(job.title || '').trim() : '';
+  if (!company && !role && !jd) {
+    return { matched: [], hasTargetKnowledge: false };
+  }
+  const library = state.interviewChat.materials.filter((item) => !chatIsQuestionBankItem(item));
+  const target = company
+    ? library.filter((item) => chatFieldMatch(item.company, company)).map((item) => Object.assign({}, item, {
+      match_tier: 'target_company'
+    }))
+    : [];
+  const targetJingyanCount = target.filter((item) => item.kind === 'jingyan').length;
+  const roleText = role || (jd ? jd.slice(0, 200) : '');
+  const peers = [];
+  if (targetJingyanCount === 0 && roleText) {
+    library.forEach((item) => {
+      if (item.kind !== 'jingyan') return;
+      if (company && chatFieldMatch(item.company, company)) return;
+      const itemRole = chatItemRoleText(item);
+      let matchTier = '';
+      if (role && chatSameRole(itemRole, role)) matchTier = 'peer_same_role';
+      else if (chatSimilarRole(itemRole, roleText)) matchTier = 'peer_similar_role';
+      if (!matchTier) return;
+      peers.push(Object.assign({}, item, { match_tier: matchTier }));
+    });
+  }
+  const matched = target.concat(peers);
+  const hasTargetKnowledge = target.some((item) => (
+    item.kind === 'knowledge' && String(item.body || '').trim()
+  ));
+  return { matched, hasTargetKnowledge };
+}
+
+function chatWebSearchConfig() {
+  const cfg = state.interviewChat.webSearch;
+  return {
+    configured: Boolean(cfg && cfg.configured),
+    results: cfg && Array.isArray(cfg.results) ? cfg.results.slice() : []
+  };
+}
+
+function setChatWebSearchConfig(options) {
+  const src = options && typeof options === 'object' ? options : {};
+  state.interviewChat.webSearch = {
+    configured: Boolean(src.configured),
+    results: Array.isArray(src.results) ? src.results.slice(0, 3) : []
+  };
+  return chatWebSearchConfig();
+}
+
+function chatHttpUrl(value) {
+  const url = String(value || '').trim();
+  return /^https?:\/\//i.test(url) ? url : '';
+}
+
+function chatParseWebSearchHits(rawRows) {
+  const rows = Array.isArray(rawRows) ? rawRows : [];
+  const hits = [];
+  rows.forEach((row) => {
+    if (hits.length >= 3 || !row || typeof row !== 'object') return;
+    const url = chatHttpUrl(row.url || row.link || row.source_url || row.href);
+    const title = String(row.title || row.name || '').trim();
+    const body = String(row.body || row.content || row.snippet || row.text || row.description || '').trim();
+    if (!url || (!title && !body)) return;
+    const kind = row.kind === 'knowledge' ? 'knowledge' : 'jingyan';
+    hits.push({
+      kind,
+      title: title || Array.from(body).slice(0, 24).join('') || (kind === 'knowledge' ? '岗位知识' : '面经'),
+      body: body || title,
+      source_urls: [url]
+    });
+  });
+  return hits;
+}
+
+function mockResolveWebSupplement(job) {
+  const cfg = chatWebSearchConfig();
+  if (!cfg.configured) {
+    return { status: 'unavailable', items: [] };
+  }
+  const hits = chatParseWebSearchHits(cfg.results);
+  if (!hits.length) {
+    return { status: 'unavailable', items: [] };
+  }
+  const now = new Date().toISOString();
+  const written = hits.map((hit) => {
+    const item = normalizeChatLibraryItem({
+      id: `lib-web-${state.interviewChat.materialSeq++}`,
+      kind: hit.kind,
+      title: hit.title,
+      body: hit.body,
+      company: job && job.company ? String(job.company) : '',
+      role: job && job.title ? String(job.title) : '',
+      source: 'web',
+      source_urls: hit.source_urls,
+      created_at: now,
+      updated_at: now
+    }, 0);
+    state.interviewChat.materials.push(item);
+    return item;
+  });
+  persistChatLibrary();
+  renderChatLibrary();
+  return { status: 'written', items: written };
+}
+
+function chatJoinPeriod(left, right) {
+  const a = String(left || '').trim();
+  const b = String(right || '').trim();
+  if (!a) return b;
+  if (!b) return a;
+  const head = a.replace(/[。.!！]+$/u, '');
+  const tail = b.replace(/^[。.!！]+/u, '');
+  return `${head}。${tail}`;
+}
+
+function chatPeerTier(item) {
+  const tier = item && item.match_tier;
+  return tier === 'peer_same_role' || tier === 'peer_similar_role' ? tier : '';
+}
+
+function chatLibraryDisplayLabel(item) {
+  if (!item) return '';
+  if (item.source === 'web') return CHAT_WEB_LABEL;
+  if (chatPeerTier(item)) return CHAT_PEER_LABEL;
+  return '';
+}
+
+function normalizeChatLibraryItem(raw, index) {
+  const item = raw && typeof raw === 'object' ? raw : {};
+  const kind = item.kind === 'knowledge' ? 'knowledge' : 'jingyan';
+  const body = String(item.body || '').trim();
+  const source = item.source === 'web' ? 'web' : 'user';
+  const title = String(item.title || '').trim()
+    || Array.from(body).slice(0, 24).join('')
+    || (kind === 'knowledge' ? '岗位知识' : '面经');
+  const id = String(item.id || '').trim() || `lib-${Date.now()}-${index + 1}`;
+  const matchTier = chatPeerTier(item);
+  return {
+    id,
+    kind,
+    title,
+    body,
+    company: String(item.company || '').trim(),
+    role: String(item.role || '').trim(),
+    source,
+    source_label: source === 'web' ? CHAT_WEB_LABEL : '',
+    match_tier: matchTier,
+    jingyan_is_not_official: kind === 'jingyan' || source === 'web',
+    created_at: String(item.created_at || new Date().toISOString()),
+    updated_at: String(item.updated_at || item.created_at || new Date().toISOString()),
+    source_urls: source === 'web' && Array.isArray(item.source_urls) ? item.source_urls.slice() : []
+  };
+}
+
+function persistChatLibrary() {
+  safeLocalSet(chatLibraryStorageKey(), JSON.stringify(state.interviewChat.materials));
+  renderInterviewHub();
+}
+
+function loadChatLibrary() {
+  const raw = safeLocalGet(chatLibraryStorageKey());
+  if (raw == null) {
+    state.interviewChat.materials = state.mode === 'demo'
+      ? [normalizeChatLibraryItem(CHAT_WEB_SEED, 0), normalizeChatLibraryItem(CHAT_PEER_SEED, 1)]
+      : [];
+    persistChatLibrary();
+  } else {
+    try {
+      const parsed = JSON.parse(raw);
+      const rows = Array.isArray(parsed) ? parsed : [];
+      state.interviewChat.materials = rows.map((item, index) => normalizeChatLibraryItem(item, index));
+    } catch (error) {
+      state.interviewChat.materials = [];
+    }
+  }
+  if (state.mode === 'demo') {
+    const ids = new Set(state.interviewChat.materials.map((item) => item.id));
+    let seeded = false;
+    if (!ids.has(CHAT_WEB_SEED.id)) {
+      state.interviewChat.materials.unshift(normalizeChatLibraryItem(CHAT_WEB_SEED, 0));
+      seeded = true;
+    }
+    if (!ids.has(CHAT_PEER_SEED.id)) {
+      state.interviewChat.materials.push(normalizeChatLibraryItem(CHAT_PEER_SEED, 1));
+      seeded = true;
+    }
+    if (seeded) persistChatLibrary();
+  }
+  const maxSeq = state.interviewChat.materials.reduce((max, item) => {
+    const match = String(item.id || '').match(/(\d+)$/);
+    const value = match ? Number(match[1]) : 0;
+    return Number.isFinite(value) && value > max ? value : max;
+  }, 0);
+  state.interviewChat.materialSeq = Math.max(state.interviewChat.materialSeq, maxSeq + 1);
+  state.interviewChat.libraryEditingId = null;
+  clearChatLibraryForm();
+  renderChatLibrary();
+}
+
+function chatLibraryBodyValue() {
+  return dom.chatLibraryBody ? String(dom.chatLibraryBody.value || '').trim() : '';
+}
+
+function syncChatLibrarySave() {
+  if (!dom.chatLibrarySave) return;
+  dom.chatLibrarySave.disabled = !chatLibraryBodyValue();
+}
+
+function clearChatLibraryForm() {
+  state.interviewChat.libraryEditingId = null;
+  if (dom.chatLibraryKind) dom.chatLibraryKind.value = 'jingyan';
+  if (dom.chatLibraryTitle) dom.chatLibraryTitle.value = '';
+  if (dom.chatLibraryCompany) dom.chatLibraryCompany.value = '';
+  if (dom.chatLibraryRole) dom.chatLibraryRole.value = '';
+  if (dom.chatLibraryBody) dom.chatLibraryBody.value = '';
+  if (dom.chatLibrarySave) dom.chatLibrarySave.textContent = '保存到知识库';
+  if (dom.chatLibraryCancel) dom.chatLibraryCancel.hidden = true;
+  syncChatLibrarySave();
+}
+
+function fillChatLibraryForm(item) {
+  if (!item) {
+    clearChatLibraryForm();
+    return;
+  }
+  state.interviewChat.libraryEditingId = item.id;
+  if (dom.chatLibraryKind) dom.chatLibraryKind.value = item.kind === 'knowledge' ? 'knowledge' : 'jingyan';
+  if (dom.chatLibraryTitle) dom.chatLibraryTitle.value = item.title || '';
+  if (dom.chatLibraryCompany) dom.chatLibraryCompany.value = item.company || '';
+  if (dom.chatLibraryRole) dom.chatLibraryRole.value = item.role || '';
+  if (dom.chatLibraryBody) dom.chatLibraryBody.value = item.body || '';
+  if (dom.chatLibrarySave) dom.chatLibrarySave.textContent = '保存修改';
+  if (dom.chatLibraryCancel) dom.chatLibraryCancel.hidden = false;
+  syncChatLibrarySave();
+}
+
+function buildChatRulesText(round, duration, generic) {
+  const roundLabel = CHAT_ROUND_LABELS[round] || '业务专业';
+  const prefix = generic ? '本轮是通用岗位模拟。' : '';
+  const text = `${prefix}本场是${roundLabel}面试，时长 ${duration} 分钟。一次只问一问。过程中不点评对错。结束后再复盘。`;
+  return Array.from(text).slice(0, 120).join('');
+}
+
+function buildChatMains(round, materials, options = {}) {
+  const first = {
+    id: 'q1',
+    text: '请讲一次你在实习里把需求范围缩小的经历。'
+  };
+  if (round === 'hr') {
+    first.text = '请讲一次你在实习里和业务方对齐需求、把范围缩小的经历。';
+  } else if (round === 'tech') {
+    first.text = '请讲一次你在项目里把需求范围缩小、并推动按时上线的经历。';
+  } else if (round === 'manager') {
+    first.text = '请讲一次你作为负责人把需求范围缩小、并带团队交付的经历。';
+  }
+  const bankTexts = chatQuestionBankTexts();
+  const scenarioSource = Array.isArray(materials) ? materials.find((item) => {
+    if (!item || chatPeerTier(item)) return false;
+    if (item.match_tier !== 'target_company') return false;
+    if (item.kind !== 'knowledge' && item.source !== 'web') return false;
+    const body = String(item.body || '').trim();
+    if (!body) return false;
+    return !bankTexts.includes(body);
+  }) : null;
+  const jd = String(options.jd || '').trim();
+  const snippet = scenarioSource
+    ? String(scenarioSource.body || '').trim()
+    : (options.hasScenario && jd ? jd : '');
+  const leaked = snippet && bankTexts.some((text) => text && snippet.includes(text));
+  const second = snippet && !leaked
+    ? {
+      id: 'q2',
+      text: `材料里写到「${Array.from(snippet).slice(0, 36).join('')}」。请说明你会怎么处理这个业务场景，不要复述简历。`
+    }
+    : {
+      id: 'q2',
+      text: '如果业务方坚持把已经缩小的首期范围加回来，你会怎么处理？'
+    };
+  return [first, second];
+}
+
+function chatLooksVague(text) {
+  const t = String(text || '').trim();
+  if (t.length < 12) return true;
+  if (/大概|可能吧|还行|挺好的/.test(t)) return true;
+  if (/我们/.test(t) && !/我/.test(t)) return true;
+  return false;
+}
+
+function chatFollowupText() {
+  return '刚才这句还比较含糊。请把其中的角色、做法和结果说具体一点。';
+}
+
+function chatCandidateTexts(session) {
+  const turns = session && Array.isArray(session.turns) ? session.turns : [];
+  return turns
+    .filter((turn) => turn && turn.role === 'candidate')
+    .map((turn) => String(turn.text || '').trim())
+    .filter(Boolean);
+}
+
+function chatPairedTurns(session) {
+  const turns = session && Array.isArray(session.turns) ? session.turns : [];
+  const pairs = [];
+  let question = '';
+  turns.forEach((turn) => {
+    if (!turn) return;
+    if (turn.role === 'interviewer' && !turn.incomplete) {
+      question = String(turn.text || '').trim();
+      return;
+    }
+    if (turn.role === 'candidate' && question) {
+      pairs.push({
+        question,
+        answer: String(turn.text || '').trim()
+      });
+      question = '';
+    }
+  });
+  return pairs;
+}
+
+function chatMentionedNumbers(text) {
+  return String(text || '').match(/\d+(?:\.\d+)?/g) || [];
+}
+
+function chatEvidenceSpan(texts, pattern) {
+  const list = Array.isArray(texts) ? texts : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const text = String(list[i] || '');
+    const match = text.match(pattern);
+    if (!match || match.index === undefined) continue;
+    const start = Math.max(0, match.index - 6);
+    const end = Math.min(text.length, match.index + match[0].length + 28);
+    return text.slice(start, end).trim();
+  }
+  return '';
+}
+
+function chatAdjacentPrompt(question) {
+  const original = String(question || '').trim();
+  if (!original) return '换个问法：当时你为什么做这个选择，而不是把范围再放大？';
+  return `换个问法：${original.replace(/。$/, '')}，请从取舍原因而不是过程复述说起。`;
+}
+
+function chatSingleGap(texts) {
+  const joined = texts.join('\n');
+  if (!chatMentionedNumbers(joined).length && !/两周|一周|三天|百分之/.test(joined)) {
+    return '缺少可核对的结果数字';
+  }
+  if (!/范围|首期|取舍/.test(joined)) {
+    return '没有说清当时缩小了什么、留下了什么';
+  }
+  return '结果和范围还没有对齐到同一段经历';
+}
+
+function buildMockDebriefCard(session) {
+  const texts = chatCandidateTexts(session);
+  const pairs = chatPairedTurns(session);
+  const joined = texts.join('\n');
+  const scopeEvidence = chatEvidenceSpan(texts, /范围|首期|注册|支付|取舍/);
+  const resultEvidence = chatEvidenceSpan(texts, /\d|两周|一周|三天|上线|百分之/);
+  const collabEvidence = chatEvidenceSpan(texts, /业务方|团队|对齐|负责人|我把|我负责/);
+  const thin = !texts.length || texts.every((text) => text.length < 8);
+  const vagueOnly = texts.length > 0 && texts.every((text) => chatLooksVague(text)) && !resultEvidence;
+  let readiness = 'needs_practice';
+  let reason = '回答里有经历轮廓，但范围和结果还没有同时说清。';
+  if (thin) {
+    readiness = 'insufficient_evidence';
+    reason = '这场几乎没有可引用的完整回答，只能标成证据不足。';
+  } else if (scopeEvidence && resultEvidence) {
+    readiness = 'almost_ready';
+    reason = '已经能引用范围和结果，再补一句取舍原因就会更完整。';
+  } else if (vagueOnly) {
+    readiness = 'needs_practice';
+    reason = '回答偏含糊，练习准备度还不够，不能据此给高分。';
+  }
+  const labels = CHAT_SCORE_LABELS[session.round] || CHAT_SCORE_LABELS.business;
+  const evidenceByIndex = [scopeEvidence, collabEvidence, resultEvidence];
+  const scores = labels.map((label, index) => {
+    const evidence = evidenceByIndex[index] || '';
+    if (!evidence) {
+      return {
+        id: `s${index + 1}`,
+        label,
+        score: null,
+        evidence: '',
+        missing: CHAT_MISSING_EVIDENCE,
+        confidence: 'low'
+      };
+    }
+    return {
+      id: `s${index + 1}`,
+      label,
+      score: 3,
+      evidence,
+      missing: '',
+      confidence: 'medium'
+    };
+  });
+  const reviews = pairs.map((pair) => ({
+    question: pair.question,
+    answer: pair.answer,
+    comment: chatLooksVague(pair.answer)
+      ? '这句还缺少可核对的做法和结果，不能只凭流畅度给分。'
+      : '这句已经能对上经历，仍要避免补上没说过的指标。',
+    suggested_structure: chatMentionedNumbers(pair.answer).length
+      ? '先说你负责的范围，再复述你已经说过的结果。'
+      : '先说你负责的范围，请补充真实数字。'
+  }));
+  const gap = chatSingleGap(texts);
+  const drillSource = pairs.slice(0, 3);
+  const drillItems = (drillSource.length ? drillSource : [{
+    question: session.current_question || '请再讲一次你缩小需求范围的经历。',
+    answer: ''
+  }]).slice(0, 3).map((pair, index) => ({
+    id: `drill-${session.id}-${index + 1}`,
+    question: pair.question,
+    gap,
+    nearby_question: chatAdjacentPrompt(pair.question)
+  }));
+  const resumeEvidence = scopeEvidence || resultEvidence || texts[0] || '';
+  const resumeSuggestion = resumeEvidence
+    ? '简历里的该项目补上首期范围和可核对的上线结果，不写未提到的指标。'
+    : '在实习或项目经历里补上可核对的范围和结果，不写这场没有出现的指标。';
+  return {
+    session_id: session.id,
+    round: session.round,
+    readiness,
+    reason,
+    scores,
+    reviews,
+    priority_fix: gap === '缺少可核对的结果数字'
+      ? '下次只补一个缺口：把结果说成可核对的数字或时间。'
+      : `下次只改一处：${gap}。`,
+    resume_edit_points: [
+      {
+        suggestion: resumeSuggestion,
+        evidence: resumeEvidence
+      }
+    ],
+    drill_items: drillItems,
+    not_an_offer: true,
+    evidence_note: '分数只依据本场回答；修改点未写入定制简历；不表示录用。'
+  };
+}
+
+function chatDelay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+    if (!signal) return;
+    const fail = () => {
+      window.clearTimeout(timer);
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      reject(error);
+    };
+    if (signal.aborted) {
+      fail();
+      return;
+    }
+    signal.addEventListener('abort', fail, { once: true });
+  });
+}
+
+function stopChatClock() {
+  if (state.interviewChat.timerId) {
+    window.clearInterval(state.interviewChat.timerId);
+    state.interviewChat.timerId = null;
+  }
+}
+
+function remainingMinutesFromSession(session) {
+  if (!session) return chatDurationValue();
+  const seconds = Number(session.remaining_seconds);
+  if (!Number.isFinite(seconds)) return session.duration_minutes || chatDurationValue();
+  return Math.max(0, Math.ceil(seconds / 60));
+}
+
+function setInlineError(node, message) {
+  if (!node) return;
+  if (!message) {
+    node.hidden = true;
+    node.textContent = '';
+    return;
+  }
+  node.hidden = false;
+  node.textContent = message;
+}
+
+function setChatError(message) {
+  setInlineError(dom.chatError, message);
+}
+
+function setLibraryError(message) {
+  setInlineError(dom.chatLibraryError, message);
+}
+
+function setChatRules(text) {
+  if (!dom.chatRules) return;
+  if (!text) {
+    dom.chatRules.hidden = true;
+    dom.chatRules.textContent = '';
+    return;
+  }
+  dom.chatRules.hidden = false;
+  dom.chatRules.textContent = text;
+}
+
+function setChatWebNotice(text, code) {
+  if (!dom.chatWebNotice) return;
+  if (!text) {
+    dom.chatWebNotice.hidden = true;
+    dom.chatWebNotice.textContent = '';
+    dom.chatWebNotice.removeAttribute('data-web-supplement');
+    return;
+  }
+  dom.chatWebNotice.hidden = false;
+  dom.chatWebNotice.textContent = text;
+  if (code) dom.chatWebNotice.setAttribute('data-web-supplement', code);
+  else dom.chatWebNotice.removeAttribute('data-web-supplement');
+}
+
+function syncChatContextLabels() {
+  const session = state.interviewChat.session;
+  const generic = session ? Boolean(session.generic_role) : chatGenericRole();
+  const display = session && session.display ? session.display : null;
+  const job = display || chatSelectedJob();
+  if (dom.chatGenericNote) {
+    dom.chatGenericNote.hidden = !generic;
+    if (generic) dom.chatGenericNote.textContent = '本轮是通用岗位模拟';
+  }
+  if (dom.chatRoleLine) {
+    if (job && (job.company || job.title)) {
+      const company = String(job.company || '').trim();
+      const title = String(job.title || '').trim();
+      dom.chatRoleLine.hidden = false;
+      dom.chatRoleLine.textContent = [company, title].filter(Boolean).join(' · ');
+    } else {
+      dom.chatRoleLine.hidden = true;
+      dom.chatRoleLine.textContent = '';
+    }
+  }
+}
+
+function updateChatProgress() {
+  if (!dom.chatProgress) return;
+  const minutes = remainingMinutesFromSession(state.interviewChat.session);
+  dom.chatProgress.textContent = `剩余 ${minutes} 分钟`;
+}
+
+function chatPhase() {
+  const session = state.interviewChat.session;
+  const internal = state.interviewChat.internal;
+  if (!session || session.user_status === 'idle') return 'idle';
+  if (internal && internal.streaming && session.user_status === 'preparing') return 'preparing';
+  if (internal && internal.streaming) return 'asking';
+  if (internal && internal.incomplete) return 'retry';
+  if (session.user_status === 'ending') return 'ending';
+  if (session.user_status === 'debriefed' || session.user_status === 'drilling') return 'done';
+  if (session.end_available || session.user_status === 'ready_to_end') return 'end';
+  if (session.user_status === 'preparing') return 'preparing';
+  return 'send';
+}
+
+function syncChatPrimary() {
+  if (!dom.chatPrimary) return;
+  const phase = chatPhase();
+  const labels = {
+    idle: '开始这场面试',
+    preparing: '正在根据简历准备问题',
+    asking: '正在提问',
+    send: '发送回答',
+    retry: '重试这一问',
+    end: '结束面试',
+    ending: '正在生成复盘',
+    done: '本场已结束'
+  };
+  const busy = phase === 'preparing' || phase === 'asking' || phase === 'ending';
+  let disabled = busy || phase === 'done';
+  if (phase === 'send') {
+    disabled = !String(dom.chatAnswer && dom.chatAnswer.value || '').trim();
+  }
+  dom.chatPrimary.textContent = labels[phase] || labels.idle;
+  dom.chatPrimary.disabled = disabled;
+  dom.chatPrimary.hidden = phase === 'done';
+  if (busy) dom.chatPrimary.setAttribute('aria-busy', 'true');
+  else dom.chatPrimary.removeAttribute('aria-busy');
+  if (dom.chatRestart) {
+    const active = Boolean(state.interviewChat.session && state.interviewChat.session.user_status !== 'idle');
+    dom.chatRestart.hidden = !active;
+  }
+  if (dom.chatAnswer) {
+    const lockInput = phase === 'preparing' || phase === 'asking' || phase === 'ending' || phase === 'done' || phase === 'end';
+    dom.chatAnswer.disabled = lockInput;
+  }
+}
+
+function renderChatLibrary() {
+  const renderList = (node, kind, emptyText) => {
+    if (!node) return;
+    clear(node);
+    const rows = state.interviewChat.materials.filter((item) => item.kind === kind);
+    if (!rows.length) {
+      node.append(el('p', { className: 'hint', text: emptyText }));
+      return;
+    }
+    rows.forEach((item) => {
+      const row = el('div', {
+        className: 'chat-library-item',
+        attrs: {
+          'data-library-id': item.id,
+          'data-library-source': item.source
+        }
+      });
+      const main = el('div', { className: 'chat-library-main' });
+      main.append(el('span', { className: 'chat-library-title', text: item.title }));
+      const label = chatLibraryDisplayLabel(item);
+      if (label) {
+        main.append(el('span', {
+          className: 'chat-library-source',
+          text: label,
+          attrs: {
+            'data-library-source-label': item.source === 'web' ? 'web' : 'peer'
+          }
+        }));
+      }
+      const actions = el('div', { className: 'chat-library-actions' });
+      actions.append(el('button', {
+        className: 'button button-quiet button-small',
+        text: '修改',
+        attrs: { type: 'button', 'data-library-edit': item.id }
+      }));
+      actions.append(el('button', {
+        className: 'button button-quiet button-small',
+        text: '删除',
+        attrs: { type: 'button', 'data-library-delete': item.id }
+      }));
+      row.append(main, actions);
+      node.append(row);
+    });
+  };
+  renderList(dom.chatJingyanList, 'jingyan', '还没有已保存的面经，请先新增。');
+  renderList(dom.chatKnowledgeList, 'knowledge', '还没有已保存的岗位知识，请先新增。');
+}
+
+function renderChatLog() {
+  if (!dom.chatLog) return;
+  const session = state.interviewChat.session;
+  const turns = session && Array.isArray(session.turns) ? session.turns : [];
+  clear(dom.chatLog);
+  turns.forEach((turn) => {
+    const role = turn.role === 'candidate' ? 'candidate' : 'interviewer';
+    const className = [
+      'chat-turn',
+      role === 'candidate' ? 'chat-turn-candidate' : 'chat-turn-interviewer',
+      turn.incomplete ? 'chat-turn-incomplete' : ''
+    ].filter(Boolean).join(' ');
+    const node = el('div', {
+      className,
+      attrs: { 'data-chat-role': role }
+    });
+    node.append(el('span', { text: String(turn.text || '') }));
+    if (turn.incomplete) {
+      node.append(el('span', { className: 'chat-turn-note', text: CHAT_INCOMPLETE_NOTE }));
+    }
+    dom.chatLog.append(node);
+  });
+  if (turns.length) {
+    const last = dom.chatLog.lastElementChild;
+    if (last && typeof last.scrollIntoView === 'function') {
+      last.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    }
+  }
+}
+
+function patchLastChatTurn() {
+  if (!dom.chatLog || !state.interviewChat.session) {
+    renderChatLog();
+    return;
+  }
+  const turns = state.interviewChat.session.turns;
+  const turn = turns[turns.length - 1];
+  const node = dom.chatLog.lastElementChild;
+  if (!turn || !node) {
+    renderChatLog();
+    return;
+  }
+  const body = node.querySelector('span:not(.chat-turn-note)') || node.firstChild;
+  if (body) body.textContent = String(turn.text || '');
+  node.classList.toggle('chat-turn-incomplete', Boolean(turn.incomplete));
+  let note = node.querySelector('.chat-turn-note');
+  if (turn.incomplete && !note) {
+    node.append(el('span', { className: 'chat-turn-note', text: CHAT_INCOMPLETE_NOTE }));
+  } else if (!turn.incomplete && note) {
+    note.remove();
+  }
+  if (typeof node.scrollIntoView === 'function') {
+    node.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  }
+}
+
+function fillChatJobOptions(snapshot) {
+  if (!dom.chatJob) return;
+  const current = String(dom.chatJob.value || '');
+  const jobs = snapshot && Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  clear(dom.chatJob);
+  dom.chatJob.append(el('option', { text: '不选岗位', props: { value: '' } }));
+  jobs.forEach((job) => {
+    const label = [job.company, job.title].filter(Boolean).join(' · ') || String(job.id || '岗位');
+    dom.chatJob.append(el('option', {
+      text: label,
+      props: { value: String(job.id || '') }
+    }));
+  });
+  const still = Array.from(dom.chatJob.options).some((option) => option.value === current);
+  dom.chatJob.value = still ? current : '';
+  syncChatContextLabels();
+}
+
+function startChatClock() {
+  stopChatClock();
+  const session = state.interviewChat.session;
+  const internal = state.interviewChat.internal;
+  if (!session || !internal || !internal.startedAt) return;
+  const tick = () => {
+    const elapsed = Math.floor((Date.now() - internal.startedAt) / 1000);
+    session.remaining_seconds = Math.max(0, session.duration_minutes * 60 - elapsed);
+    if (session.remaining_seconds === 0) session.time_up = true;
+    updateChatProgress();
+    if (session.remaining_seconds === 0) stopChatClock();
+  };
+  tick();
+  state.interviewChat.timerId = window.setInterval(tick, 1000);
+}
+
+function resetInterviewChat(options = {}) {
+  if (options.archiveDebrief && state.interviewChat.card) {
+    const card = state.interviewChat.card;
+    const exists = state.interviewChat.debriefHistory.some((item) => item && item.session_id === card.session_id);
+    if (!exists) state.interviewChat.debriefHistory.unshift(card);
+  }
+  if (state.interviewChat.streamAbort) {
+    try {
+      state.interviewChat.streamAbort.abort();
+    } catch (error) {
+      /* ignore */
+    }
+  }
+  stopChatClock();
+  state.interviewChat.session = null;
+  state.interviewChat.internal = null;
+  state.interviewChat.interruptNext = false;
+  state.interviewChat.streamAbort = null;
+  state.interviewChat.card = null;
+  state.interviewChat.drill = null;
+  setChatError('');
+  setChatRules('');
+  setChatWebNotice('');
+  renderChatLog();
+  renderChatDebrief();
+  if (dom.chatAnswer) {
+    dom.chatAnswer.value = '';
+    dom.chatAnswer.disabled = false;
+  }
+  if (dom.chatPrimary) dom.chatPrimary.hidden = false;
+  syncChatContextLabels();
+  updateChatProgress();
+  syncChatPrimary();
+  renderInterviewHub();
+}
+
+function mockSaveLibraryItem() {
+  const body = chatLibraryBodyValue();
+  if (!body) {
+    setLibraryError(CHAT_EMPTY_MATERIAL);
+    setStatus(CHAT_EMPTY_MATERIAL, 'error');
+    syncChatLibrarySave();
+    return;
+  }
+  const kind = dom.chatLibraryKind && dom.chatLibraryKind.value === 'knowledge' ? 'knowledge' : 'jingyan';
+  const titleInput = dom.chatLibraryTitle ? String(dom.chatLibraryTitle.value || '').trim() : '';
+  const company = dom.chatLibraryCompany ? String(dom.chatLibraryCompany.value || '').trim() : '';
+  const role = dom.chatLibraryRole ? String(dom.chatLibraryRole.value || '').trim() : '';
+  const editingId = state.interviewChat.libraryEditingId;
+  const now = new Date().toISOString();
+  if (editingId) {
+    const current = state.interviewChat.materials.find((item) => item.id === editingId);
+    if (!current) {
+      setLibraryError('这条知识库条目不存在。');
+      return;
+    }
+    current.kind = kind;
+    current.body = body;
+    current.title = titleInput || Array.from(body).slice(0, 24).join('') || (kind === 'knowledge' ? '岗位知识' : '面经');
+    current.company = company;
+    current.role = role;
+    current.updated_at = now;
+    if (current.source === 'web') {
+      current.source_label = '来自联网';
+      current.jingyan_is_not_official = true;
+    } else {
+      current.source = 'user';
+      current.source_label = '';
+      current.jingyan_is_not_official = current.kind === 'jingyan';
+    }
+    persistChatLibrary();
+    renderChatLibrary();
+    clearChatLibraryForm();
+    setLibraryError('');
+    setStatus('已更新这条知识库条目。', 'ok');
+    return;
+  }
+  const duplicate = state.interviewChat.materials.find((item) => (
+    item.kind === kind && String(item.body || '').trim() === body
+  ));
+  if (duplicate) {
+    persistChatLibrary();
+    renderChatLibrary();
+    clearChatLibraryForm();
+    setLibraryError('');
+    setStatus(CHAT_LIBRARY_SAVED, 'ok');
+    return;
+  }
+  const item = normalizeChatLibraryItem({
+    id: `lib-${state.interviewChat.materialSeq++}`,
+    kind,
+    title: titleInput,
+    body,
+    company,
+    role,
+    source: 'user',
+    created_at: now,
+    updated_at: now
+  }, 0);
+  state.interviewChat.materials.push(item);
+  persistChatLibrary();
+  renderChatLibrary();
+  clearChatLibraryForm();
+  setLibraryError('');
+  setStatus(CHAT_LIBRARY_SAVED, 'ok');
+}
+
+function mockEditLibraryItem(id) {
+  const item = state.interviewChat.materials.find((row) => row.id === id);
+  if (!item) return;
+  fillChatLibraryForm(item);
+}
+
+function mockDeleteLibraryItem(id) {
+  const index = state.interviewChat.materials.findIndex((row) => row.id === id);
+  if (index < 0) {
+    setLibraryError('这条知识库条目不存在。');
+    return;
+  }
+  state.interviewChat.materials.splice(index, 1);
+  if (state.interviewChat.libraryEditingId === id) clearChatLibraryForm();
+  persistChatLibrary();
+  renderChatLibrary();
+  setLibraryError('');
+  setStatus('已从知识库删除。', 'ok');
+}
+
+async function mockStreamQuestion(intent) {
+  const session = state.interviewChat.session;
+  const internal = state.interviewChat.internal;
+  if (!session || !internal) return;
+  const mains = internal.mains;
+  let question = '';
+  let move = 'main';
+  if (intent === 'retry') {
+    question = internal.pendingText || (mains[internal.mainIndex] && mains[internal.mainIndex].text) || '';
+    move = internal.pendingMove || 'main';
+  } else if (intent === 'first') {
+    internal.mainIndex = 0;
+    internal.followups = 0;
+    question = mains[0].text;
+    move = 'main';
+    internal.currentMainId = mains[0].id;
+  } else {
+    const lastAnswer = internal.lastAnswer || '';
+    const canFollow = internal.followups < 3 && chatLooksVague(lastAnswer);
+    if (canFollow) {
+      move = 'followup';
+      internal.followups += 1;
+      question = chatFollowupText();
+    } else if (internal.mainIndex + 1 < mains.length) {
+      move = 'main';
+      internal.mainIndex += 1;
+      internal.followups = 0;
+      internal.currentMainId = mains[internal.mainIndex].id;
+      question = mains[internal.mainIndex].text;
+    } else {
+      session.need_next = false;
+      session.end_available = true;
+      session.user_status = 'ready_to_end';
+      syncChatPrimary();
+      return;
+    }
+  }
+  internal.pendingText = question;
+  internal.pendingMove = move;
+  const abort = new AbortController();
+  state.interviewChat.streamAbort = abort;
+  internal.streaming = true;
+  internal.incomplete = false;
+  const existing = session.turns[session.turns.length - 1];
+  const reuse = intent === 'retry' && existing && existing.role === 'interviewer' && existing.incomplete;
+  const turn = reuse ? existing : { role: 'interviewer', text: '' };
+  turn.text = '';
+  turn.incomplete = false;
+  if (!reuse) session.turns.push(turn);
+  renderChatLog();
+  syncChatPrimary();
+  let shown = '';
+  const chars = Array.from(question);
+  try {
+    for (let i = 0; i < chars.length; i += 1) {
+      if (abort.signal.aborted) {
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+      if (state.interviewChat.interruptNext && shown.length >= 8) {
+        state.interviewChat.interruptNext = false;
+        throw new Error('interrupt');
+      }
+      shown += chars[i];
+      turn.text = shown;
+      patchLastChatTurn();
+      await chatDelay(28, abort.signal);
+    }
+    turn.incomplete = false;
+    session.current_question = shown;
+    internal.streaming = false;
+    internal.incomplete = false;
+    internal.pendingText = shown;
+    if (intent === 'first' || session.user_status === 'preparing') {
+      session.user_status = 'in_progress';
+      if (!internal.startedAt) {
+        internal.startedAt = Date.now();
+        startChatClock();
+      }
+    }
+    patchLastChatTurn();
+    syncChatPrimary();
+  } catch (error) {
+    internal.streaming = false;
+    if (error && error.name === 'AbortError') return;
+    turn.text = shown;
+    turn.incomplete = true;
+    internal.incomplete = true;
+    patchLastChatTurn();
+    setStatus('这一问没有说完：外部 AI 中断或超时。已出现的半句仍保留，标明未完成，不计入本轮进度。可以重试。你已提交的回答还在。', 'warn');
+    syncChatPrimary();
+  } finally {
+    if (state.interviewChat.streamAbort === abort) state.interviewChat.streamAbort = null;
+  }
+}
+
+async function mockStartInterview() {
+  if (state.interviewChat.session) return;
+  const round = chatRoundValue();
+  const duration = chatDurationValue();
+  if (!CHAT_ROUND_LABELS[round] || (duration !== 20 && duration !== 30)) {
+    setChatError('请选择 HR、业务专业、技术口述或主管，以及 20 或 30 分钟。');
+    return;
+  }
+  const profile = state.snapshot && state.snapshot.profile;
+  if (!chatHasResumeEvidence(profile)) {
+    setChatError(CHAT_NO_RESUME);
+    setStatus(CHAT_NO_RESUME, 'error');
+    return;
+  }
+  const job = chatSelectedJob();
+  const generic = chatGenericRole();
+  const hasTarget = chatHasStartTarget();
+  const jd = dom.chatJd ? String(dom.chatJd.value || '').trim() : '';
+  const matched = hasTarget ? matchChatLibraryForSession() : { matched: [], hasTargetKnowledge: false };
+  let materials = matched.matched.slice();
+  let webSupplement = 'skipped_generic';
+  let webNotice = '';
+  if (!hasTarget) {
+    webSupplement = 'skipped_generic';
+    materials = [];
+  } else if (matched.hasTargetKnowledge) {
+    webSupplement = 'not_needed';
+  } else {
+    const search = mockResolveWebSupplement(job);
+    if (search.status === 'written' && search.items.length) {
+      const written = search.items.map((item) => Object.assign({}, item, { match_tier: 'target_company' }));
+      materials = materials.concat(written);
+      webSupplement = 'written';
+      webNotice = CHAT_WEB_WRITTEN;
+    } else {
+      webSupplement = 'unavailable';
+      webNotice = CHAT_WEB_UNAVAILABLE;
+    }
+  }
+  const hasScenario = Boolean(jd) || webSupplement === 'written' || materials.some((item) => (
+    item.match_tier === 'target_company' && item.kind === 'knowledge' && String(item.body || '').trim()
+  ));
+  const rules = buildChatRulesText(round, duration, generic);
+  state.interviewChat.session = {
+    id: `mock-${Date.now()}`,
+    round,
+    duration_minutes: duration,
+    rules_text: rules,
+    generic_role: generic,
+    display: job ? { company: job.company || '', title: job.title || '' } : {},
+    user_status: 'preparing',
+    remaining_seconds: duration * 60,
+    end_available: false,
+    time_up: false,
+    current_question: '',
+    turns: [],
+    web_supplement: webSupplement,
+    web_supplement_notice: webNotice,
+    library_match_count: materials.length
+  };
+  state.interviewChat.internal = {
+    mains: buildChatMains(round, materials, { jd, hasScenario }),
+    materialIds: materials.map((item) => item.id),
+    matchTiers: materials.map((item) => item.match_tier || ''),
+    mainIndex: 0,
+    followups: 0,
+    currentMainId: 'q1',
+    lastAnswer: '',
+    startedAt: null,
+    streaming: false,
+    incomplete: false,
+    pendingText: '',
+    pendingMove: 'main'
+  };
+  setChatError('');
+  setChatRules(rules);
+  setChatWebNotice(webNotice, webSupplement);
+  syncChatContextLabels();
+  updateChatProgress();
+  renderChatLog();
+  syncChatPrimary();
+  renderInterviewHub();
+  await mockStreamQuestion('first');
+}
+
+async function mockSendAnswer() {
+  const session = state.interviewChat.session;
+  const internal = state.interviewChat.internal;
+  if (!session || !internal) return;
+  if (internal.incomplete || internal.streaming) return;
+  const answer = String(dom.chatAnswer.value || '').trim();
+  if (!answer) {
+    setStatus(CHAT_EMPTY_ANSWER, 'error');
+    syncChatPrimary();
+    return;
+  }
+  session.turns.push({ role: 'candidate', text: answer });
+  internal.lastAnswer = answer;
+  dom.chatAnswer.value = '';
+  renderChatLog();
+  const timeUp = Boolean(session.time_up) || Number(session.remaining_seconds) <= 0;
+  const lastMain = internal.mainIndex >= internal.mains.length - 1;
+  const wouldFollow = !timeUp && internal.followups < 3 && chatLooksVague(answer);
+  const hasNextMain = !timeUp && !wouldFollow && internal.mainIndex + 1 < internal.mains.length;
+  if (timeUp || (lastMain && !wouldFollow)) {
+    session.need_next = false;
+    session.end_available = true;
+    session.user_status = 'ready_to_end';
+    if (timeUp) session.time_up = true;
+    updateChatProgress();
+    syncChatPrimary();
+    return;
+  }
+  session.need_next = true;
+  session.end_available = false;
+  syncChatPrimary();
+  if (hasNextMain || wouldFollow) await mockStreamQuestion('next');
+}
+
+async function mockRetryQuestion() {
+  const internal = state.interviewChat.internal;
+  if (!internal || !internal.incomplete) return;
+  await mockStreamQuestion('retry');
+}
+
+function chatCurrentDrillItem() {
+  const card = state.interviewChat.card;
+  const drill = state.interviewChat.drill;
+  if (!card || !drill) return null;
+  const items = Array.isArray(card.drill_items) ? card.drill_items : [];
+  return items.find((item) => item && item.id === drill.item_id) || null;
+}
+
+function chatDrillPrompt(item, attempt) {
+  if (!item) return '';
+  if (attempt >= 4) return String(item.nearby_question || chatAdjacentPrompt(item.question));
+  return String(item.question || '');
+}
+
+function buildDrillRecast(answer, session) {
+  const text = String(answer || '').trim();
+  if (!text) return '';
+  const spoken = `${chatCandidateTexts(session).join('\n')}\n${text}`;
+  const allowedNums = new Set(chatMentionedNumbers(spoken));
+  const rewritten = `可以改成：${text}`;
+  const leaked = chatMentionedNumbers(rewritten).some((num) => !allowedNums.has(num));
+  if (leaked) return '请补充真实数字。';
+  if (!allowedNums.size) {
+    return chatJoinPeriod(rewritten.replace(/[。.!！]+$/u, ''), '请补充真实数字');
+  }
+  return rewritten.replace(/[。.!！]{2,}/gu, '。');
+}
+
+function mockDrillResponse(answer) {
+  const session = state.interviewChat.session;
+  const card = state.interviewChat.card;
+  if (!session || !card) {
+    setChatError('结束并生成复盘后才能重练。');
+    return;
+  }
+  if (session.user_status !== 'debriefed' && session.user_status !== 'drilling') {
+    setChatError('结束并生成复盘后才能重练。');
+    return;
+  }
+  const item = chatCurrentDrillItem();
+  if (!item) return;
+  const drill = state.interviewChat.drill;
+  const attempt = Number(drill.attempt) || 1;
+  const trimmed = String(answer || '').trim();
+  drill.gap = item.gap;
+  drill.prompt = chatDrillPrompt(item, attempt);
+  drill.recast = trimmed ? buildDrillRecast(trimmed, session) : '';
+  drill.last_answer = trimmed;
+  session.user_status = 'drilling';
+  renderChatDebrief();
+  syncChatPrimary();
+}
+
+function mockStartDrill(itemId) {
+  const card = state.interviewChat.card;
+  const session = state.interviewChat.session;
+  if (!card || !session) {
+    setChatError('结束并生成复盘后才能重练。');
+    return;
+  }
+  const items = Array.isArray(card.drill_items) ? card.drill_items : [];
+  const item = items.find((row) => row && row.id === itemId);
+  if (!item) return;
+  state.interviewChat.drill = {
+    item_id: item.id,
+    attempt: 1,
+    gap: item.gap,
+    prompt: '',
+    recast: '',
+    last_answer: ''
+  };
+  setChatError('');
+  mockDrillResponse('');
+}
+
+function mockSubmitDrill() {
+  const drill = state.interviewChat.drill;
+  if (!drill) return;
+  const input = document.getElementById('chat-drill-answer');
+  const answer = input ? String(input.value || '') : '';
+  drill.attempt = Math.max(1, Number(drill.attempt) || 1) + 1;
+  mockDrillResponse(answer);
+}
+
+async function mockEndInterview() {
+  const session = state.interviewChat.session;
+  if (!session || !session.end_available) return;
+  if (session.user_status === 'debriefed' || session.user_status === 'drilling') return;
+  const token = session.id;
+  session.user_status = 'ending';
+  stopChatClock();
+  syncChatPrimary();
+  const abort = new AbortController();
+  state.interviewChat.streamAbort = abort;
+  try {
+    await chatDelay(420, abort.signal);
+  } catch (error) {
+    if (error && error.name === 'AbortError') return;
+    throw error;
+  } finally {
+    if (state.interviewChat.streamAbort === abort) state.interviewChat.streamAbort = null;
+  }
+  if (!state.interviewChat.session || state.interviewChat.session.id !== token) return;
+  if (state.interviewChat.session.user_status !== 'ending') return;
+  const card = buildMockDebriefCard(session);
+  state.interviewChat.card = card;
+  state.interviewChat.drill = null;
+  session.user_status = 'debriefed';
+  renderChatDebrief();
+  syncChatPrimary();
+  renderInterviewHub();
+  showInterviewModule('debrief');
+  setStatus('本场已结束。准备度复盘在「面试复盘」。输入已不可再发送。', 'ok');
+}
+
+function mockExpireTime() {
+  const session = state.interviewChat.session;
+  const internal = state.interviewChat.internal;
+  if (!session || !internal) return;
+  session.remaining_seconds = 0;
+  session.time_up = true;
+  if (internal.startedAt) internal.startedAt = Date.now() - session.duration_minutes * 60 * 1000;
+  updateChatProgress();
+  const waitingAnswer = session.user_status === 'in_progress' && !internal.streaming && !internal.incomplete;
+  if (!waitingAnswer && !internal.streaming) {
+    session.end_available = true;
+    session.user_status = 'ready_to_end';
+  }
+  syncChatPrimary();
+}
+
+async function onChatPrimary() {
+  const phase = chatPhase();
+  if (phase === 'idle') {
+    await mockStartInterview();
+    return;
+  }
+  if (phase === 'retry') {
+    await mockRetryQuestion();
+    return;
+  }
+  if (phase === 'send') {
+    await mockSendAnswer();
+    return;
+  }
+  if (phase === 'end') {
+    await mockEndInterview();
+  }
+}
+
+function buildChatScoreNode(score) {
+  const node = el('div', { className: 'chat-score' });
+  const value = score && score.score;
+  const hasScore = Number.isFinite(Number(value));
+  const evidence = score && String(score.evidence || '').trim();
+  const label = score && score.label ? String(score.label) : '练习项';
+  if (!evidence) {
+    node.append(el('p', {
+      className: 'chat-score-label',
+      text: `${label}：${CHAT_MISSING_EVIDENCE}`,
+      attrs: { 'data-chat-score-value': 'missing' }
+    }));
+    node.append(el('p', { className: 'chat-score-evidence', text: String((score && score.missing) || CHAT_MISSING_EVIDENCE) }));
+    return node;
+  }
+  const shown = hasScore ? `${label}：${Number(value)} 分` : `${label}：${CHAT_MISSING_EVIDENCE}`;
+  node.append(el('p', {
+    className: 'chat-score-label',
+    text: shown,
+    attrs: { 'data-chat-score-value': hasScore ? String(Number(value)) : 'missing' }
+  }));
+  node.append(el('p', { className: 'chat-score-evidence', text: `证据：${evidence}` }));
+  return node;
+}
+
+function buildChatDebriefNode(card, options = {}) {
+  const history = Boolean(options.history);
+  const readiness = card && CHAT_READINESS_LABELS[card.readiness] ? card.readiness : 'insufficient_evidence';
+  const node = el('article', {
+    className: history ? 'chat-debrief' : '',
+    attrs: {
+      'data-chat-readiness': readiness,
+      'data-chat-not-an-offer': card && card.not_an_offer ? 'true' : 'false'
+    }
+  });
+  node.append(el('h4', {
+    className: 'chat-debrief-heading',
+    text: history ? '历史复盘卡' : '本场复盘',
+    attrs: history ? {} : { id: 'chat-debrief-title' }
+  }));
+  node.append(el('p', {
+    className: 'chat-debrief-reason',
+    text: `${CHAT_READINESS_LABELS[readiness]}。${String((card && card.reason) || '')}`
+  }));
+  node.append(el('p', {
+    className: 'chat-not-offer',
+    text: CHAT_NOT_AN_OFFER
+  }));
+
+  const scoreWrap = el('div', { className: 'chat-debrief-section' });
+  scoreWrap.append(el('h5', { className: 'chat-debrief-heading', text: '带证据的分数' }));
+  const scores = card && Array.isArray(card.scores) ? card.scores : [];
+  if (!scores.length) {
+    scoreWrap.append(el('p', { className: 'chat-score-evidence', text: CHAT_MISSING_EVIDENCE }));
+  } else {
+    scores.forEach((score) => scoreWrap.append(buildChatScoreNode(score)));
+  }
+  node.append(scoreWrap);
+
+  const reviewWrap = el('div', { className: 'chat-debrief-section' });
+  reviewWrap.append(el('h5', { className: 'chat-debrief-heading', text: '逐题点评' }));
+  const reviews = card && Array.isArray(card.reviews) ? card.reviews : [];
+  if (!reviews.length) {
+    reviewWrap.append(el('p', { className: 'chat-disclaimer', text: '本场没有完整问答可点评。' }));
+  } else {
+    reviews.forEach((review) => {
+      const item = el('div', { className: 'chat-review' });
+      item.append(el('p', { text: `问：${String(review.question || '')}` }));
+      item.append(el('p', { text: `答：${String(review.answer || '')}` }));
+      item.append(el('p', { className: 'chat-disclaimer', text: String(review.comment || '') }));
+      item.append(el('p', { className: 'chat-disclaimer', text: String(review.suggested_structure || '') }));
+      reviewWrap.append(item);
+    });
+  }
+  node.append(reviewWrap);
+
+  node.append(el('div', { className: 'chat-debrief-section' }, [
+    el('h5', { className: 'chat-debrief-heading', text: '优先修正项' }),
+    el('p', { className: 'chat-debrief-fix', text: String((card && card.priority_fix) || '') })
+  ]));
+
+  const resumeWrap = el('div', { className: 'chat-debrief-section' });
+  resumeWrap.append(el('h5', { className: 'chat-debrief-heading', text: '简历修改点' }));
+  resumeWrap.append(el('p', { className: 'chat-disclaimer', text: CHAT_RESUME_DISCLAIMER }));
+  const points = card && Array.isArray(card.resume_edit_points) ? card.resume_edit_points : [];
+  const list = el('ol', { className: 'chat-resume-points' });
+  if (!points.length) {
+    list.append(el('li', { text: '本场没有可写入简历的修改点。' }));
+  } else {
+    points.forEach((point) => {
+      const suggestion = String((point && point.suggestion) || '');
+      const evidence = String((point && point.evidence) || '').trim();
+      list.append(el('li', { text: evidence ? `${suggestion} 依据：${evidence}` : suggestion }));
+    });
+  }
+  resumeWrap.append(list);
+  node.append(resumeWrap);
+
+  if (card && card.evidence_note) {
+    node.append(el('p', { className: 'chat-disclaimer', text: String(card.evidence_note) }));
+  }
+
+  if (history) return node;
+
+  const drillWrap = el('div', { className: 'chat-debrief-section' });
+  drillWrap.append(el('h5', { className: 'chat-debrief-heading', text: '重练一题' }));
+  const items = card && Array.isArray(card.drill_items) ? card.drill_items : [];
+  const drillList = el('div', { className: 'chat-drill-list' });
+  items.forEach((item) => {
+    const current = state.interviewChat.drill && state.interviewChat.drill.item_id === item.id;
+    drillList.append(el('button', {
+      className: 'button button-quiet',
+      text: current ? '正在重练这题' : '重练这题',
+      attrs: {
+        type: 'button',
+        'data-chat-drill-start': String(item.id || ''),
+        'data-chat-drill-question': String(item.question || '')
+      },
+      props: { disabled: Boolean(current) }
+    }));
+  });
+  drillWrap.append(drillList);
+
+  const drill = state.interviewChat.drill;
+  if (drill && drill.prompt) {
+    const panel = el('div', { className: 'chat-drill-panel' });
+    panel.append(el('p', {
+      className: 'chat-score-label',
+      text: drill.prompt,
+      attrs: { 'data-chat-drill-prompt': 'true', 'data-chat-drill-attempt': String(drill.attempt || 1) }
+    }));
+    panel.append(el('p', {
+      className: 'chat-score-evidence',
+      text: `本次缺口：${String(drill.gap || '')}`,
+      attrs: { 'data-chat-drill-gap': 'true' }
+    }));
+    if (drill.recast) {
+      panel.append(el('p', {
+        className: 'chat-disclaimer',
+        text: `示范：${drill.recast}`,
+        attrs: { 'data-chat-drill-recast': 'true' }
+      }));
+    }
+    panel.append(el('label', { className: 'chat-sr-only', text: '重练回答', attrs: { for: 'chat-drill-answer' } }));
+    panel.append(el('textarea', {
+      attrs: {
+        id: 'chat-drill-answer',
+        rows: '3',
+        placeholder: '可空提交，只会再提示同一个缺口；有内容则给出示范。'
+      },
+      props: { value: '' }
+    }));
+    panel.append(el('button', {
+      className: 'button',
+      text: '提交这次重练',
+      attrs: { type: 'button', 'data-chat-drill-submit': 'true' }
+    }));
+    drillWrap.append(panel);
+  }
+  node.append(drillWrap);
+  return node;
+}
+
+function renderChatDebrief() {
+  const emptyNote = document.getElementById('chat-debrief-empty');
+  let showCurrent = false;
+  if (dom.chatDebrief) {
+    const session = state.interviewChat.session;
+    const card = state.interviewChat.card;
+    showCurrent = Boolean(card && session && (session.user_status === 'debriefed' || session.user_status === 'drilling'));
+    clear(dom.chatDebrief);
+    if (showCurrent) {
+      dom.chatDebrief.hidden = false;
+      dom.chatDebrief.append(buildChatDebriefNode(card, { history: false }));
+    } else {
+      dom.chatDebrief.hidden = true;
+    }
+  }
+  let showHistory = false;
+  if (dom.chatDebriefHistory && dom.chatDebriefHistoryList) {
+    const history = Array.isArray(state.interviewChat.debriefHistory) ? state.interviewChat.debriefHistory : [];
+    clear(dom.chatDebriefHistoryList);
+    showHistory = history.length > 0;
+    if (!showHistory) {
+      dom.chatDebriefHistory.hidden = true;
+    } else {
+      dom.chatDebriefHistory.hidden = false;
+      history.forEach((card) => {
+        dom.chatDebriefHistoryList.append(buildChatDebriefNode(card, { history: true }));
+      });
+    }
+  }
+  if (emptyNote) emptyNote.hidden = showCurrent || showHistory;
+}
+
+function bindInterviewChat() {
+  if (!dom.chatPrimary) return;
+  const setupForm = document.getElementById('chat-setup-form');
+  if (setupForm) {
+    setupForm.addEventListener('submit', (event) => event.preventDefault());
+  }
+  if (dom.chatLibraryForm) {
+    dom.chatLibraryForm.addEventListener('submit', (event) => event.preventDefault());
+  }
+  document.querySelectorAll('input[name="chat-round"], input[name="chat-duration"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      if (!state.interviewChat.session) updateChatProgress();
+      syncChatContextLabels();
+    });
+  });
+  if (dom.chatJob) {
+    dom.chatJob.addEventListener('change', syncChatContextLabels);
+  }
+  if (dom.chatJd) {
+    dom.chatJd.addEventListener('input', syncChatContextLabels);
+  }
+  if (dom.chatLibraryBody) {
+    dom.chatLibraryBody.addEventListener('input', syncChatLibrarySave);
+  }
+  if (dom.chatLibrarySave) {
+    dom.chatLibrarySave.addEventListener('click', mockSaveLibraryItem);
+  }
+  if (dom.chatLibraryCancel) {
+    dom.chatLibraryCancel.addEventListener('click', () => {
+      clearChatLibraryForm();
+    });
+  }
+  const libraryRoot = document.getElementById('interview-module-library') || dom.chatLibrary;
+  if (libraryRoot) {
+    libraryRoot.addEventListener('click', (event) => {
+      const edit = event.target.closest('[data-library-edit]');
+      if (edit) {
+        mockEditLibraryItem(edit.getAttribute('data-library-edit'));
+        return;
+      }
+      const remove = event.target.closest('[data-library-delete]');
+      if (remove) {
+        mockDeleteLibraryItem(remove.getAttribute('data-library-delete'));
+      }
+    });
+  }
+  document.querySelectorAll('[data-interview-back]').forEach((button) => {
+    button.addEventListener('click', () => showInterviewModule(null));
+  });
+  if (dom.chatAnswer) {
+    dom.chatAnswer.addEventListener('input', syncChatPrimary);
+  }
+  dom.chatPrimary.addEventListener('click', () => {
+    onChatPrimary();
+  });
+  if (dom.chatRestart) {
+    dom.chatRestart.addEventListener('click', () => {
+      const session = state.interviewChat.session;
+      const finished = Boolean(
+        state.interviewChat.card
+        && session
+        && (session.user_status === 'debriefed' || session.user_status === 'drilling')
+      );
+      resetInterviewChat({ archiveDebrief: finished });
+      setStatus(
+        finished ? '对话已替换，已完成的复盘仍保留。' : '未完成的对话已替换，没有生成复盘。',
+        'ok'
+      );
+    });
+  }
+  if (dom.chatDebrief) {
+    dom.chatDebrief.addEventListener('click', (event) => {
+      const start = event.target.closest('[data-chat-drill-start]');
+      if (start) {
+        mockStartDrill(start.getAttribute('data-chat-drill-start'));
+        return;
+      }
+      if (event.target.closest('[data-chat-drill-submit]')) {
+        mockSubmitDrill();
+      }
+    });
+  }
+  if (dom.chatMockInterrupt) {
+    dom.chatMockInterrupt.addEventListener('click', () => {
+      state.interviewChat.interruptNext = true;
+      setStatus('下一次提问将在半句后中断。', 'info');
+    });
+  }
+  if (dom.chatMockTimeup) {
+    dom.chatMockTimeup.addEventListener('click', () => {
+      mockExpireTime();
+      setStatus('已模拟时长用完。当前问仍可答完，之后不再出新题。', 'info');
+    });
+  }
+  loadChatLibrary();
+  renderChatDebrief();
+  syncChatContextLabels();
+  updateChatProgress();
+  syncChatPrimary();
+  window.__interviewChatMock = {
+    interruptNext() {
+      state.interviewChat.interruptNext = true;
+    },
+    expireTime: mockExpireTime,
+    session() {
+      const session = state.interviewChat.session;
+      if (!session) return null;
+      return {
+        id: session.id,
+        round: session.round,
+        duration_minutes: session.duration_minutes,
+        rules_text: session.rules_text,
+        generic_role: session.generic_role,
+        display: session.display,
+        user_status: session.user_status,
+        remaining_seconds: session.remaining_seconds,
+        end_available: session.end_available,
+        time_up: session.time_up,
+        current_question: session.current_question,
+        turns: session.turns,
+        web_supplement: session.web_supplement,
+        web_supplement_notice: session.web_supplement_notice,
+        library_match_count: session.library_match_count
+      };
+    },
+    library() {
+      return state.interviewChat.materials.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        title: item.title,
+        company: item.company,
+        role: item.role,
+        source: item.source,
+        source_label: item.source_label,
+        match_tier: item.match_tier || '',
+        source_urls: Array.isArray(item.source_urls) ? item.source_urls.slice() : []
+      }));
+    },
+    webSearch: chatWebSearchConfig,
+    setWebSearch: setChatWebSearchConfig,
+    debrief() {
+      return state.interviewChat.card;
+    },
+    drill() {
+      const drill = state.interviewChat.drill;
+      if (!drill) return null;
+      return {
+        item_id: drill.item_id,
+        attempt: drill.attempt,
+        gap: drill.gap,
+        prompt: drill.prompt,
+        recast: drill.recast
+      };
+    },
+    history() {
+      return state.interviewChat.debriefHistory.slice();
+    },
+    emptyResume() {
+      const profile = state.snapshot && state.snapshot.profile;
+      if (!profile) return false;
+      if (!state.interviewChat.profileBackup) {
+        state.interviewChat.profileBackup = {
+          experiences: profile.experiences,
+          projects: profile.projects
+        };
+      }
+      profile.experiences = [];
+      profile.projects = [];
+      return true;
+    },
+    restoreResume() {
+      const profile = state.snapshot && state.snapshot.profile;
+      const backup = state.interviewChat.profileBackup;
+      if (!profile || !backup) return false;
+      profile.experiences = backup.experiences;
+      profile.projects = backup.projects;
+      state.interviewChat.profileBackup = null;
+      return true;
+    }
+  };
+}
+
 /* Render: interview */
 
 function listSection(title, items) {
@@ -3081,6 +5027,8 @@ function buildDebriefCard(card, collapsible) {
 }
 
 function renderInterview(snapshot) {
+  fillChatJobOptions(snapshot);
+  renderInterviewHub();
   const debriefs = Array.isArray(snapshot.debriefs) ? snapshot.debriefs : [];
   clear(dom.debriefList);
   if (!debriefs.length) {
@@ -3430,6 +5378,7 @@ async function resetDemo() {
 /* Event handlers */
 
 function bindEvents() {
+  bindInterviewChat();
   dom.navItems.forEach((button) => {
     button.addEventListener('click', () => showView(button.dataset.view));
   });

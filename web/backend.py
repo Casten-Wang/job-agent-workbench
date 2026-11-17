@@ -51,6 +51,7 @@ import quota_planner  # noqa: E402
 import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
 import mock_interview  # noqa: E402
+import interview_chat  # noqa: E402
 import precheck  # noqa: E402
 import state_machine  # noqa: E402
 import variants  # noqa: E402
@@ -221,6 +222,8 @@ class Store:
             "profile": self.root / "profile.json",
             "config": self.root / "config.json",
             "deliveries": self.root / "deliveries.json",
+            "interview_session": self.root / "interview-session.json",
+            "interview_materials": self.root / "interview-materials.json",
             "downloads": self.root / "downloads",
         }
         self.files["downloads"].mkdir(parents=True, exist_ok=True)
@@ -313,6 +316,25 @@ class Store:
 
     def set_question_bank(self, value: dict[str, Any]) -> None:
         self._write_json("bank", value)
+
+    def interview_session(self) -> dict[str, Any] | None:
+        value = self._read_json("interview_session", None)
+        return value if isinstance(value, dict) and value else None
+
+    def set_interview_session(self, value: dict[str, Any]) -> None:
+        self._write_json("interview_session", value)
+
+    def clear_interview_session(self) -> None:
+        path = self.files["interview_session"]
+        if path.is_file():
+            path.unlink()
+
+    def interview_materials(self) -> list[dict[str, Any]]:
+        value = self._read_json("interview_materials", [])
+        return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+    def set_interview_materials(self, rows: list[dict[str, Any]]) -> None:
+        self._write_json("interview_materials", rows)
 
     def profile(self) -> dict[str, Any]:
         value = self._read_json("profile", None)
@@ -1013,6 +1035,8 @@ def seed_demo(store: Store) -> None:
     demo_profile = _demo_profile()
     demo_profile["updated_at"] = "2026-11-14T09:00:00+08:00"
     store.set_profile(demo_profile)
+    store.clear_interview_session()
+    store.set_interview_materials([])
     store.files["events"].write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in _demo_events()), encoding="utf-8")
     store.files["pipeline"].write_text("", encoding="utf-8")
     store.files["activity"].write_text("", encoding="utf-8")
@@ -2422,6 +2446,602 @@ def add_bank_question(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "id": digest, "message": "题目已加入本地题库"}
 
 
+def interview_ai_configured(mode: str) -> bool:
+    """True only when the embedded OfferPilot config actually has an AI key."""
+    try:
+        state = get_offerpilot_state(mode)
+    except Exception:
+        return False
+    return bool((state.get("ai") or {}).get("configured"))
+
+
+def _complete_interview_plan(system_prompt: str, user_text: str, timeout: float = interview_chat.PLAN_TIMEOUT_SECONDS) -> str:
+    """Call the configured external AI. Tests patch this; it never invents questions."""
+    try:
+        server = offerpilot_runtime.load_backend()
+        config = server.load_config(server.CONFIG_PATH)
+        from offerpilot.ai.credentials import AIRequestError, call_anthropic_text, get_ai_api_key
+    except Exception as exc:
+        raise interview_chat.PlanGenerationError("unavailable") from exc
+    if not get_ai_api_key(config):
+        raise interview_chat.PlanGenerationError("unavailable")
+    prompt = f"{system_prompt.strip()}\n\n{user_text}"
+    try:
+        text = call_anthropic_text(
+            prompt,
+            config,
+            max_tokens=4096,
+            timeout=timeout,
+            purpose="interview_plan",
+        )
+    except AIRequestError as exc:
+        kind = "timeout" if "timeout" in str(getattr(exc, "kind", "") or "").lower() else "unavailable"
+        raise interview_chat.PlanGenerationError(kind) from exc
+    except TimeoutError as exc:
+        raise interview_chat.PlanGenerationError("timeout") from exc
+    except Exception as exc:
+        kind = "timeout" if "timeout" in type(exc).__name__.lower() else "unavailable"
+        raise interview_chat.PlanGenerationError(kind) from exc
+    if not text or not str(text).strip():
+        raise interview_chat.PlanGenerationError("unavailable")
+    return str(text)
+
+
+def _complete_interview_json(
+    system_prompt: str,
+    user_text: str,
+    timeout: float,
+    purpose: str,
+    error_cls: type,
+) -> str:
+    """Non-streaming model call for debrief/drill. Tests patch the wrappers, not this."""
+    try:
+        runtime = offerpilot_runtime.load_backend()
+        config = runtime.load_config(runtime.CONFIG_PATH)
+        from offerpilot.ai.credentials import AIRequestError, call_anthropic_text, get_ai_api_key
+    except Exception as exc:
+        raise error_cls("unavailable") from exc
+    if not get_ai_api_key(config):
+        raise error_cls("unavailable")
+    prompt = f"{system_prompt.strip()}\n\n{user_text}"
+    try:
+        text = call_anthropic_text(
+            prompt,
+            config,
+            max_tokens=4096,
+            timeout=timeout,
+            purpose=purpose,
+        )
+    except AIRequestError as exc:
+        kind = "timeout" if "timeout" in str(getattr(exc, "kind", "") or "").lower() else "unavailable"
+        raise error_cls(kind) from exc
+    except TimeoutError as exc:
+        raise error_cls("timeout") from exc
+    except Exception as exc:
+        kind = "timeout" if "timeout" in type(exc).__name__.lower() else "unavailable"
+        raise error_cls(kind) from exc
+    if not text or not str(text).strip():
+        raise error_cls("unavailable")
+    return str(text)
+
+
+def _complete_interview_debrief(
+    system_prompt: str,
+    user_text: str,
+    timeout: float = interview_chat.DEBRIEF_TIMEOUT_SECONDS,
+) -> str:
+    return _complete_interview_json(
+        system_prompt,
+        user_text,
+        timeout,
+        "interview_debrief",
+        interview_chat.DebriefGenerationError,
+    )
+
+
+def _complete_interview_drill(
+    system_prompt: str,
+    user_text: str,
+    timeout: float = interview_chat.DRILL_TIMEOUT_SECONDS,
+) -> str:
+    return _complete_interview_json(
+        system_prompt,
+        user_text,
+        timeout,
+        "interview_drill",
+        interview_chat.DrillGenerationError,
+    )
+
+
+def _public_material(row: dict[str, Any]) -> dict[str, Any]:
+    kind = str(row.get("kind") or "")
+    item = {
+        "id": row.get("id"),
+        "kind": kind,
+        "title": row.get("title") or "",
+        "created_at": row.get("created_at") or "",
+    }
+    if kind == "jingyan":
+        item["jingyan_is_not_official"] = True
+    return item
+
+
+def interview_material_upload(payload: dict[str, Any]) -> dict[str, Any]:
+    mode = str(payload.get("mode") or "user")
+    kind = str(payload.get("kind") or "").strip()
+    body = str(payload.get("body") or payload.get("text") or "").strip()
+    if not body:
+        raise ApiError(interview_chat.MSG_MATERIAL_EMPTY)
+    if kind not in interview_chat.MATERIAL_KINDS:
+        raise ApiError(interview_chat.MSG_MATERIAL_EMPTY)
+    store = get_store(mode)
+    digest = hashlib.sha256(f"{kind}\n{body}".encode("utf-8")).hexdigest()[:12]
+    material_id = "mat-" + digest
+    rows = store.interview_materials()
+    existing = next((row for row in rows if str(row.get("id")) == material_id), None)
+    if existing:
+        return {
+            "ok": True,
+            "id": material_id,
+            "kind": kind,
+            "jingyan_is_not_official": kind == "jingyan",
+            "materials": [_public_material(row) for row in rows],
+            "message": "该材料已在本机列表中",
+        }
+    title = _clean_text(payload.get("title"), PROFILE_LIMITS["short"]) or body[:40]
+    row = {
+        "id": material_id,
+        "kind": kind,
+        "title": title,
+        "body": body[:MAX_TEXT],
+        "created_at": _now(),
+        "jingyan_is_not_official": kind == "jingyan",
+    }
+    rows.append(row)
+    store.set_interview_materials(rows)
+    store.log("保存面试材料", f"{kind} {material_id}")
+    return {
+        "ok": True,
+        "id": material_id,
+        "kind": kind,
+        "jingyan_is_not_official": kind == "jingyan",
+        "materials": [_public_material(item) for item in rows],
+        "message": "已保存到本机，下一场面试可勾选。",
+    }
+
+
+def _selected_interview_materials(store: Store, material_ids: Any) -> list[dict[str, Any]]:
+    if not isinstance(material_ids, list):
+        return []
+    wanted = [str(item) for item in material_ids if str(item).strip()]
+    if not wanted:
+        return []
+    by_id = {str(row.get("id")): row for row in store.interview_materials()}
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for ident in wanted:
+        row = by_id.get(ident)
+        if row and ident not in seen:
+            selected.append(row)
+            seen.add(ident)
+    return selected
+
+
+def _interview_job_display(store: Store, job_id: str) -> tuple[dict[str, str], str]:
+    if not job_id:
+        return {}, ""
+    job = next((row for row in store.jobs() if str(row.get("id")) == job_id), None)
+    if not job:
+        return {}, ""
+    display = {
+        "company": str(job.get("company") or ""),
+        "title": str(job.get("title") or ""),
+    }
+    jd_text = str(job.get("raw_text") or job.get("jd") or "")
+    return display, jd_text
+
+
+def _in_progress_interview(session: dict[str, Any] | None) -> bool:
+    if not session:
+        return False
+    return str(session.get("user_status") or "") in {"preparing", "in_progress", "ready_to_end", "drilling"}
+
+
+def interview_start(payload: dict[str, Any]) -> dict[str, Any]:
+    mode = str(payload.get("mode") or "user")
+    try:
+        round_key = interview_chat.parse_round(payload.get("round"))
+        duration_minutes = interview_chat.parse_duration(payload.get("duration_minutes"))
+    except ValueError as exc:
+        raise ApiError(str(exc)) from exc
+    store = get_store(mode)
+    profile = store.profile()
+    if not interview_chat.profile_has_internship_or_project(profile):
+        raise ApiError(interview_chat.MSG_NO_RESUME)
+    if not interview_ai_configured(mode):
+        raise ApiError(interview_chat.MSG_AI_MISSING)
+    jd_text = str(payload.get("jd") or "").strip()
+    job_id = str(payload.get("job_id") or "").strip()
+    display, job_jd = _interview_job_display(store, job_id)
+    if not jd_text:
+        jd_text = job_jd
+    materials = _selected_interview_materials(store, payload.get("material_ids"))
+    generic_role = (not str(payload.get("jd") or "").strip()) and (not job_id or not display)
+    resume_text = interview_chat.resume_evidence_text(profile)
+    try:
+        blueprint = interview_chat.plan_interview(
+            round_key=round_key,
+            duration_minutes=duration_minutes,
+            resume_text=resume_text,
+            jd_text=jd_text,
+            materials=materials,
+            complete=_complete_interview_plan,
+        )
+    except interview_chat.PlanGenerationError as exc:
+        status = 503 if exc.kind in {"timeout", "unavailable"} else 400
+        raise ApiError(interview_chat.MSG_PLAN_FAILED, status) from exc
+    previous = store.interview_session()
+    discarded = _in_progress_interview(previous)
+    session_id = "iv-" + uuid.uuid4().hex[:12]
+    has_jingyan = any(str(row.get("kind")) == "jingyan" for row in materials)
+    session = {
+        "id": session_id,
+        "round": round_key,
+        "duration_minutes": duration_minutes,
+        "rules_text": interview_chat.build_rules_text(round_key, duration_minutes, generic_role),
+        "generic_role": generic_role,
+        "display": display,
+        "user_status": "preparing",
+        "remaining_seconds": duration_minutes * 60,
+        "end_available": False,
+        "time_up": False,
+        "current_question": None,
+        "turns": [],
+        "blueprint": blueprint,
+        "interview_started_at": None,
+        "current_main_id": None,
+        "followup_count": 0,
+        "jingyan_is_not_official": True if has_jingyan else False,
+        "material_ids": [str(row.get("id")) for row in materials],
+        "job_id": job_id,
+        "jd": jd_text[: interview_chat.MATERIAL_MODEL_LIMIT],
+    }
+    store.set_interview_session(session)
+    store.log("开始文字面试规划", f"{round_key} {duration_minutes}分钟")
+    public = interview_chat.public_session(session)
+    public["ok"] = True
+    public["discarded_in_progress"] = discarded
+    if has_jingyan:
+        public["jingyan_is_not_official"] = True
+    public["message"] = "规则已准备，正在根据简历准备问题"
+    return public
+
+
+def _stream_interview_question(
+    system_prompt: str,
+    user_text: str,
+    timeout: float = interview_chat.CHAT_TIMEOUT_SECONDS,
+) -> Any:
+    """Stream one interviewer question from the configured external AI.
+
+    Tests patch this. It never invents a canned stem when the model fails.
+    """
+    try:
+        runtime = offerpilot_runtime.load_backend()
+        config = runtime.load_config(runtime.CONFIG_PATH)
+        from offerpilot.ai.credentials import (
+            AIRequestError,
+            build_anthropic_client_kwargs,
+            get_ai_api_key,
+        )
+    except Exception as exc:
+        raise interview_chat.StreamGenerationError("unavailable") from exc
+    if not get_ai_api_key(config):
+        raise interview_chat.StreamGenerationError("unavailable")
+    prompt = f"{system_prompt.strip()}\n\n{user_text}"
+    ai_cfg = config.get("ai", {}) if isinstance(config, dict) else {}
+    try:
+        if ai_cfg.get("provider") == "openai_compatible":
+            yield from _stream_openai_compatible_question(prompt, config, timeout)
+            return
+        import anthropic
+
+        client = anthropic.Anthropic(**build_anthropic_client_kwargs(config))
+        model = str(ai_cfg.get("model") or "claude-sonnet-4-6")
+        with client.messages.stream(
+            model=model,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=timeout,
+        ) as stream:
+            for text in stream.text_stream:
+                if text:
+                    yield str(text)
+    except interview_chat.StreamGenerationError:
+        raise
+    except AIRequestError as exc:
+        kind = "timeout" if "timeout" in str(getattr(exc, "kind", "") or "").lower() else "unavailable"
+        raise interview_chat.StreamGenerationError(kind) from exc
+    except TimeoutError as exc:
+        raise interview_chat.StreamGenerationError("timeout") from exc
+    except Exception as exc:
+        kind = "timeout" if "timeout" in type(exc).__name__.lower() else "unavailable"
+        raise interview_chat.StreamGenerationError(kind) from exc
+
+
+def _stream_openai_compatible_question(prompt: str, config: dict[str, Any], timeout: float) -> Any:
+    from offerpilot.ai.credentials import get_ai_api_key, get_ai_base_url, get_openai_compatible_model
+    import httpx
+
+    api_key = get_ai_api_key(config)
+    base_url = get_ai_base_url(config)
+    model = get_openai_compatible_model(config)
+    if not api_key or not base_url:
+        raise interview_chat.StreamGenerationError("unavailable")
+    yielded = False
+    try:
+        with httpx.stream(
+            "POST",
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1024,
+                "temperature": 0.2,
+                "stream": True,
+            },
+            timeout=timeout,
+            trust_env=False,
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                text = line.decode("utf-8") if isinstance(line, bytes) else str(line)
+                if not text.startswith("data:"):
+                    continue
+                payload = text[5:].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    body = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                choices = body.get("choices") if isinstance(body, dict) else None
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") if isinstance(choices[0], dict) else {}
+                chunk = ""
+                if isinstance(delta, dict):
+                    chunk = str(delta.get("content") or "")
+                if chunk:
+                    yielded = True
+                    yield chunk
+    except TimeoutError as exc:
+        raise interview_chat.StreamGenerationError("timeout") from exc
+    except Exception as exc:
+        kind = "timeout" if "timeout" in type(exc).__name__.lower() else "unavailable"
+        raise interview_chat.StreamGenerationError(kind) from exc
+    if not yielded:
+        raise interview_chat.StreamGenerationError("empty")
+
+
+def _load_interview_session(payload: dict[str, Any]) -> tuple[Store, dict[str, Any]]:
+    mode = str(payload.get("mode") or "user")
+    store = get_store(mode)
+    session = store.interview_session()
+    if not session:
+        raise ApiError(interview_chat.MSG_NO_SESSION)
+    wanted = str(payload.get("session_id") or payload.get("id") or "").strip()
+    if wanted and wanted != str(session.get("id") or ""):
+        raise ApiError(interview_chat.MSG_NO_SESSION)
+    return store, session
+
+
+def _session_materials(store: Store, session: dict[str, Any]) -> list[dict[str, Any]]:
+    return _selected_interview_materials(store, session.get("material_ids") or [])
+
+
+def _public_reply(session: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    interview_chat.apply_timing(session)
+    public = interview_chat.public_session(session)
+    public["ok"] = True
+    if extra:
+        public.update(extra)
+    return public
+
+
+def interview_reply(payload: dict[str, Any]) -> dict[str, Any]:
+    store, session = _load_interview_session(payload)
+    answer = str(payload.get("answer") or payload.get("text") or "").strip()
+    if not answer:
+        raise ApiError(interview_chat.MSG_EMPTY_ANSWER)
+    if not interview_chat.awaiting_answer(session):
+        raise ApiError(interview_chat.MSG_QUESTION_INCOMPLETE, 409)
+    status = str(session.get("user_status") or "")
+    if status not in {"in_progress", "preparing"}:
+        raise ApiError(interview_chat.MSG_QUESTION_INCOMPLETE, 409)
+    turns = list(session.get("turns") or [])
+    turns.append({"role": "candidate", "text": answer})
+    session["turns"] = turns
+    session["last_answer"] = answer
+    session["question_complete"] = False
+    now = interview_chat._now()
+    interview_chat.apply_timing(session, now)
+    remaining = int(session.get("remaining_seconds") or 0)
+    if remaining <= 0:
+        session["time_up"] = True
+        session["end_available"] = True
+        session["need_next"] = False
+        session["user_status"] = "ready_to_end"
+        session["remaining_seconds"] = 0
+    elif interview_chat.should_end_after_answer(session, answer):
+        session["time_up"] = False
+        session["end_available"] = True
+        session["need_next"] = False
+        session["user_status"] = "ready_to_end"
+    else:
+        session["time_up"] = False
+        session["end_available"] = False
+        session["need_next"] = True
+        session["user_status"] = "in_progress"
+    store.set_interview_session(session)
+    store.log("提交面试回答", f"{len(answer)}字")
+    public = _public_reply(session)
+    public["need_next"] = bool(session.get("need_next"))
+    public["end_available"] = bool(session.get("end_available"))
+    public["time_up"] = bool(session.get("time_up"))
+    public["remaining_seconds"] = int(session.get("remaining_seconds") or 0)
+    public["message"] = "回答已记下" if public["need_next"] else "可以结束面试"
+    return public
+
+
+def interview_end(payload: dict[str, Any]) -> dict[str, Any]:
+    store, session = _load_interview_session(payload)
+    interview_chat.apply_timing(session)
+    if str(session.get("user_status") or "") != "ready_to_end":
+        raise ApiError(interview_chat.MSG_END_LOCKED, 409)
+    try:
+        card = interview_chat.generate_debrief(session, _complete_interview_debrief)
+    except interview_chat.DebriefGenerationError as exc:
+        raise ApiError(interview_chat.MSG_DEBRIEF_UNAVAILABLE, 503) from exc
+    card_id = "ivdebrief-" + str(session.get("id") or uuid.uuid4().hex[:12])
+    stored = {
+        **card,
+        "id": card_id,
+        "session_id": session.get("id"),
+        "created_at": _now(),
+        "source": "interview-end",
+    }
+    rows = store.debriefs()
+    rows.append(stored)
+    store.set_debriefs(rows)
+    session["user_status"] = "debriefed"
+    session["end_available"] = False
+    session["need_next"] = False
+    session["debrief_id"] = card_id
+    session["debrief_card"] = card
+    store.set_interview_session(session)
+    store.log("生成模拟面试复盘", card_id)
+    public = interview_chat.public_session(session)
+    public["ok"] = True
+    public["card"] = {**card, "id": card_id, "session_id": session.get("id")}
+    public["message"] = "复盘已生成；未写入定制简历"
+    return public
+
+
+def interview_drill(payload: dict[str, Any]) -> dict[str, Any]:
+    store, session = _load_interview_session(payload)
+    status = str(session.get("user_status") or "")
+    if status not in interview_chat.DRILL_STATUSES:
+        raise ApiError(interview_chat.MSG_DRILL_LOCKED, 409)
+    item = interview_chat.find_drill_item(session, str(payload.get("item_id") or ""))
+    if not item:
+        raise ApiError(interview_chat.MSG_DRILL_ITEM)
+    answer = str(payload.get("answer") or payload.get("text") or "")
+    try:
+        result = interview_chat.generate_drill(session, item, answer, _complete_interview_drill)
+    except interview_chat.DrillGenerationError as exc:
+        raise ApiError(interview_chat.MSG_DRILL_UNAVAILABLE, 503) from exc
+    store.set_interview_session(session)
+    store.log("模拟面试重练", f"{item['id']} attempt={result.get('attempt')}")
+    public = interview_chat.public_session(session)
+    public["ok"] = True
+    public.update(result)
+    public["user_status"] = session.get("user_status")
+    return public
+
+
+def _stream_decision(session: dict[str, Any], intent: str) -> dict[str, Any]:
+    if intent == "retry":
+        decision = interview_chat.pending_decision(session)
+        if decision:
+            return decision
+        if str(session.get("user_status") or "") == "preparing":
+            return interview_chat.first_question_decision(session)
+        last = interview_chat.last_candidate_answer(session)
+        decision = interview_chat.decide_next_move(session, last)
+        if not decision:
+            raise ApiError(interview_chat.MSG_PLAN_DONE, 409)
+        return decision
+    if intent == "first":
+        return interview_chat.first_question_decision(session)
+    last = interview_chat.last_candidate_answer(session)
+    decision = interview_chat.decide_next_move(session, last)
+    if not decision:
+        raise ApiError(interview_chat.MSG_PLAN_DONE, 409)
+    return decision
+
+
+def interview_stream_events(payload: dict[str, Any]) -> Any:
+    intent = str(payload.get("intent") or "").strip()
+    if intent not in interview_chat.STREAM_INTENTS:
+        raise ApiError(interview_chat.MSG_INTENT)
+    store, session = _load_interview_session(payload)
+    interview_chat.apply_timing(session)
+    incomplete = bool((session.get("pending") or {}).get("incomplete")) if isinstance(session.get("pending"), dict) else False
+    if not incomplete:
+        turns = session.get("turns") or []
+        last = turns[-1] if turns else None
+        incomplete = isinstance(last, dict) and last.get("role") == "interviewer" and bool(last.get("incomplete"))
+    remaining = int(session.get("remaining_seconds") or 0)
+    if intent == "first" and str(session.get("user_status") or "") not in {"preparing", "in_progress"}:
+        raise ApiError(interview_chat.MSG_NO_SESSION)
+    if intent == "next":
+        if remaining <= 0 and not incomplete:
+            raise ApiError(interview_chat.MSG_TIME_UP, 409)
+        if session.get("end_available") and not incomplete:
+            if session.get("time_up") or remaining <= 0:
+                raise ApiError(interview_chat.MSG_TIME_UP, 409)
+            raise ApiError(interview_chat.MSG_PLAN_DONE, 409)
+        if str(session.get("user_status") or "") not in {"in_progress"}:
+            raise ApiError(interview_chat.MSG_NO_SESSION)
+    if intent == "retry" and not incomplete and not interview_chat.pending_decision(session):
+        if str(session.get("user_status") or "") == "preparing":
+            intent = "first"
+        else:
+            raise ApiError(interview_chat.MSG_QUESTION_INCOMPLETE, 409)
+    decision = _stream_decision(session, intent)
+    session["pending"] = {
+        "intent": intent,
+        "move": decision.get("move"),
+        "kind": decision.get("kind"),
+        "main_id": decision.get("main_id"),
+        "stem_intent": decision.get("stem_intent"),
+        "gap_labels": decision.get("gap_labels") or [],
+        "text": "",
+        "incomplete": False,
+    }
+    store.set_interview_session(session)
+    meta = {"session_id": session.get("id"), "move": decision.get("move")}
+    yield ("meta", meta)
+    resume_text = interview_chat.resume_evidence_text(store.profile())
+    materials = _session_materials(store, session)
+    system_prompt = interview_chat.load_chat_system_prompt()
+    user_text = interview_chat.chat_user_payload(session, decision, resume_text, materials)
+    collected = ""
+    try:
+        for piece in interview_chat.iter_question_tokens(
+            system_prompt,
+            user_text,
+            _stream_interview_question,
+            interview_chat.CHAT_TIMEOUT_SECONDS,
+        ):
+            collected += piece
+            yield ("token", {"text": piece})
+        if not collected.strip():
+            raise interview_chat.StreamGenerationError("empty")
+        interview_chat.commit_stream_done(session, decision, collected.strip())
+        store.set_interview_session(session)
+        yield ("done", {"text": collected.strip(), "session_id": session.get("id")})
+    except interview_chat.StreamGenerationError:
+        interview_chat.save_incomplete_question(session, decision, collected, intent)
+        store.set_interview_session(session)
+        yield (
+            "error",
+            {"message": interview_chat.stream_error_message(intent, str(session.get("user_status") or "preparing"))},
+        )
+
+
 def debrief(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     text = _bounded_text(payload.get("transcript"), "逐字稿", 30_000)
@@ -2610,6 +3230,11 @@ ACTIONS = {
     "generate-ics": generate_ics,
     "worksheet": worksheet,
     "add-question": add_bank_question,
+    "interview-start": interview_start,
+    "interview-material-upload": interview_material_upload,
+    "interview-reply": interview_reply,
+    "interview-end": interview_end,
+    "interview-drill": interview_drill,
     "debrief": debrief,
     "add-variant": add_variant,
     "check-pdf": check_pdf,
