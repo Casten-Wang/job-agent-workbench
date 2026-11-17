@@ -1739,7 +1739,8 @@ def get_jobs_needing_resume(conn: sqlite3.Connection) -> list[dict]:
 def _init_collect_progress(conn: sqlite3.Connection) -> None:
     """采集断点续采进度表：记录已完成的 (source, city, keyword) 组合。
 
-    词级断点（collect_progress）：组合采集完成即标记，默认 24h 内整词跳过。
+    词级断点（collect_progress）：组合采集完成即标记；默认不用它整词跳过，
+    只有显式配置 resume_ttl_hours 时才跳过窗口内已完成的组合。
     页级断点（collect_progress_page）：记录 51job API 采集每个词已采到的页码，
     支持「中途停止 → 从 N+1 页续采」。
     """
@@ -1784,6 +1785,23 @@ def get_collected_combos(conn: sqlite3.Connection, source: str, within_hours: in
             (source,),
         ).fetchall()
     return {(str(r["city"]), str(r["keyword"])) for r in rows}
+
+
+def combos_to_skip(
+    conn: sqlite3.Connection | None,
+    source: str,
+    ttl_hours: int | None = None,
+) -> set[tuple[str, str]]:
+    """本次采集要整词跳过的 (city, keyword) 组合。
+
+    ``ttl_hours`` 为 None（默认）时不跳过任何组合：采集由用户在前台手动触发，
+    每次都应该重新采集，不看「上一次完成到现在过了多久」。只有 config 里显式把
+    ``resume_ttl_hours`` 设为正数时，才跳过该窗口内已完成的组合。
+    页级续采不经过这里，仍由 :func:`get_page_progress` 单独决定。
+    """
+    if conn is None or ttl_hours is None:
+        return set()
+    return get_collected_combos(conn, source, within_hours=ttl_hours)
 
 
 def clear_collected_combos(conn: sqlite3.Connection, source: str | None = None) -> int:
