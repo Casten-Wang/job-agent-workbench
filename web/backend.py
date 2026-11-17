@@ -979,15 +979,35 @@ def _runtime_resume_files() -> list[Path]:
 
 
 def _profile_cv_source() -> tuple[Path, str] | None:
-    """The resume to read: workspace/resume.md, else the runtime's uploaded Markdown resume."""
+    """The resume to read: the newer of the uploaded Markdown resume and workspace/resume.md.
+
+    A resume uploaded on the collect page must win over a stale
+    ``workspace/resume.md`` (that was the bug: the file existed, so a new upload
+    was ignored).  The uploaded ``.md`` is used only when it is strictly newer
+    than ``workspace/resume.md``; otherwise the workspace file stays the source.
+    """
+    markdown = [path for path in _runtime_resume_files() if path.suffix.lower() == ".md"]
+    uploaded: Path | None = None
+    if markdown:
+        preferred = [path for path in markdown if path.name == "resume.md"]
+        uploaded = preferred[0] if preferred else max(markdown, key=lambda path: path.stat().st_mtime)
+    uploaded_at = _mtime(uploaded)
+    workspace_at = _mtime(CV_PATH if CV_PATH.is_file() else None)
+    if uploaded is not None and (workspace_at is None or (uploaded_at is not None and uploaded_at > workspace_at)):
+        return uploaded, "采集页已上传的 Markdown 简历"
     if CV_PATH.is_file():
         return CV_PATH, "workspace/resume.md"
-    markdown = [path for path in _runtime_resume_files() if path.suffix.lower() == ".md"]
-    if not markdown:
+    return None
+
+
+def _mtime(path: Path | None) -> float | None:
+    """Modification time, or ``None`` when the file is missing or unreadable."""
+    if path is None:
         return None
-    preferred = [path for path in markdown if path.name == "resume.md"]
-    chosen = preferred[0] if preferred else max(markdown, key=lambda path: path.stat().st_mtime)
-    return chosen, "采集页已上传的 Markdown 简历"
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
 
 
 def profile_for_api(mode: str, store: Store) -> dict[str, Any]:

@@ -103,11 +103,11 @@ POST /api/action
 {"action": "import-profile-cv", "mode": "user"}
 ```
 
-只读取本机 `workspace/resume.md`，返回可识别的姓名、邮箱、电话、城市、技能词与一段简介建议；**不会自动保存**。
+读取本机 `workspace/resume.md` 或采集页已上传的 Markdown 简历（较新的一份），返回可识别的姓名、邮箱、电话、城市、技能词与一段简介建议；**不会自动保存**。
 
 导入来源与解析范围（只增不改，旧字段保持原样）：
 
-- 来源：优先 `workspace/resume.md`；不存在时回退到采集页已上传的 Markdown 简历（运行时目录内的 `resume.md` 优先，否则最近修改的 `.md`，只读取，不改动其内容）。两处都没有返回 `404`；只有非 `.md` 的上传简历时返回 `400` 并提示改用 `.md` 或手动填写。
+- 来源：比较 `workspace/resume.md` 与采集页已上传的 Markdown 简历的修改时间，取较新的一份——采集页上传的 `.md` 比 workspace 文件新时用上传件，否则用 `workspace/resume.md`；时间相同取 workspace。上传件多个时运行时目录内的 `resume.md` 优先，否则最近修改的 `.md`。两处都只读取，不改动其内容；都没有返回 `404`；只有非 `.md` 的上传简历时返回 `400` 并提示改用 `.md` 或手动填写。
 - 响应新增 `source` 字段，标明本次读取的是哪一份简历。
 - 解析 Markdown 的 `##` 段落：`Professional Summary` / 个人简介 → `summary`；`Work Experience` / 工作经历 / 实习经历 → `experiences`（`### 公司 — 城市` + `**职位**` + 日期行 + `-`/`*`/`•` 要点）；`Projects` / 项目经历 → `projects`；`Education` / 教育经历 / 教育背景 → `education`；`Skills` / 技能 → `skills.tools`（与内置词表命中合并去重）。
 - 日期支持 `2019年10月 - 至今`、`2018.03-2018.06`、`2019-03 ~ 2019-06` 等写法，统一输出为 `YYYY-MM` 或 `至今`。

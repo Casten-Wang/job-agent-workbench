@@ -171,17 +171,42 @@ def _style_issues(raw: Any) -> list[str]:
     return [str(item)[:120] for item in parsed[:5] if str(item).strip()]
 
 
+def _redact_materials(materials: dict[str, Any]) -> dict[str, Any]:
+    """Copy a materials package with contact details removed from resume suggestions.
+
+    ``original`` is quoted from the resume, so it can carry a phone, email or
+    WeChat that the generation-side check on ``suggested`` never saw; older
+    stored rows may also predate that check.  Both are redacted here before the
+    package reaches the workbench; everything else is copied unchanged.
+    """
+    cleaned = dict(materials)
+    suggestions = materials.get("resume_suggestions")
+    if isinstance(suggestions, list):
+        rows: list[Any] = []
+        for item in suggestions:
+            if isinstance(item, dict):
+                row = dict(item)
+                for key in ("original", "suggested"):
+                    if isinstance(row.get(key), str):
+                        row[key] = _redact_contacts(row[key])
+                rows.append(row)
+            else:
+                rows.append(item)
+        cleaned["resume_suggestions"] = rows
+    return cleaned
+
+
 def _safe_materials(raw: Any) -> dict[str, Any] | None:
-    """Return a stored materials package, or ``None`` when absent or unreadable."""
+    """Return a stored materials package with contacts redacted, or ``None``."""
     if isinstance(raw, dict):
-        return raw or None
+        return _redact_materials(raw) if raw else None
     if not isinstance(raw, str) or not raw.strip():
         return None
     try:
         parsed = json.loads(raw)
     except (TypeError, ValueError):
         return None
-    return parsed if isinstance(parsed, dict) and parsed else None
+    return _redact_materials(parsed) if isinstance(parsed, dict) and parsed else None
 
 
 def get_greetings(ids: Any) -> dict[str, Any]:
@@ -755,7 +780,7 @@ def stop_task(task_id: str) -> dict[str, Any]:
 
 
 def reset_runtime(mode: str = "demo") -> None:
-    """Remove a demo runtime so reset-demo cannot keep stale jobs."""
+    """Remove the demo runtime directory (manual maintenance; no workbench action calls it)."""
     if mode != "demo":
         raise ValueError("只能重置演示运行时")
     target = runtime_dir(mode)

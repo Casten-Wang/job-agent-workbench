@@ -15,6 +15,7 @@ import datetime as dt
 import hashlib
 import http.client
 import json
+import os
 import re
 import shutil
 import socket
@@ -1449,6 +1450,88 @@ class GreetingPreviewTests(unittest.TestCase):
         self.assertEqual(item["materials"], {"mapping": [], "greetings": {}})
 
 
+class MaterialsRedactionTests(unittest.TestCase):
+    """``original``/``suggested`` never carry a phone, email or WeChat to the UI."""
+
+    PHONE = "1" + "3" * 10  # fabricated 11-digit number
+    EMAIL = "demo.person@example.com"
+    WECHAT = "demo_wechat01"
+
+    def _materials(self, *, leak: bool) -> dict:
+        original = (
+            f"负责示例项目，联系电话 {self.PHONE} / 邮箱 {self.EMAIL} / 微信 {self.WECHAT}"
+            if leak else "负责示例项目"
+        )
+        suggested = "负责示例项目并推动上线" + (f"，联系 {self.EMAIL}" if leak else "")
+        return {
+            "mapping": [{"requirement": "示例要求", "evidence": "示例证据", "source": "项目经历"}],
+            "conditions": [],
+            "unknown_fields": [],
+            "resume_suggestions": [
+                {"original": original, "suggested": suggested, "evidence": "项目经历", "reason": "示例原因"},
+            ],
+            "greetings": {"concise": "简洁版", "project": "项目版", "safe": "稳妥版"},
+            "confirm_items": [],
+        }
+
+    def test_safe_materials_redacts_dict_and_json_input(self):
+        runtime = backend.offerpilot_runtime
+        for raw in (self._materials(leak=True), json.dumps(self._materials(leak=True), ensure_ascii=False)):
+            with self.subTest(kind=type(raw).__name__):
+                package = runtime._safe_materials(raw)
+                self.assertIsNotNone(package)
+                row = package["resume_suggestions"][0]
+                for value in (row["original"], row["suggested"]):
+                    self.assertNotIn(self.PHONE, value)
+                    self.assertNotIn(self.EMAIL, value)
+                    self.assertNotIn(self.WECHAT, value)
+                self.assertIn("[联系方式已隐藏]", row["original"])
+                # Fields that are not resume quotes are untouched.
+                self.assertEqual(package["mapping"], self._materials(leak=True)["mapping"])
+
+    def test_materials_without_contacts_are_returned_unchanged(self):
+        runtime = backend.offerpilot_runtime
+        package = runtime._safe_materials(self._materials(leak=False))
+        self.assertEqual(package, self._materials(leak=False))
+
+    def test_get_greetings_redacts_materials_read_from_the_database(self):
+        vendor_src = str(PROJECT_ROOT / "vendor" / "offerpilot" / "src")
+        if vendor_src not in sys.path:
+            sys.path.insert(0, vendor_src)
+        from offerpilot.db import get_db  # noqa: E402
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "offerpilot.db"
+            conn = get_db(db_path)
+            conn.execute(
+                "INSERT INTO jobs (id, title, company, status, greeting, greeting_selection,"
+                " greeting_style_issues, materials) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "job-contact", "产品经理", "示例公司", "ready", "你好。",
+                    "generated", "[]", json.dumps(self._materials(leak=True), ensure_ascii=False),
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            class _Server:
+                DATA_DIR = Path(tmp)
+
+                def get_db(self, path):
+                    return get_db(path)
+
+            with patch.object(backend.offerpilot_runtime, "load_backend", return_value=_Server()):
+                result = backend.offerpilot_runtime.get_greetings(["job-contact"])
+
+        self.assertTrue(result["ok"])
+        materials = result["greetings"][0]["materials"]
+        payload = json.dumps(materials, ensure_ascii=False)
+        self.assertNotIn(self.PHONE, payload)
+        self.assertNotIn(self.EMAIL, payload)
+        self.assertNotIn(self.WECHAT, payload)
+        self.assertIn("[联系方式已隐藏]", payload)
+
+
 class GreetingEvidenceCheckTests(SeededStoreTestCase):
     def test_snapshot_flags_numbers_missing_from_profile_facts(self):
         store = backend.get_store("user")
@@ -2726,7 +2809,15 @@ class ProfileCvImportTests(unittest.TestCase):
         "- 技能：Axure、Visio、Excel、需求分析\n"
     )
 
-    def _run_import(self, text: str | None, runtime_files: dict[str, str] | None = None, cv_exists: bool = True):
+    def _run_import(
+        self,
+        text: str | None,
+        runtime_files: dict[str, str] | None = None,
+        cv_exists: bool = True,
+        *,
+        cv_mtime: float | None = None,
+        runtime_mtime: float | None = None,
+    ):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -2735,10 +2826,15 @@ class ProfileCvImportTests(unittest.TestCase):
             if cv_exists and text is not None:
                 cv_path.parent.mkdir(parents=True, exist_ok=True)
                 cv_path.write_text(text, encoding="utf-8")
+                if cv_mtime is not None:
+                    os.utime(cv_path, (cv_mtime, cv_mtime))
             runtime = root / "runtime"
             (runtime / "data" / "resumes").mkdir(parents=True, exist_ok=True)
             for name, body in (runtime_files or {}).items():
-                (runtime / "data" / "resumes" / name).write_text(body, encoding="utf-8")
+                uploaded = runtime / "data" / "resumes" / name
+                uploaded.write_text(body, encoding="utf-8")
+                if runtime_mtime is not None:
+                    os.utime(uploaded, (runtime_mtime, runtime_mtime))
             with patch.object(backend, "CV_PATH", cv_path), \
                     patch.object(backend.offerpilot_runtime, "runtime_dir", lambda mode: runtime), \
                     patch.object(backend, "WEB_DIR", root):
@@ -2833,10 +2929,39 @@ class ProfileCvImportTests(unittest.TestCase):
         self.assertEqual(profile["basic"]["phone"], "")
         self.assertEqual(profile["summary"], "")
 
-    def test_import_prefers_workspace_resume_over_runtime_resume(self):
+    def test_import_prefers_workspace_resume_when_it_is_newer(self):
         runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
-        result, _ = self._run_import(self.RESUME, {"resume.md": runtime_body})
+        result, _ = self._run_import(
+            self.RESUME,
+            {"resume.md": runtime_body},
+            cv_mtime=2_000_000_100,
+            runtime_mtime=2_000_000_000,
+        )
         self.assertEqual(result["profile"]["experiences"][0]["company"], "示例公司甲")
+        self.assertEqual(result["source"], "workspace/resume.md")
+
+    def test_import_prefers_a_runtime_resume_uploaded_after_the_workspace_file(self):
+        # Regression: the workspace file existed, so a fresh collect-page upload
+        # was ignored and "import" kept reading the old resume.
+        runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
+        result, _ = self._run_import(
+            self.RESUME,
+            {"resume.md": runtime_body},
+            cv_mtime=2_000_000_000,
+            runtime_mtime=2_000_000_100,
+        )
+        self.assertEqual(result["profile"]["experiences"][0]["company"], "示例公司庚")
+        self.assertEqual(result["profile"]["experiences"][0]["start"], "2022-01")
+        self.assertIn("采集页", result["source"])
+
+    def test_import_keeps_workspace_resume_when_timestamps_are_equal(self):
+        runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
+        result, _ = self._run_import(
+            self.RESUME,
+            {"resume.md": runtime_body},
+            cv_mtime=2_000_000_000,
+            runtime_mtime=2_000_000_000,
+        )
         self.assertEqual(result["source"], "workspace/resume.md")
 
     def test_import_falls_back_to_runtime_markdown_resume_when_workspace_missing(self):
