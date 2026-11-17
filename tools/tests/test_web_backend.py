@@ -15,6 +15,7 @@ import datetime as dt
 import hashlib
 import http.client
 import json
+import os
 import re
 import shutil
 import socket
@@ -2723,7 +2724,15 @@ class ProfileCvImportTests(unittest.TestCase):
         "- 技能：Axure、Visio、Excel、需求分析\n"
     )
 
-    def _run_import(self, text: str | None, runtime_files: dict[str, str] | None = None, cv_exists: bool = True):
+    def _run_import(
+        self,
+        text: str | None,
+        runtime_files: dict[str, str] | None = None,
+        cv_exists: bool = True,
+        *,
+        cv_mtime: float | None = None,
+        runtime_mtime: float | None = None,
+    ):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -2732,10 +2741,15 @@ class ProfileCvImportTests(unittest.TestCase):
             if cv_exists and text is not None:
                 cv_path.parent.mkdir(parents=True, exist_ok=True)
                 cv_path.write_text(text, encoding="utf-8")
+                if cv_mtime is not None:
+                    os.utime(cv_path, (cv_mtime, cv_mtime))
             runtime = root / "runtime"
             (runtime / "data" / "resumes").mkdir(parents=True, exist_ok=True)
             for name, body in (runtime_files or {}).items():
-                (runtime / "data" / "resumes" / name).write_text(body, encoding="utf-8")
+                uploaded = runtime / "data" / "resumes" / name
+                uploaded.write_text(body, encoding="utf-8")
+                if runtime_mtime is not None:
+                    os.utime(uploaded, (runtime_mtime, runtime_mtime))
             with patch.object(backend, "CV_PATH", cv_path), \
                     patch.object(backend.offerpilot_runtime, "runtime_dir", lambda mode: runtime), \
                     patch.object(backend, "WEB_DIR", root):
@@ -2830,10 +2844,39 @@ class ProfileCvImportTests(unittest.TestCase):
         self.assertEqual(profile["basic"]["phone"], "")
         self.assertEqual(profile["summary"], "")
 
-    def test_import_prefers_workspace_resume_over_runtime_resume(self):
+    def test_import_prefers_workspace_resume_when_it_is_newer(self):
         runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
-        result, _ = self._run_import(self.RESUME, {"resume.md": runtime_body})
+        result, _ = self._run_import(
+            self.RESUME,
+            {"resume.md": runtime_body},
+            cv_mtime=2_000_000_100,
+            runtime_mtime=2_000_000_000,
+        )
         self.assertEqual(result["profile"]["experiences"][0]["company"], "示例公司甲")
+        self.assertEqual(result["source"], "workspace/resume.md")
+
+    def test_import_prefers_a_runtime_resume_uploaded_after_the_workspace_file(self):
+        # Regression: the workspace file existed, so a fresh collect-page upload
+        # was ignored and "import" kept reading the old resume.
+        runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
+        result, _ = self._run_import(
+            self.RESUME,
+            {"resume.md": runtime_body},
+            cv_mtime=2_000_000_000,
+            runtime_mtime=2_000_000_100,
+        )
+        self.assertEqual(result["profile"]["experiences"][0]["company"], "示例公司庚")
+        self.assertEqual(result["profile"]["experiences"][0]["start"], "2022-01")
+        self.assertIn("采集页", result["source"])
+
+    def test_import_keeps_workspace_resume_when_timestamps_are_equal(self):
+        runtime_body = "# 示例运行时简历\n\n## Work Experience\n\n### 示例公司庚\n**示例岗位庚**\n2022.01-2022.06\n- 运行时示例要点\n"
+        result, _ = self._run_import(
+            self.RESUME,
+            {"resume.md": runtime_body},
+            cv_mtime=2_000_000_000,
+            runtime_mtime=2_000_000_000,
+        )
         self.assertEqual(result["source"], "workspace/resume.md")
 
     def test_import_falls_back_to_runtime_markdown_resume_when_workspace_missing(self):

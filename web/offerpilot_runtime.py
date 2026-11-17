@@ -755,7 +755,7 @@ def stop_task(task_id: str) -> dict[str, Any]:
 
 
 def reset_runtime(mode: str = "demo") -> None:
-    """Remove a demo runtime so reset-demo cannot keep stale jobs."""
+    """Remove the demo runtime directory (manual maintenance; no workbench action calls it)."""
     if mode != "demo":
         raise ValueError("只能重置演示运行时")
     target = runtime_dir(mode)
