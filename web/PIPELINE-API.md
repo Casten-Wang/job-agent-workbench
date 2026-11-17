@@ -145,6 +145,34 @@ GET /api/pipeline?mode=user
 
 `POST /api/action` 的 `delete-jobs`（body：`{ids: string[], mode}`，一次最多 100 条）对岗位池做软删除：仅标记 `deleted_at`，不物理删除记录，便于指纹去重防止重新导入复活；已 `approved` 或已出现在发送记录中的岗位会被跳过并在 `skipped: [{id, reason}]` 中列出原因，响应为 `{deleted: number, skipped: [...], message}`。
 
+### 2.2 定制简历：经历变体与主稿对比（只读）
+
+```http
+POST /api/action
+{"action":"compare-variant","mode":"user","variant_id":"<variant-id>"}
+```
+
+把一条已保存的经历变体与主稿按段落对比，返回新增、删除与改写的段落原文。动作只读：不写入 `variants.json`、活动日志或任何文件，不修改主稿，不发送、不投递，也不生成或改写任何文字。
+
+请求字段（均可省略，但至少要能定位一条变体，或提供 `text`）：
+
+- `variant_id`：按记录 id 定位，最长 200 字。
+- `job_id`：按岗位关联定位；同一岗位有多条时取 `created_at` 最新的一条。
+- `project`：按项目名定位（忽略大小写、全半角与空白差异），同样取最新一条。
+- `text`：行内经历原文，最长 20,000 字。提供时以它作为对比文本（即使同时命中某条记录）；没有命中记录但有 `text` 时，直接对比这段文本。
+- `master_text`：可选的母版原文，最长 200,000 字，用于调用方自带主稿。
+- 定位优先级为 `variant_id` → `job_id` → `project`。
+
+主稿来源：提供 `master_text` 时返回 `master_source: "请求提供"`；否则读取本机 `workspace/resume.md`（`master_source: "workspace/resume.md"`），不存在时回退到采集页已上传的 Markdown 简历（`master_source: "采集页已上传的 Markdown 简历"`）。没有可读主稿返回 404「未找到可对比的母版简历：workspace/resume.md 不存在，也没有已上传的 Markdown 简历」；主稿存在但无法按 UTF-8 文本读取返回 400。既没有命中变体也没有 `text` 时返回 404「未找到可对比的经历变体：请提供 variant_id、job_id，或 project 与 text」。
+
+响应为 `{ok, variant_id, project, job_id, master_source, identical, summary, segments}`：
+
+- `summary`：`{added, removed, changed, unchanged}`，单位为段落数。
+- `segments`：只列差异，按文档顺序。新增为 `{kind: "added", text}`，删除为 `{kind: "removed", text}`，改写为 `{kind: "changed", before, after}`。所有字符串都取自两条输入的原文，不改写、不润色。
+- 段落按空行切分；比较时忽略空白与全半角差异，但输出仍是原文。两段文本逐段一致时 `identical: true` 且 `segments` 为空数组。
+
+该动作不在六段流程中产生事件，也不代表任何投递或发送状态；定制简历页的「与主稿对比」入口只展示上述返回值。
+
 ## 3.1 岗位自动化接口
 
 ```http
