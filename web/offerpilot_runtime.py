@@ -30,7 +30,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = Path(__file__).resolve().parent
 VENDOR_SRC = ROOT / "vendor" / "offerpilot" / "src"
-RUNTIME_MODES = ("demo", "user")
+RUNTIME_MODES = ("user",)
 TASK_MODES = ("collect", "monitor", "full")
 PACE_MULTIPLIERS = {"cautious": 3.0, "standard": 1.5, "fast": 1.0}
 PACE_LABELS = {"cautious": "稳健", "standard": "标准", "fast": "快速"}
@@ -66,7 +66,7 @@ class OfferPilotUnavailable(RuntimeError):
 
 def runtime_dir(mode: str) -> Path:
     if mode not in RUNTIME_MODES:
-        raise ValueError("数据模式只能是 demo 或 user")
+        raise ValueError("数据模式只能是 user")
     return WEB_DIR / "data" / mode / "offerpilot"
 
 
@@ -766,15 +766,6 @@ def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str
 def stop_task(task_id: str) -> dict[str, Any]:
     server = load_backend()
     return _safe_task(server.task_runner.stop(task_id)) or {}
-
-
-def reset_runtime(mode: str = "demo") -> None:
-    """Remove the demo runtime directory (manual maintenance; no workbench action calls it)."""
-    if mode != "demo":
-        raise ValueError("只能重置演示运行时")
-    target = runtime_dir(mode)
-    if target.exists():
-        shutil.rmtree(target, ignore_errors=True)
 
 
 # --- HR conversations: read-only list/thread plus one confirmed reply ---------
