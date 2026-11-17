@@ -3828,6 +3828,401 @@ body.offer-ui .jobs-materials-greeting-meta {
   }
 }
 
+/* ==========================================================================
+ * 分支视觉基线（2026-11-17）
+ * 取自 8d3a41c 分支的界面语言：白底 / 近黑底，黑（深色下为白）作主色，
+ * 粉色作次色；无衬线标题、细线分隔、小圆角、紧凑排布。
+ * 只覆盖颜色、字号、间距与圆角，不改任何 #view-*、data-*、DOM 结构与 JS 行为。
+ * 需要回退时删掉本段即可，上方「案头册页」层仍然是完整可用的设计。
+ * 位置在「首页：今天要做的事」样式段之前：test_home_today 要求该段到文件末尾
+ * 不再出现圆角与阴影规则，因此不能把本段追加到文件最后。
+ * ========================================================================== */
+
+body.offer-ui {
+  --op-paper: #ffffff;
+  --op-surface: #ffffff;
+  --op-surface-2: #f7f7f8;
+  --op-ink: #0a0a0a;
+  --op-ink-2: #3f3f46;
+  --op-mute: #71717a;
+  --op-line: rgba(10, 10, 10, 0.1);
+  --op-accent: #0a0a0a;
+  --op-accent-strong: #2b2b31;
+  --op-accent-soft: #f4f4f5;
+  --op-accent-ink: #ffffff;
+  --op-font-display: "PingFang SC", "Source Han Sans SC", "Noto Sans SC", -apple-system,
+    BlinkMacSystemFont, "Microsoft YaHei", system-ui, sans-serif;
+
+  --bg: var(--op-paper);
+  --surface: var(--op-surface);
+  --panel-bg: var(--op-surface);
+  --header-bg: var(--op-paper);
+  --ink: var(--op-ink);
+  --ink-2: var(--op-ink-2);
+  --mute: var(--op-mute);
+  --line: var(--op-line);
+  --accent: var(--op-accent);
+  --accent-fill: var(--op-accent);
+  --accent-ink: var(--op-accent-ink);
+  --on-ink: var(--op-accent-ink);
+  --accent-soft: var(--op-accent-soft);
+  --pill: #f4f4f5;
+  --neutral-bg: #f4f4f5;
+  --good: #17663a;
+  --good-bg: #e9f7ef;
+  --warn: #8a4b00;
+  --warn-bg: #fff4e5;
+  --bad: #b42318;
+  --bad-bg: #fef3f2;
+  --danger: #b42318;
+  --focus: var(--op-accent);
+  --focus-ring: rgba(10, 10, 10, 0.28);
+  --code-bg: #f4f4f5;
+  --chart-grid: rgba(10, 10, 10, 0.08);
+  --offer-pink: #e4889c;
+  --series-1: #0a0a0a;
+  --series-2: #e4889c;
+  --series-3: #8aa4ff;
+  --stage-0: #f5d0d8;
+  --stage-1: #efb3c1;
+  --stage-2: #e4889c;
+  --stage-3: #c96b80;
+  --stage-4: #a44d62;
+  --radius-card: 6px;
+  --shadow-card: none;
+  --shadow-soft: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui {
+    --op-paper: #0b0b0d;
+    --op-surface: #151518;
+    --op-surface-2: #1c1c20;
+    --op-ink: #f5f5f7;
+    --op-ink-2: #b4b4bb;
+    --op-mute: #8e8e96;
+    --op-line: rgba(255, 255, 255, 0.12);
+    --op-accent: #f5f5f7;
+    --op-accent-strong: #d6d6dd;
+    --op-accent-soft: #232327;
+    --op-accent-ink: #0a0a0a;
+    --pill: #232327;
+    --neutral-bg: #232327;
+    --good: #7fe0bd;
+    --good-bg: #12332a;
+    --warn: #ffcf8a;
+    --warn-bg: #332815;
+    --bad: #ffb3ab;
+    --bad-bg: #351d1c;
+    --danger: #ffb3ab;
+    --focus: var(--op-accent);
+    --focus-ring: rgba(245, 245, 247, 0.4);
+    --code-bg: #232327;
+    --chart-grid: rgba(255, 255, 255, 0.1);
+    --series-1: #f5f5f7;
+    --series-2: #e4889c;
+    --series-3: #8aa4ff;
+    --stage-0: #5b3a44;
+    --stage-1: #7d4d5b;
+    --stage-2: #a35f71;
+    --stage-3: #c97b8d;
+    --stage-4: #e39aab;
+  }
+}
+
+:root[data-theme="dark"] body.offer-ui {
+  --op-paper: #0b0b0d;
+  --op-surface: #151518;
+  --op-surface-2: #1c1c20;
+  --op-ink: #f5f5f7;
+  --op-ink-2: #b4b4bb;
+  --op-mute: #8e8e96;
+  --op-line: rgba(255, 255, 255, 0.12);
+  --op-accent: #f5f5f7;
+  --op-accent-strong: #d6d6dd;
+  --op-accent-soft: #232327;
+  --op-accent-ink: #0a0a0a;
+  --pill: #232327;
+  --neutral-bg: #232327;
+  --good: #7fe0bd;
+  --good-bg: #12332a;
+  --warn: #ffcf8a;
+  --warn-bg: #332815;
+  --bad: #ffb3ab;
+  --bad-bg: #351d1c;
+  --danger: #ffb3ab;
+  --focus: var(--op-accent);
+  --focus-ring: rgba(245, 245, 247, 0.4);
+  --code-bg: #232327;
+  --chart-grid: rgba(255, 255, 255, 0.1);
+  --series-1: #f5f5f7;
+  --series-2: #e4889c;
+  --series-3: #8aa4ff;
+  --stage-0: #5b3a44;
+  --stage-1: #7d4d5b;
+  --stage-2: #a35f71;
+  --stage-3: #c97b8d;
+  --stage-4: #e39aab;
+}
+
+/* ---- 外壳：紧凑栏宽与排布 ------------------------------------------------ */
+
+body.offer-ui .app-shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+
+body.offer-ui .sidebar {
+  padding: 22px 16px 20px;
+}
+
+body.offer-ui .brand {
+  padding-bottom: 14px;
+}
+
+body.offer-ui .brand-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+body.offer-ui .brand-sub {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+body.offer-ui .nav {
+  gap: 1px;
+  margin: 14px 0 16px;
+}
+
+body.offer-ui .nav-group-label {
+  margin: 12px 0 4px;
+  padding-left: 9px;
+  font-size: 11px;
+}
+
+body.offer-ui .nav-item {
+  padding: 7px 9px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+body.offer-ui .nav-item.is-active {
+  color: var(--op-ink);
+}
+
+body.offer-ui .main-column {
+  max-width: 1320px;
+  padding: 18px 32px 56px;
+}
+
+body.offer-ui .topbar {
+  padding-bottom: 10px;
+}
+
+body.offer-ui .topbar-heading h1 {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+body.offer-ui .views {
+  padding-top: 16px;
+}
+
+body.offer-ui .view {
+  gap: 16px;
+}
+
+/* ---- 页头：标题回到无衬线，字号收紧 ------------------------------------- */
+
+body.offer-ui .view-head {
+  gap: 8px;
+  padding-bottom: 14px;
+}
+
+body.offer-ui .view-title {
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+body.offer-ui .view-lede {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+body.offer-ui .home-title {
+  font-size: clamp(26px, 3.2vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+/* ---- 面板与卡片：细线、小圆角、紧凑内边距 ------------------------------- */
+
+body.offer-ui .panel {
+  padding: 16px 18px;
+  border-radius: 6px;
+}
+
+body.offer-ui .panel-head {
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+body.offer-ui .panel-head h3 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body.offer-ui .card,
+body.offer-ui .action-result {
+  border-radius: 4px;
+}
+
+body.offer-ui .status {
+  margin-top: 12px;
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+body.offer-ui .notice {
+  padding: 8px 10px;
+  border-radius: 4px;
+}
+
+body.offer-ui .filter-bar,
+body.offer-ui .jobs-filter-bar {
+  border-radius: 4px;
+}
+
+/* ---- 控件：3px 圆角，主按钮跟随主色 ------------------------------------- */
+
+body.offer-ui .button,
+body.offer-ui .button-quiet,
+body.offer-ui .segmented,
+body.offer-ui .segmented button,
+body.offer-ui .filter,
+body.offer-ui .hr-filter {
+  border-radius: 3px;
+}
+
+body.offer-ui .button {
+  padding: 8px 14px;
+  color: var(--op-accent-ink);
+  font-weight: 600;
+}
+
+body.offer-ui .button-quiet {
+  color: var(--op-ink);
+  font-weight: 500;
+}
+
+body.offer-ui .button-danger {
+  border-color: color-mix(in srgb, var(--bad) 35%, transparent);
+  color: var(--bad);
+}
+
+body.offer-ui .badge,
+body.offer-ui .tag,
+body.offer-ui .jobs-platform,
+body.offer-ui .jobs-materials-status {
+  border-radius: 2px;
+}
+
+body.offer-ui input[type="text"],
+body.offer-ui input[type="number"],
+body.offer-ui input[type="date"],
+body.offer-ui input[type="file"],
+body.offer-ui input[type="search"],
+body.offer-ui select,
+body.offer-ui textarea {
+  border-radius: 3px;
+}
+
+/* ---- 表格与 HR：细线容器、小圆角 ---------------------------------------- */
+
+body.offer-ui .table-wrap {
+  border-radius: 4px;
+}
+
+body.offer-ui .hr-sidebar,
+body.offer-ui .hr-thread {
+  border-radius: 4px;
+}
+
+body.offer-ui .hr-messages,
+body.offer-ui .hr-composer {
+  border-radius: 4px;
+}
+
+body.offer-ui .hr-message {
+  border-radius: 6px 6px 6px 2px;
+}
+
+body.offer-ui .hr-message-me {
+  border-radius: 6px 6px 2px 6px;
+}
+
+body.offer-ui .hr-search {
+  border-radius: 3px;
+}
+
+body.offer-ui .hr-conversation {
+  border-radius: 3px;
+}
+
+body.offer-ui .hr-thread-head h4 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ---- 首页「今天」 ------------------------------------------------------- */
+
+body.offer-ui .home-task {
+  padding: 13px 0;
+}
+
+body.offer-ui .home-task-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+body.offer-ui .home-task-count {
+  font-size: 18px;
+}
+
+/* ---- 移动端：与桌面同一套紧凑节奏 --------------------------------------- */
+
+@media (max-width: 900px) {
+  body.offer-ui .sidebar {
+    padding: 14px 14px 10px;
+  }
+
+  body.offer-ui .brand-title {
+    font-size: 16px;
+  }
+
+  body.offer-ui .main-column {
+    padding: 14px 14px 40px;
+  }
+
+  body.offer-ui .views {
+    padding-top: 14px;
+  }
+
+  body.offer-ui .view {
+    gap: 14px;
+  }
+
+  body.offer-ui .panel {
+    padding: 14px 14px;
+  }
+}
+
 /* 首页：今天要做的事 ---------------------------------------------------------- */
 
 .home-today {
@@ -4184,3 +4579,4 @@ body.offer-ui .jobs-materials-greeting-meta {
     width: 100%;
   }
 }
+
