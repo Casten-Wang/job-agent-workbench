@@ -11,3 +11,6 @@ workspace/*
 !workspace/README.md
 web/data/
 
+# Local run logs (runtime artifacts, may contain machine paths)
+tools/data/*.log
+

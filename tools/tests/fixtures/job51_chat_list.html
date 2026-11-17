@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>前程无忧聊天列表 — 本地测试夹具（虚构数据）</title>
+</head>
+<body>
+  <!--
+    依据 JS 与 DOM 线索合成，未经真实页面验证。
+
+    Class names mirror the conversation-list templates inside the 51job IM SDK
+    (im-web-hi-chat 2.73.0): .conversation-item, .username, .jobname,
+    .message-date, .messageforshow .last-message, .el-badge__content, .to-top.
+    Every company, person, job and message below is fictional.  There is no
+    credential or contact detail anywhere in this file.
+  -->
+  <div id="imComponentApp">
+    <div id="im-page">
+      <div class="conversation-list-section with-box-shadow">
+        <div class="conversation-list-container">
+          <div id="conversation-list" class="conversation-list partition-msg-list">
+            <div class="conversation-item new">
+              <div class="avatar">
+                <span class="el-badge">
+                  <sup class="el-badge__content el-badge__content--danger is-fixed">2</sup>
+                </span>
+              </div>
+              <div class="info">
+                <div class="name">
+                  <span class="username">示例招聘官甲</span>
+                  <span class="jobname">虚构产品经理</span>
+                </div>
+                <div class="message-date">11-17 09:20</div>
+                <div class="messageforshow">
+                  <div class="last-message">您好，方便沟通一下岗位吗</div>
+                </div>
+                <div class="to-top"></div>
+              </div>
+            </div>
+
+            <div class="conversation-item old">
+              <div class="avatar">
+                <span class="el-badge">
+                  <sup class="el-badge__content el-badge__content--danger is-fixed">1</sup>
+                </span>
+              </div>
+              <div class="info">
+                <div class="name">
+                  <span class="username">示例招聘官乙</span>
+                  <span class="jobname">虚构数据分析师</span>
+                </div>
+                <div class="message-date">11-16 18:05</div>
+                <div class="messageforshow">
+                  <div class="last-message">期待您的回复</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="conversation-item old">
+              <div class="avatar"></div>
+              <div class="info">
+                <div class="name">
+                  <span class="username">示例招聘官丙</span>
+                  <span class="jobname">虚构运营专员</span>
+                </div>
+                <div class="message-date">11-15 10:00</div>
+                <div class="messageforshow">
+                  <div class="last-message">已收到您的简历</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden Element UI badge (v-show) plus missing job/date/message. -->
+            <div class="conversation-item old">
+              <div class="avatar">
+                <span class="el-badge">
+                  <sup class="el-badge__content is-fixed" style="display: none;">3</sup>
+                </span>
+              </div>
+              <div class="info">
+                <div class="name">
+                  <span class="username">示例招聘官丁</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

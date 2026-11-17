@@ -37,6 +37,10 @@ def _runtime_job(job_id: str, **overrides: object) -> dict:
         "salary": "15-25K",
         "status": "scored",
         "score": 85,
+        "score_coverage": 0.9,
+        "scoring_model": "match-coefficients-v3",
+        "mandatory_status": "satisfied",
+        "hiring_status": "unknown",
         "created_at": "2026-11-16T09:00:00+08:00",
     }
     job.update(overrides)
@@ -53,7 +57,6 @@ class VendorFullFlowTests(unittest.TestCase):
             vendor_server, "get_jobs_pending_confirmation", return_value=[{"score": 64}, {"score": 72}]
         ), patch.object(vendor_server, "_execute_deliver") as deliver:
             vendor_server._execute_full(task, {
-                "scoring": {"threshold": 71},
                 "_workbench_auto_pipeline": True,
                 "_collection_options": {
                     "platform_order": ["boss"],
@@ -67,8 +70,10 @@ class VendorFullFlowTests(unittest.TestCase):
         self.assertTrue(task.context.get("confirmation_complete"))
         self.assertNotIn("confirmation_event", task.context)
         self.assertTrue(any("最终确认门" in line for line in task.logs), task.logs)
-        # 64 < 71 被运行时门槛过滤；只有 72 达标（0–100 分制）。
-        self.assertTrue(any("1 个岗位评分达标" in line for line in task.logs), task.logs)
+        # 文档没有数字门槛：待确认岗位按状态计入，不再比较 71 分。
+        self.assertTrue(
+            any("2 个岗位已按文档规则通过筛选" in line for line in task.logs), task.logs
+        )
 
 
 class RuntimeStartTests(unittest.TestCase):
@@ -112,24 +117,16 @@ class RuntimeStartTests(unittest.TestCase):
         self.assertFalse(result["auto_pipeline"])
 
 
-class ThresholdScaleTests(unittest.TestCase):
-    def test_live_threshold_pair_maps_runtime_gate_onto_queue_gate(self):
-        with patch.object(offerpilot_runtime, "get_score_threshold", return_value=71):
-            raw, workbench = backend._offerpilot_thresholds()
-        self.assertEqual((raw, workbench), (71.0, 4.0))
-        self.assertEqual(backend._offerpilot_score(71, raw, workbench), 4.0)
-        self.assertEqual(backend._offerpilot_score(64, raw, workbench), 3.6)
-        self.assertEqual(backend._offerpilot_score(72, raw, workbench), 4.1)
+class MatchingScoreTests(unittest.TestCase):
+    def test_document_score_is_kept_as_a_0_to_100_integer(self):
+        self.assertEqual(backend._offerpilot_score(80, 0.9), 80)
+        self.assertEqual(backend._offerpilot_score(0, 0.9), 0)
+        self.assertIsNone(backend._offerpilot_score(0))
+        self.assertIsNone(backend._offerpilot_score(101, 1.0))
+        self.assertIsNone(backend._offerpilot_score(True, 1.0))
+        self.assertEqual(backend.MATCH_SCORE_SCALE_LABEL, "0-100（文档匹配分）")
 
-    def test_mapping_follows_a_changed_runtime_threshold(self):
-        with patch.object(offerpilot_runtime, "get_score_threshold", return_value=60):
-            raw, workbench = backend._offerpilot_thresholds()
-        self.assertEqual((raw, workbench), (60.0, 4.0))
-        # 运行时门槛整体下移时，映射跟着移动，两个门仍同时通过/拒绝。
-        self.assertEqual(backend._offerpilot_score(60, raw, workbench), 4.0)
-        self.assertEqual(backend._offerpilot_score(58, raw, workbench), 3.9)
-
-    def test_36_fails_and_40_passes_the_real_queue_gate(self):
+    def test_document_scored_jobs_need_no_numeric_threshold(self):
         with tempfile.TemporaryDirectory() as tmp:
             class _Store:
                 def __init__(self):
@@ -137,10 +134,14 @@ class ThresholdScaleTests(unittest.TestCase):
 
                 def jobs(self):
                     return [
-                        {"id": "job-3-6", "company": "示例丙公司", "title": "产品经理",
-                         "city": "上海", "score": 3.6, "source_channel": "boss", "offerpilot_id": "rt-64"},
-                        {"id": "job-4-0", "company": "示例丁公司", "title": "产品经理",
-                         "city": "上海", "score": 4.0, "source_channel": "boss", "offerpilot_id": "rt-71"},
+                        {"id": "job-36", "company": "示例丙公司", "title": "产品经理",
+                         "city": "上海", "score": 36, "score_raw": 36, "score_coverage": 0.9,
+                         "scoring_model": backend.MATCH_SCORE_MODEL, "mandatory_status": "pending",
+                         "hiring_status": "unknown", "source_channel": "boss", "offerpilot_id": "rt-36"},
+                        {"id": "job-80", "company": "示例丁公司", "title": "产品经理",
+                         "city": "上海", "score": 80, "score_raw": 80, "score_coverage": 0.8,
+                         "scoring_model": backend.MATCH_SCORE_MODEL, "mandatory_status": "satisfied",
+                         "hiring_status": "not_closed", "source_channel": "boss", "offerpilot_id": "rt-80"},
                     ]
 
                 def profile(self):
@@ -157,22 +158,118 @@ class ThresholdScaleTests(unittest.TestCase):
 
             store = _Store()
             with patch.object(backend, "get_store", return_value=store):
-                result = backend.enqueue({"mode": "user", "ids": ["job-3-6", "job-4-0"]})
-        self.assertEqual(result["approved"], ["job-4-0"])
-        self.assertIn("job-3-6", result["dropped"])
+                result = backend.enqueue({"mode": "user", "ids": ["job-36", "job-80"]})
+        # 文档没有数字阈值：36 分和 80 分都可以进入审批队列。
+        self.assertEqual(result["approved"], ["job-36", "job-80"])
+        self.assertEqual(result["dropped"], [])
 
-    def test_runtime_reads_the_configured_threshold(self):
-        class _Server:
-            CONFIG_PATH = Path("config.yaml")
+    def test_all_unknown_coverage_zero_is_not_auto_enqueued(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            class _Store:
+                def __init__(self):
+                    self.files = {"queue": Path(tmp) / "approval-queue.json"}
 
-        with patch.object(offerpilot_runtime, "load_backend", return_value=_Server()), patch(
-            "offerpilot.config.load_config", return_value={"scoring": {"threshold": 71}}
-        ):
-            self.assertEqual(offerpilot_runtime.get_score_threshold(), 71)
-        with patch.object(offerpilot_runtime, "load_backend", return_value=_Server()), patch(
-            "offerpilot.config.load_config", return_value={"scoring": {"threshold": "bad"}}
-        ):
-            self.assertEqual(offerpilot_runtime.get_score_threshold(), 71)
+                def jobs(self):
+                    return [{
+                        "id": "job-unknown", "company": "示例戊公司", "title": "产品经理",
+                        "city": "上海", "score": 0, "score_raw": 0, "score_coverage": 0.0,
+                        "scoring_model": backend.MATCH_SCORE_MODEL, "mandatory_status": "pending",
+                        "hiring_status": "unknown", "source_channel": "boss", "offerpilot_id": "rt-unknown",
+                    }]
+
+                def profile(self):
+                    return {"job_intent": {"cities": ["上海"]}}
+
+                def queue(self):
+                    return []
+
+                def deliveries(self):
+                    return []
+
+                def log(self, *args):
+                    pass
+
+            store = _Store()
+            with patch.object(backend, "get_store", return_value=store):
+                result = backend.enqueue({"mode": "user", "ids": ["job-unknown"]})
+        self.assertEqual(result["accepted"], [])
+        self.assertEqual(result["unscored"], ["job-unknown"])
+
+    def test_legacy_numeric_score_is_not_document_scored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            class _Store:
+                def __init__(self):
+                    self.files = {"queue": Path(tmp) / "approval-queue.json"}
+
+                def jobs(self):
+                    return [{
+                        "id": "job-legacy", "company": "示例己公司", "title": "产品经理",
+                        "city": "上海", "score": 4.6, "source_channel": "manual_paste",
+                    }]
+
+                def profile(self):
+                    return {"job_intent": {"cities": ["上海"]}}
+
+                def queue(self):
+                    return []
+
+                def deliveries(self):
+                    return []
+
+                def log(self, *args):
+                    pass
+
+            store = _Store()
+            with patch.object(backend, "get_store", return_value=store):
+                result = backend.enqueue({"mode": "user", "ids": ["job-legacy"]})
+                manual = backend.enqueue({
+                    "mode": "user",
+                    "ids": ["job-legacy"],
+                    "allow_low_score": True,
+                    "override_reason": "值得沟通，人工判断",
+                })
+        # 旧评分不是文档评分：不自动入队，只能人工带原因加入。
+        self.assertEqual(result["accepted"], [])
+        self.assertEqual(result["approved"], [])
+        self.assertEqual(result["dropped"], ["job-legacy"])
+        self.assertEqual(manual["manual"], ["job-legacy"])
+
+    def test_coverage_zero_job_can_only_be_added_manually(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            class _Store:
+                def __init__(self):
+                    self.files = {"queue": Path(tmp) / "approval-queue.json"}
+
+                def jobs(self):
+                    return [{
+                        "id": "job-unknown", "company": "示例庚公司", "title": "产品经理",
+                        "city": "上海", "score": 0, "score_raw": 0, "score_coverage": 0.0,
+                        "scoring_model": backend.MATCH_SCORE_MODEL, "mandatory_status": "pending",
+                        "hiring_status": "unknown", "source_channel": "boss", "offerpilot_id": "rt-unknown",
+                    }]
+
+                def profile(self):
+                    return {"job_intent": {"cities": ["上海"]}}
+
+                def queue(self):
+                    return []
+
+                def deliveries(self):
+                    return []
+
+                def log(self, *args):
+                    pass
+
+            store = _Store()
+            with patch.object(backend, "get_store", return_value=store):
+                result = backend.enqueue({
+                    "mode": "user",
+                    "ids": ["job-unknown"],
+                    "allow_low_score": True,
+                    "override_reason": "公司或岗位我已了解",
+                })
+        self.assertEqual(result["accepted"], [])
+        self.assertEqual(result["manual"], ["job-unknown"])
 
 
 class AutoPipelineTests(unittest.TestCase):
@@ -190,9 +287,6 @@ class AutoPipelineTests(unittest.TestCase):
         self.store_patch = patch.object(backend, "get_store", return_value=self.store)
         self.store_patch.start()
         self.addCleanup(self.store_patch.stop)
-        self.threshold_patch = patch.object(offerpilot_runtime, "get_score_threshold", return_value=71)
-        self.threshold_patch.start()
-        self.addCleanup(self.threshold_patch.stop)
         backend._last_pipeline = None
         self.addCleanup(setattr, backend, "_last_pipeline", None)
 
@@ -234,28 +328,33 @@ class AutoPipelineTests(unittest.TestCase):
         self.assertEqual(approved, {
             str(jobs_by_vendor["rt-shanghai"]["id"]),
             str(jobs_by_vendor["rt-no-city"]["id"]),
+            str(jobs_by_vendor["rt-low"]["id"]),
         })
-        # 广州被城市门拦截；50 分映射为 2.8，低于 4.0 门槛。
+        # 广州被城市门拦截；50 分按文档规则仍然可以入队（没有数字阈值）。
         self.assertEqual(
             {item["id"] for item in result["queued"]["city_blocked"]},
             {str(jobs_by_vendor["rt-guangzhou"]["id"])},
         )
-        self.assertIn(str(jobs_by_vendor["rt-low"]["id"]), result["queued"]["dropped"])
+        self.assertEqual(result["queued"]["dropped"], [])
         greet.assert_called_once()
-        self.assertEqual(sorted(greet.call_args.args[0]), ["rt-no-city", "rt-shanghai"])
+        self.assertEqual(sorted(greet.call_args.args[0]), ["rt-low", "rt-no-city", "rt-shanghai"])
         deliver.assert_not_called()
         self.assertIn("最终确认门", result["message"])
         self.assertIn("尚未发送任何消息", result["message"])
 
     def test_pipeline_is_idempotent_on_retry(self):
         self._run()
-        # The first greeting task finished before the retry: both are ready now.
-        ready = [{"id": "rt-shanghai", "ready": True}, {"id": "rt-no-city", "ready": True}]
+        # The first greeting task finished before the retry: all three are ready now.
+        ready = [
+            {"id": "rt-shanghai", "ready": True},
+            {"id": "rt-no-city", "ready": True},
+            {"id": "rt-low", "ready": True},
+        ]
         result, greet, _deliver = self._run(greetings=ready)
         self.assertEqual(result["imported"]["added"], 0)
         self.assertEqual(result["imported"]["duplicates"], 4)
         self.assertEqual(result["queued"]["approved"], [])
-        self.assertEqual(result["greeting"]["already_ready"], 2)
+        self.assertEqual(result["greeting"]["already_ready"], 3)
         greet.assert_not_called()
 
     def test_batch_actions_log_one_row_each(self):
@@ -284,16 +383,23 @@ class AutoPipelineTests(unittest.TestCase):
         }):
             state = backend.get_offerpilot_state("user")
         self.assertTrue(state["pipeline"]["awaiting_confirmation"])
-        self.assertEqual(state["pipeline"]["approved_count"], 2)
+        self.assertEqual(state["pipeline"]["approved_count"], 3)
         self.assertIn("最终确认门", state["pipeline"]["message"])
 
     def test_action_is_registered(self):
         self.assertIs(backend.ACTIONS["offerpilot-automate"], backend.run_offerpilot_pipeline)
 
-    def test_demo_mode_is_rejected(self):
-        with self.assertRaises(backend.ApiError) as ctx:
-            backend.run_offerpilot_pipeline({"data_mode": "demo", "ids": ["x"]})
-        self.assertEqual(ctx.exception.status, 403)
+    def test_mode_is_a_compatibility_field(self):
+        """``data_mode`` is ignored; execution reaches the runtime read."""
+        with patch.object(
+            backend.offerpilot_runtime,
+            "get_jobs",
+            return_value={"ok": False, "error": "运行时不可用"},
+        ) as get_jobs:
+            with self.assertRaises(backend.ApiError) as ctx:
+                backend.run_offerpilot_pipeline({"data_mode": "demo", "ids": ["x"]})
+        self.assertEqual(ctx.exception.status, 503)
+        get_jobs.assert_called_once()
 
 
 class ActivityBatchLogTests(unittest.TestCase):
@@ -305,9 +411,6 @@ class ActivityBatchLogTests(unittest.TestCase):
         web_dir_patch = patch.object(backend, "WEB_DIR", Path(self.tmp.name))
         web_dir_patch.start()
         self.addCleanup(web_dir_patch.stop)
-        threshold_patch = patch.object(offerpilot_runtime, "get_score_threshold", return_value=71)
-        threshold_patch.start()
-        self.addCleanup(threshold_patch.stop)
         self.store = backend.Store("user")
         self.jobs = [
             _runtime_job("rt-three-1", score=85),

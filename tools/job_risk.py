@@ -125,7 +125,14 @@ def assess_job_risk(
     city = _text(job.get("city"))
     salary_text = _text(job.get("salary_text"))
     raw_text = _text(job.get("raw_text"))
-    posted_at = job.get("posted_at")
+    # 「发布过久」只用平台日期：来源更新时间优先。岗位自动化导入行没有平台日期，
+    # 其 posted_at 历史上是入库时间，不参与判断，避免把入库天数当成岗位存续天数。
+    if job.get("source_updated_at"):
+        posted_at = job.get("source_updated_at")
+    elif job.get("offerpilot_id"):
+        posted_at = None
+    else:
+        posted_at = job.get("posted_at")
 
     haystack = _normalize(" \n ".join([title, company, city, salary_text, raw_text]))
     signals: list[dict[str, str]] = []

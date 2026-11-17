@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>猎聘搜索页「我的沟通」抽屉 — 本地测试夹具（虚构数据）</title>
+</head>
+<body>
+  <!-- Fixture for the www search page https://www.liepin.com/zhaopin/ with the
+       「我的沟通」 drawer open on the right.  The structure follows the layout
+       described for the page: each list row shows the recruiter name,
+       「招聘方·公司名」, time, last-message preview and a red unread badge; the
+       open conversation shows a title row (name + 招聘方·公司), the job title and
+       salary, the message list, and a bottom input.  Every name, company, job and
+       message below is fictional.  Nothing here came from a real platform page.
+       Class names mirror JS_LIEPIN_ENSURE_DRAWER_WWW / JS_LIEPIN_CHAT_LIST /
+       JS_LIEPIN_THREAD in web/offerpilot_runtime.py. -->
+  <header class="site-header">
+    <nav>
+      <a class="im-ui-basic-entry" href="#im-basic-contact">我的沟通</a>
+    </nav>
+  </header>
+
+  <main class="search-page">
+    <section class="job-results">
+      <article class="job-card">虚构岗位一</article>
+    </section>
+  </main>
+
+  <div id="im-basic-contact" class="im-basic-contact">
+    <div class="im-ui-contacts-wrap">
+      <ul class="im-ui-contact-list">
+        <li class="im-ui-contact-list-item" data-conversation="c1">
+          <div class="im-ui-title">王示例</div>
+          <div class="im-ui-company-info">招聘方·虚构猎聘科技有限公司</div>
+          <div class="im-ui-time">11-16 10:20</div>
+          <div class="im-ui-last-message-super">您好，方便发一份简历吗</div>
+          <span class="im-ui-unread-count-badge">1</span>
+        </li>
+        <li class="im-ui-contact-list-item" data-conversation="c2">
+          <div class="im-ui-title">李示例</div>
+          <div class="im-ui-company-info">招聘方·示例数据服务有限公司</div>
+          <div class="im-ui-time">11-15 09:05</div>
+          <div class="im-ui-last-message-super">期待您的回复</div>
+        </li>
+      </ul>
+    </div>
+
+    <div class="im-ui-chat-content">
+      <div class="im-ui-chat-title">王示例 · 招聘方·虚构猎聘科技有限公司</div>
+      <div class="im-ui-chat-job">虚构岗位：产品经理 · 示例薪资 20-30K</div>
+      <div class="im-ui-message-wrapper im-ui-message-left">
+        <div class="im-ui-message-body">您好，方便发一份简历吗</div>
+      </div>
+      <div class="im-ui-message-wrapper im-ui-message-right">
+        <div class="im-ui-message-body">您好，我整理好简历后发您。</div>
+      </div>
+      <div class="im-ui-message-wrapper im-ui-message-system">
+        <div class="im-ui-txt-content">对方已查看您的简历</div>
+      </div>
+      <div class="im-ui-chat-input" placeholder="请输入文字，按Enter键发送" disabled>请输入文字，按Enter键发送</div>
+    </div>
+  </div>
+</body>
+</html>

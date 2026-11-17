@@ -1,0 +1,70 @@
+{
+  "id": "fixture-job-001",
+  "company": "示例科技（虚构）",
+  "title": "后端开发工程师（虚构）",
+  "greeting": {
+    "selection": "项目成果版"
+  },
+  "materials": {
+    "mapping": [
+      {
+        "requirement": "熟悉 Python 与异步编程",
+        "evidence": "订单服务用 FastAPI 处理异步任务",
+        "source": "简历项目一"
+      },
+      {
+        "requirement": "有数据库调优经验",
+        "evidence": null,
+        "source": "简历项目二"
+      },
+      {
+        "requirement": null,
+        "evidence": null,
+        "source": null
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "本科及以上",
+        "status": "已满足",
+        "evidence": "简历教育经历"
+      },
+      {
+        "condition": "五年以上后端经验",
+        "status": "明确不满足",
+        "evidence": "目前三年经验"
+      },
+      {
+        "condition": "可在上海到岗",
+        "status": "待确认",
+        "evidence": "需要在确认时说明"
+      },
+      {
+        "condition": "熟悉 Go",
+        "status": "",
+        "evidence": null
+      }
+    ],
+    "unknown_fields": ["团队规模", "汇报对象"],
+    "resume_suggestions": [
+      {
+        "original": "负责订单服务开发",
+        "suggested": "主导订单服务异步化改造，接口平均耗时下降 40%",
+        "evidence": "项目一中的性能记录",
+        "reason": "补充可核对的结果数字"
+      },
+      {
+        "original": "联系方式见平台消息，邮箱 hr-demo@example.com",
+        "suggested": "如需沟通请通过平台消息，微信：demo_wechat_dummy，链接 https://example.com/job",
+        "evidence": null,
+        "reason": null
+      }
+    ],
+    "greetings": {
+      "concise": "您好，我有三年后端开发经验，想了解这个岗位。",
+      "project": "您好，我在订单服务做过异步化改造，接口耗时下降 40%，和岗位要求比较接近。",
+      "safe": "您好，看到岗位在招后端工程师，我的项目经历与要求有重合，方便进一步沟通吗？邮箱 demo@example.com"
+    },
+    "confirm_items": ["确认到岗时间", "确认薪资范围", "确认是否接受远程"]
+  }
+}

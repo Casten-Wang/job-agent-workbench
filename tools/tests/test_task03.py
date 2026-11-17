@@ -422,12 +422,15 @@ class VariantTests(unittest.TestCase):
             text_file.write_text(text, encoding="utf-8")
             now = dt.datetime(2026, 11, 14, 10, 30, tzinfo=dt.timezone.utc)
             config = dict(CONFIG)
+            # The shared store and the legacy per-file directory both stay in
+            # the temporary directory, never in the real web/data/user.
+            config["variants_store"] = str(directory / "variants.json")
             config["variants_dir"] = str(directory / "variants")
             master_before = (PROJECT_ROOT / "workspace" / "resume.md").read_bytes()
             outcome = variants.add_variant("测试数据甲项目", text_file, config, now=now)
             stored = Path(outcome["path"])
             self.assertTrue(stored.is_file())
-            self.assertEqual(json.loads(stored.read_text(encoding="utf-8"))["text"], text)
+            self.assertEqual(json.loads(stored.read_text(encoding="utf-8"))[0]["text"], text)
             self.assertEqual(outcome["record"]["project"], "测试数据甲项目")
             self.assertEqual(outcome["record"]["created_at"], now.isoformat())
             import hashlib
@@ -452,6 +455,7 @@ class VariantTests(unittest.TestCase):
             text_file.write_text("测试数据：另一条手动修改的经历变体。", encoding="utf-8")
             config_file = directory / "config.json"
             test_config = dict(CONFIG)
+            test_config["variants_store"] = str(directory / "variants.json")
             test_config["variants_dir"] = str(directory / "variants")
             config_file.write_text(
                 json.dumps(test_config, ensure_ascii=False), encoding="utf-8"
