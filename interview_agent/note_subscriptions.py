@@ -241,7 +241,9 @@ class NoteSubscriptions:
         with self.db() as db:
             rows = db.execute("SELECT * FROM inbox ORDER BY created DESC,rowid DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
             unread = db.execute("SELECT count(*) FROM inbox WHERE read_at IS NULL").fetchone()[0]
-        return {"items": [{k: row[k] for k in ("id", "job_id", "note_id", "created", "kind", "read_at")} | json.loads(row["payload"]) for row in rows], "unread": unread}
+            total = db.execute("SELECT count(*) FROM inbox").fetchone()[0]
+        return {"items": [{k: row[k] for k in ("id", "job_id", "note_id", "created", "kind", "read_at")} | json.loads(row["payload"]) for row in rows],
+                "unread": unread, "total": total, "next_offset": offset + len(rows) if offset + len(rows) < total else None}
 
     def read(self, key):
         with self.db() as db:
