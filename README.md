@@ -84,6 +84,29 @@ NO_PROXY=127.0.0.1,localhost .venv/bin/python -B tools/run_career_demo.py --engi
 
 脚本使用仓库内的 `.venv`，等价于上面的完整启动命令。Windows 路径尚未在真机上跑通验证；`run_web.sh` 是 sh 脚本，Windows 上只启动工作台时请运行 `.venv\Scripts\python.exe -I -B web\server.py --host 127.0.0.1 --port 8766`。
 
+**停止与重启**：前台运行时按 `Ctrl+C` 停止。改了代码或配置后要重启，已在内存里的旧服务不会自动加载新代码。后台运行的服务先停掉旧的，再用「完整启动」命令重新起：
+
+```bash
+pkill -f tools/run_career_demo.py   # 停掉旧的完整启动；若之前只用 run_web.sh 启动，改用 pkill -f "web/server.py"
+NO_PROXY=127.0.0.1,localhost nohup .venv/bin/python -B tools/run_career_demo.py --engine-root . > /tmp/offerpilot-server.log 2>&1 &
+```
+
+确认服务都起来了：三个端口都应在监听，且对话助理接口不再返回 503。
+
+```bash
+lsof -iTCP -sTCP:LISTEN -P | grep -E "8766|18747|18748"
+curl -s "http://127.0.0.1:8766/api/workbench-agent/conversations?mode=user" | head -c 200
+```
+
+**常见问题**
+
+| 现象 | 原因与处理 |
+| --- | --- |
+| 对话助理发不出消息，页面提示「项目核验服务未启动」，接口 `/api/workbench-agent/*`、`/api/career-user/*` 返回 503 | 只启动了工作台（`run_web.sh` 或 `web/server.py`），没有启动两个本机引擎。停掉后改用上面的「完整启动」命令 |
+| 完整启动报 `Career service startup failed` | 8766 / 18747 / 18748 端口被占用，或没装 `interview_agent/requirements.lock.txt` 的依赖；用 `lsof -iTCP -P \| grep -E "8766\|1874"` 找占用，按「安装」补装依赖 |
+| 对话助理能打开但回复报模型错误 | 「08 设置 › AI 接口设置」里没填 Key 或 Key 无效，填好后点「测试连接」；Key 只存在本机；修改后无需重启，在当前任务结束时自动应用 |
+| 想先看页面、暂时没有 Key | 完整启动命令加 `--knowledge-only`，只起工作台和离线知识库 |
+
 ### 首次使用
 
 1. 打开 <http://127.0.0.1:8766/>，进入「08 设置 › AI 接口设置」，选服务商、填模型名和 API Key 并保存，再点「测试连接」。

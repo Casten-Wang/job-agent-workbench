@@ -114,7 +114,7 @@ class CareerHttpTests(unittest.TestCase):
         with patch.dict(os.environ, {"OFFERPILOT_CAREER_AGENT_TOKEN": ""}):
             status, body = self.request("/api/resume-agent/materials?mode=user")
         self.assertEqual(status, 503)
-        self.assertIn("启动面试服务", json.loads(body)["error"])
+        self.assertIn("run_career_demo.py", json.loads(body)["error"])
 
     def test_capabilities_route_is_credential_free(self):
         status, body = self.request("/api/agent/capabilities")

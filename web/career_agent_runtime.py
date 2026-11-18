@@ -39,7 +39,7 @@ def _request(method, path, payload=None):
 def service_request(port, token_env, method, path, payload=None):
     token = os.environ.get(token_env, "")
     if len(token) < 20:
-        raise ApiError("项目核验服务未启动：请先在本机启动面试服务后重试", 503)
+        raise ApiError("项目核验服务未启动：请改用完整启动 tools/run_career_demo.py（见 README「启动」）重启后重试", 503)
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=150)
     try:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
