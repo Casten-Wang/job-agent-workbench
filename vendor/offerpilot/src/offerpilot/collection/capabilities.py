@@ -8,7 +8,8 @@ PLATFORM_CAPABILITIES: dict[str, frozenset[str]] = {
     # 智联的 deliver 已在 2026-11-18 用真实账号验证过一次（立即投递 → 平台发送简历与预置招呼语）。
     "zhilian": frozenset({"collect", "score", "greet", "deliver"}),
     "51job": frozenset({"collect", "score", "greet"}),
-    "liepin": frozenset({"collect", "score", "greet"}),
+    # 猎聘的 deliver 已在 2026-11-18 用真实账号验证过（搜索页分栏点「聊一聊」，平台发出预置招呼语）。
+    "liepin": frozenset({"collect", "score", "greet", "deliver"}),
 }
 
 

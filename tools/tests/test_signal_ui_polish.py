@@ -462,8 +462,8 @@ class ReadmeRunStepsTests(unittest.TestCase):
         caps = _read(PROJECT_ROOT / "vendor" / "offerpilot" / "src" / "offerpilot" / "collection" / "capabilities.py")
         self.assertIn('"boss": frozenset({"collect", "score", "greet", "deliver", "monitor"})', caps)
         self.assertIn('"zhilian": frozenset({"collect", "score", "greet", "deliver"})', caps)
-        for platform in ("51job", "liepin"):
-            self.assertIn(f'"{platform}": frozenset({{"collect", "score", "greet"}})', caps)
+        self.assertIn('"liepin": frozenset({"collect", "score", "greet", "deliver"})', caps)
+        self.assertIn('"51job": frozenset({"collect", "score", "greet"})', caps)
         for label in ("Boss直聘", "智联招聘", "前程无忧", "猎聘"):
             self.assertIn(label, self.readme)
 

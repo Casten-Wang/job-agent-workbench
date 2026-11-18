@@ -3564,7 +3564,9 @@ function syncCollectModeUI() {
         ? ''
         : platform === 'zhilian'
           ? '智联可采集、打分，并可在工作台投递（发出的是平台预置招呼语）。'
-          : `${collectPlatformLabel(platform)} 可采集、打分、生成招呼语；发送请自己复制到平台。`;
+          : platform === 'liepin'
+            ? '猎聘可采集、打分，并可在工作台发送（发出的是平台预置招呼语）。'
+            : `${collectPlatformLabel(platform)} 可采集、打分、生成招呼语；发送请自己复制到平台。`;
     }
   }
   renderCollectSummary();

@@ -1910,7 +1910,7 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
             "只有已确认且来自采集结果的岗位可以发送；请检查：" + "、".join(invalid[:5]),
             409,
         )
-    send_blocked = {"51job": "前程无忧", "liepin": "猎聘"}
+    send_blocked = {"51job": "前程无忧"}
     unsupported = [
         job_id for job_id in job_ids
         if str((jobs.get(job_id) or {}).get("source_channel") or "") in send_blocked

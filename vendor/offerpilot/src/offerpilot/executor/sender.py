@@ -763,6 +763,14 @@ def _send_greeting_once(job: dict, greeting: str, throttle_config: dict) -> tupl
             job, throttle_config,
             stop_requested=_stop_requested, sleep_or_stop=_sleep_or_stop,
         )
+    if str(job.get("source_platform") or "boss") == "liepin":
+        # 猎聘：在搜索页分栏里点「聊一聊」，平台立刻发出预置招呼语。
+        from offerpilot.executor.sender_liepin import send_liepin_application
+
+        return send_liepin_application(
+            job, throttle_config,
+            stop_requested=_stop_requested, sleep_or_stop=_sleep_or_stop,
+        )
     stop_event = throttle_config.get("_workbench_stop_event")
     existing_target_ids = {
         str(target.get("targetId") or "")

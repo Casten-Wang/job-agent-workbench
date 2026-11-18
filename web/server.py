@@ -46,6 +46,8 @@ STATIC_FILES = {
     "/sg-base.css": ("sg-base.css", "text/css; charset=utf-8"),
     "/sg-pipeline.css": ("sg-pipeline.css", "text/css; charset=utf-8"),
     "/sg-tools.css": ("sg-tools.css", "text/css; charset=utf-8"),
+    "/mj-base.css": ("mj-base.css", "text/css; charset=utf-8"),
+    "/mj-pages.css": ("mj-pages.css", "text/css; charset=utf-8"),
     "/workbench-agent.js": ("workbench-agent.js", "text/javascript; charset=utf-8"),
     "/career-user.js": ("career-user.js", "text/javascript; charset=utf-8"),
 }

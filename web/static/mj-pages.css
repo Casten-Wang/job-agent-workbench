@@ -1,0 +1,1904 @@
+/* 「墨靛」页面层：采集、岗位池、审批、HR 回复、个人资料、定制简历、模拟面试、信息推送。
+ * 规格见 web/COTTON-UI-SPEC.md；--mj-* token 由 mj-base.css 定义，本文件只引用、不定义。
+ * 本文件不使用 !important；每条选择器都以 body.offer-ui:not(#wa-theme-off) 开头。
+ */
+
+/* ==========================================================================
+ * 1. 四个流水线页签共用的页头、页签、按钮、徽标、表格
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-title {
+  font-size: 36px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-lede {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-help > summary {
+  padding: 4px 10px;
+  border-radius: var(--mj-r-tag);
+  background: transparent;
+  color: var(--mj-mute);
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-help[open] > summary {
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-help > p {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+/* 页签：轨道 brand-soft，选中墨靛底；深色选中用品牌靛蓝。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tabs {
+  margin-top: 4px;
+  padding: 4px;
+  border-radius: var(--mj-r-control);
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: calc(var(--mj-r-control) - 2px);
+  color: var(--mj-text-2);
+  font-size: 13px;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab:hover {
+  background: color-mix(in srgb, var(--mj-brand) 10%, transparent);
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab.is-active,
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab[aria-current="page"] {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab.is-active,
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab[aria-current="page"] {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab.is-active,
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab[aria-current="page"] {
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+  }
+}
+
+/* 按钮回到 10px 圆角，不再用胶囊。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .button {
+  border-radius: var(--mj-r-control);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .button:disabled {
+  opacity: .45;
+}
+
+/* 徽标统一为 8px 标签角；good 用浅底深字，不做实心强调色。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge {
+  padding: 0 9px;
+  border-radius: var(--mj-r-tag);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-good {
+  background: var(--mj-good-bg);
+  color: var(--mj-good);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-neutral {
+  background: transparent;
+  color: var(--mj-text-2);
+  box-shadow: inset 0 0 0 1px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-warn {
+  background: var(--mj-warn-bg);
+  color: var(--mj-warn);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-bad {
+  background: var(--mj-bad-bg);
+  color: var(--mj-bad);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-disabled-reason {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+/* 表格：表头 paper-2 吸顶，行高 48，悬停 brand-soft。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .table-wrap {
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table thead th {
+  border-bottom: 1px solid var(--mj-line);
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table tbody tr {
+  height: 48px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table tbody td {
+  border-bottom: 1px solid var(--mj-line);
+  color: var(--mj-text);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table tbody tr:hover td {
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--mj-spark);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .empty-cell {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .cell-mono {
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .empty-cell .button {
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+ * 2. 采集页
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-criteria-line {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-criteria-line > strong {
+  color: var(--mj-ink);
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-criteria-line > span {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-form {
+  display: grid;
+  gap: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-details {
+  margin: 4px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-details > summary {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-details[open] > summary {
+  margin-bottom: 10px;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .resume-dropzone {
+  border: 1.5px dashed var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .resume-dropzone:hover,
+body.offer-ui:not(#wa-theme-off) #view-collect .resume-dropzone:focus-visible {
+  border-color: var(--mj-brand);
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-resume-main strong {
+  color: var(--mj-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-resume-main p {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .resume-drop-status {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-summary {
+  padding: 10px 12px;
+  border: 1px dashed var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  box-shadow: inset 0 0 0 1px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card h4 {
+  margin: 0 0 8px;
+  font-family: var(--mj-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card .hint {
+  color: var(--mj-mute);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-task-line {
+  margin: 0;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect :is(.cell-mono, .offerpilot-task-line .cell-mono) {
+  font-family: var(--mj-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 采集结果：子区块自己的标题栏，不再借用面板顶栏的负外边距。 */
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs > .panel-head {
+  margin: 0 0 12px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--mj-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs > .panel-head h4 {
+  margin: 0;
+  font-family: var(--mj-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs .offerpilot-details {
+  background: transparent;
+}
+
+/* 启动前检查：窗口标题栏与 18px 卡内边距对齐。 */
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card > .panel-head {
+  margin: -18px -18px 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-card) var(--mj-r-card) 0 0;
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card > .panel-head h4 {
+  margin: 0;
+  font-family: var(--mj-serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check {
+  padding: 9px 11px;
+  border-left: 3px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check:has(.badge-good) {
+  border-left-color: var(--mj-good);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check:has(.badge-warn) {
+  border-left-color: var(--mj-warn);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check:has(.badge-bad) {
+  border-left-color: var(--mj-bad);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body strong {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body p {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
+  border-top: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .checkbox-label {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .integration-meta {
+  margin: 8px 0 0;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .integration-meta dt {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .integration-meta dd {
+  margin: 0;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* ==========================================================================
+ * 3. 岗位池
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-filter-bar {
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-filter-select,
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-filter-actions {
+  gap: 8px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason-label {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason {
+  min-height: 32px;
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-selection-count {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td {
+  padding: 8px 10px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-company {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-title {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-platform {
+  padding: 1px 8px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-score {
+  font-family: var(--mj-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-score-empty {
+  color: var(--mj-text-2);
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table :is(th, td):nth-child(7) {
+  text-align: right;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions .button {
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions select {
+  min-height: 30px;
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions .terminal-note {
+  color: var(--mj-mute);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(13) {
+  background: var(--mj-paper);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13) {
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table tbody tr:hover td:nth-child(13) {
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-manual-entry > summary,
+body.offer-ui:not(#wa-theme-off) #view-jobs .advanced-panel > summary {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .advanced-panel > .panel-head {
+  margin: 8px 0 12px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--mj-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 批量操作条：贴底时用浮起阴影。 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-bulk-bar,
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar {
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper);
+  box-shadow: inset 0 0 0 1px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-bulk-bar:has(#jobs-bulk-enqueue:not(:disabled)) {
+  box-shadow: var(--mj-shadow-float);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar:has(.button:not(:disabled)) {
+  box-shadow: var(--mj-shadow-float);
+}
+
+/* 详情 / 核对抽屉：纸面窗口 + 浮起阴影。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) :is(#jobs-dossier, #queue-review) {
+  padding: 20px 20px 28px;
+  border-left: 1px solid var(--mj-line);
+  border-radius: 0;
+  background: var(--mj-paper);
+  box-shadow: var(--mj-shadow-float);
+}
+
+/* ==========================================================================
+ * 4. 审批队列
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-toolbar {
+  gap: 10px;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-count {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-greeting-card {
+  padding: 12px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-greeting-head strong {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-greeting-text {
+  color: var(--mj-text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-greeting-meta {
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-greetings > .muted {
+  color: var(--mj-mute);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-modal {
+  border-radius: var(--mj-r-stage);
+  background: var(--mj-paper);
+  box-shadow: var(--mj-shadow-float);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-head h3 {
+  font-family: var(--mj-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-summary {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-item {
+  border: 1px dashed var(--mj-line);
+  border-radius: var(--mj-r-inner);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-item strong {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-item p {
+  color: var(--mj-text);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-meta,
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-evidence {
+  color: var(--mj-mute);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-card {
+  padding: 12px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-result {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-queue-delivery-platform,
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-hr-reply-platform {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+/* ==========================================================================
+ * 5. HR 回复
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-mail #hr-conversations-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--mj-line);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar h3 {
+  font-family: var(--mj-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar-note {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sync {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sync-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--mj-mute);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sync[data-state="syncing"] .hr-sync-dot {
+  background: var(--mj-brand);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sync[data-state="ok"] .hr-sync-dot {
+  background: var(--mj-good);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sync[data-state="error"] .hr-sync-dot {
+  background: var(--mj-bad);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-notice {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--mj-line);
+  border-left: 3px solid var(--mj-warn);
+  background: var(--mj-warn-bg);
+  color: var(--mj-text);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sidebar {
+  padding: 16px 12px;
+  border-right: 1px solid var(--mj-line);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-sidebar-title {
+  color: var(--mj-mute);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-count {
+  color: var(--mj-mute);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-search {
+  border-radius: var(--mj-r-control);
+  background: var(--mj-paper);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-filter {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-filter select {
+  max-width: 160px;
+  border-radius: var(--mj-r-control);
+  background: var(--mj-paper);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-filter {
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--mj-r-control);
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-filter:hover {
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-filter.is-active {
+  border-color: var(--mj-line);
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-status {
+  padding: 8px 0;
+  border-top: 1px solid var(--mj-line);
+  border-bottom: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row {
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper);
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row.is-error {
+  border-color: color-mix(in srgb, var(--mj-warn) 45%, transparent);
+  background: var(--mj-warn-bg);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--mj-good);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row.is-error .hr-platform-dot {
+  background: var(--mj-warn);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row-detail {
+  color: var(--mj-text);
+  font-family: var(--mj-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row.is-error .hr-platform-row-detail {
+  color: var(--mj-warn);
+}
+
+/* 会话项：未读茜红点 8px，选中 brand-soft + 左 3px 茜红条。 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation {
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--mj-r-inner);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation:hover {
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {
+  border-color: transparent;
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+  box-shadow: inset 3px 0 0 var(--mj-spark);
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+  box-shadow: inset 3px 0 0 var(--mj-spark);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {
+    background: var(--mj-brand-soft);
+    color: var(--mj-ink);
+    box-shadow: inset 3px 0 0 var(--mj-spark);
+  }
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-hr {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-sub {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-last {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-unread .hr-conversation-last {
+  color: var(--mj-text);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-time {
+  color: var(--mj-mute);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-unread-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--mj-spark);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-badge.sg-platform-tag {
+  height: 22px;
+  padding: 0 8px 0 4px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
+    background: var(--mj-ink);
+    color: var(--mj-brand-ink);
+  }
+}
+
+/* 右列：会话头、正文、气泡、发送区。 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread {
+  background: var(--mj-paper);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-head {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--mj-line);
+  background: var(--mj-paper);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-head h4 {
+  font-family: var(--mj-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-meta,
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-muted {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-avatar {
+  width: 38px;
+  height: 38px;
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-empty {
+  border: 1px dashed var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card {
+  padding: 8px 10px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-label {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-title {
+  color: var(--mj-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-score {
+  color: var(--mj-text-2);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-messages {
+  padding: 20px 24px;
+  background: var(--mj-canvas);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message {
+  max-width: min(72%, 600px);
+  padding: 10px 14px 8px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-card) var(--mj-r-card) var(--mj-r-card) 4px;
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-hr {
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-me {
+  border-color: transparent;
+  border-radius: var(--mj-r-card) var(--mj-r-card) 4px var(--mj-r-card);
+  background: var(--mj-brand-soft);
+  color: var(--mj-text);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-me .hr-message-meta {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-system {
+  max-width: min(92%, 520px);
+  border: 1px dashed var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: transparent;
+  color: var(--mj-mute);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-meta {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-text {
+  color: var(--mj-text);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-system .hr-message-text {
+  color: var(--mj-mute);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty,
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty-hint {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-block-reason {
+  padding: 8px 10px;
+  border-left: 3px solid var(--mj-warn);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-warn-bg);
+  color: var(--mj-warn);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer {
+  margin: 0 18px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer:focus-within {
+  border-color: var(--mj-brand);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer textarea {
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-control);
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer textarea:focus,
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer textarea:focus-visible {
+  border: 1px solid var(--mj-brand);
+  box-shadow: none;
+  outline: 2px solid var(--mj-brand);
+  outline-offset: 1px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer-actions {
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-key-hint,
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-draft-count {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-draft-count {
+  font-family: var(--mj-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer .button {
+  border-radius: var(--mj-r-control);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-send {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: var(--mj-r-control);
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-send:not(:disabled):hover {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-send:disabled {
+  opacity: .45;
+}
+
+/* 确认对话框 #hr-reply-confirm-panel：浮起阴影、stage 圆角、衬线标题。 */
+body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-confirm-panel {
+  background: color-mix(in srgb, var(--mj-ink) 32%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-confirm-panel .hr-reply-dialog {
+  border-radius: var(--mj-r-stage);
+  background: var(--mj-paper);
+  box-shadow: var(--mj-shadow-float);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-head h3 {
+  font-family: var(--mj-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-who {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-text {
+  padding: 12px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-progress {
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline {
+  margin-top: 16px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-summary {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-note {
+  color: var(--mj-mute);
+  font-size: 12.5px;
+}
+
+/* ==========================================================================
+ * 6. 个人资料
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-profile #profile-meter.profile-meter {
+  margin: 4px 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-card);
+  background: var(--mj-paper-2);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress-value {
+  color: var(--mj-ink);
+  font-family: var(--mj-serif);
+  font-size: 44px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress-value small {
+  color: var(--mj-mute);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress .profile-meter-bar {
+  height: 6px;
+  border: 0;
+  background: color-mix(in srgb, var(--mj-ink) 10%, transparent);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress .profile-meter-bar > span {
+  background: var(--mj-brand);
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress .profile-meter-bar > span {
+  background: var(--mj-brand);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress .profile-meter-bar > span {
+    background: var(--mj-brand);
+  }
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress .profile-meter-text {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-chip.is-done {
+  background: var(--mj-good-bg);
+  color: var(--mj-good);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-profile .profile-chip.is-done {
+  background: var(--mj-good-bg);
+  color: var(--mj-good);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) #view-profile .profile-chip.is-done {
+    background: var(--mj-good-bg);
+    color: var(--mj-good);
+  }
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-chip-hint {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav {
+  padding: 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-card);
+  background: var(--mj-paper-2);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-title {
+  margin: 2px 10px 6px;
+  color: var(--mj-mute);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: var(--mj-r-tag);
+  color: var(--mj-text-2);
+  font-size: 13px;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item:hover {
+  background: var(--mj-paper);
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-state {
+  border-radius: var(--mj-r-tag);
+  color: var(--mj-mute);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item.is-done .sg-profile-nav-state {
+  background: var(--mj-good-bg);
+  color: var(--mj-good);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item.is-done .sg-profile-nav-state {
+  background: var(--mj-good-bg);
+  color: var(--mj-good);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item.is-done .sg-profile-nav-state {
+    background: var(--mj-good-bg);
+    color: var(--mj-good);
+  }
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-note {
+  margin: 8px 10px 2px;
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-section-title {
+  margin: 28px 0 12px;
+  color: var(--mj-ink);
+  font-family: var(--mj-serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview) .profile-required-mark,
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-required {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mj-spark);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+  vertical-align: middle;
+}
+
+/* 个人资料一屏有 10 个「必填」，改用中性灰，把茜红让给真正的情绪信号（规格 §2 ≤5 处）。 */
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-required-mark {
+  margin: 0 0 0 6px;
+  color: var(--mj-mute);
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-field-note {
+  margin: 6px 0 0;
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .form-field label,
+body.offer-ui:not(#wa-theme-off) #view-interview .form-field label,
+body.offer-ui:not(#wa-theme-off) #view-push .form-field label,
+body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .form-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-list {
+  gap: 10px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-item {
+  padding: 12px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-item-title {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-truth {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone,
+body.offer-ui:not(#wa-theme-off) #view-resume .resume-dropzone {
+  padding: 16px 18px;
+  border: 1.5px dashed var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone:hover,
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone:focus-visible,
+body.offer-ui:not(#wa-theme-off) #view-resume .resume-dropzone:hover,
+body.offer-ui:not(#wa-theme-off) #view-resume .resume-dropzone:focus-visible {
+  border-color: var(--mj-brand);
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone strong {
+  color: var(--mj-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone p {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-profile .profile-import-text {
+  color: var(--mj-text-2);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+ * 7. 定制简历
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-resume .two-col {
+  gap: 16px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) legend {
+  padding: 0 6px;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-control);
+  background: var(--mj-paper);
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) > label:has(input:checked) {
+  padding: 9.5px 11.5px;
+  border: 1.5px solid var(--mj-brand);
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) label strong {
+  display: block;
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) label small {
+  display: block;
+  margin-top: 2px;
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .career-message {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .career-code {
+  color: var(--mj-text-2);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-preview-frame {
+  padding: 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-document.resume-sheet {
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper);
+  color: var(--mj-text);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dt {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dd {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-saved {
+  margin-top: 16px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-project {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-sha {
+  color: var(--mj-mute);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .table-wrap {
+  border-radius: var(--mj-r-inner);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .data-table th {
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .data-table td {
+  border-bottom: 1px solid var(--mj-line);
+  color: var(--mj-text);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .resume-compare-cell {
+  font-family: var(--mj-mono);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .ats-keyword,
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-ai-help,
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-ai-test-note {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* ==========================================================================
+ * 8. 模拟面试
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node {
+  padding: 18px;
+  border: 0;
+  border-radius: var(--mj-r-card);
+  background: var(--mj-paper);
+  box-shadow: inset 0 0 0 1px var(--mj-line), var(--mj-shadow-card);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node:hover {
+  border: 0;
+  transform: translateY(-2px);
+  box-shadow: inset 0 0 0 1px var(--mj-line), var(--mj-shadow-float);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-index {
+  color: var(--mj-mute);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-owner {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-name {
+  color: var(--mj-ink);
+  font-family: var(--mj-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .sg-card-count strong {
+  color: var(--mj-ink);
+  font-family: var(--mj-serif);
+  font-size: 44px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .sg-card-count span {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-desc {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-status {
+  padding: 2px 8px;
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .sg-card-enter {
+  padding: 5px 12px;
+  border-radius: var(--mj-r-control);
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node:hover .sg-card-enter {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .interview-module-nav {
+  margin-bottom: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-progress {
+  color: var(--mj-text-2);
+  font-family: var(--mj-mono);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set {
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set legend {
+  padding: 0 6px;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set .checkbox-label {
+  color: var(--mj-text);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-rules {
+  padding: 10px 14px;
+  border-left: 3px solid var(--mj-brand);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-brand-soft);
+  color: var(--mj-text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-log {
+  padding: 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn {
+  padding: 10px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-card) var(--mj-r-card) var(--mj-r-card) 4px;
+  background: var(--mj-paper);
+  color: var(--mj-text);
+  font-size: 15px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-candidate {
+  border-radius: var(--mj-r-card) var(--mj-r-card) 4px var(--mj-r-card);
+  border-color: transparent;
+  background: var(--mj-brand-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-incomplete {
+  border-color: transparent;
+  background: var(--mj-warn-bg);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-note {
+  color: var(--mj-warn);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-composer {
+  padding-top: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-error {
+  padding: 10px 12px;
+  border-left: 3px solid var(--mj-bad);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-bad-bg);
+  color: var(--mj-bad);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-web-notice {
+  padding: 10px 12px;
+  border-left: 3px solid var(--mj-warn);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-warn-bg);
+  color: var(--mj-text);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-debrief,
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-debrief-history {
+  padding: 16px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-debrief-heading {
+  color: var(--mj-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-score {
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-score-label {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-score-evidence,
+body.offer-ui:not(#wa-theme-off) #view-interview :is(.chat-debrief-reason, .chat-debrief-fix, .chat-disclaimer, .chat-not-offer) {
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-library-item {
+  padding: 10px 12px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-library-title {
+  color: var(--mj-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-interview .chat-library-source {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+/* ==========================================================================
+ * 9. 信息推送
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-push .code-block {
+  max-height: 420px;
+  padding: 12px 14px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-inner);
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-push .sg-dry-empty {
+  margin: 12px 0 0;
+  color: var(--mj-mute);
+  font-size: 13px;
+}
+
+/* ==========================================================================
+ * 10. 四个工具页共用的细节
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note {
+  margin-top: 16px;
+  padding: 2px 16px;
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-card);
+  background: var(--mj-paper);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note > summary {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note > summary::after {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note[open] > summary {
+  border-bottom: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note > p {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note .integration-meta dt {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note .integration-meta dd {
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) :is(.integration-meta, .sg-dev-note, .career-message) code {
+  font-family: var(--mj-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .checkbox-label {
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--mj-brand);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) summary {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .section-label {
+  color: var(--mj-mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .subhead {
+  color: var(--mj-text-2);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .hint {
+  color: var(--mj-mute);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* ==========================================================================
+ * 11. 动效：只保留颜色与位移，减弱动效时全部关闭
+ * ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab,
+  body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation,
+  body.offer-ui:not(#wa-theme-off) #view-mail .hr-message,
+  body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item,
+  body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone,
+  body.offer-ui:not(#wa-theme-off) #view-resume .resume-dropzone,
+  body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) > label,
+  body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node {
+    transition: none;
+  }
+}

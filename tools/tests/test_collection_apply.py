@@ -265,11 +265,10 @@ class PlatformVocabularyTests(unittest.TestCase):
     def test_capabilities_keep_deliver_locked(self):
         from offerpilot.collection.capabilities import platform_supports
 
-        # 智联的投递已在真实账号上验证并开放；前程无忧、猎聘仍锁定。
+        # 智联、猎聘的投递已在真实账号上验证并开放；前程无忧没有站内聊天，仍锁定。
         self.assertTrue(platform_supports("zhilian", "deliver"))
-        for platform in ("51job", "liepin"):
-            with self.subTest(platform=platform):
-                self.assertFalse(platform_supports(platform, "deliver"))
+        self.assertTrue(platform_supports("liepin", "deliver"))
+        self.assertFalse(platform_supports("51job", "deliver"))
 
 
 if __name__ == "__main__":
