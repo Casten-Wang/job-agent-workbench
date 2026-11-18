@@ -462,14 +462,6 @@ body.offer-ui:not(#wa-theme-off) #view-push .form-field label {
   font-size: 12.5px;
   font-weight: 600;
 }
-body.offer-ui:not(#wa-theme-off) #view-push .sg-dry-tools {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-body.offer-ui:not(#wa-theme-off) #view-push .sg-dry-tools .hint { margin: 0; }
 body.offer-ui:not(#wa-theme-off) #view-push .code-block {
   max-height: 420px;
   overflow: auto;

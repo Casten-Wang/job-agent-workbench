@@ -94,12 +94,14 @@ class SignalToolsUiTest(unittest.TestCase):
         self.assertIn("mockTools.hidden = phase === 'idle'", script)
         self.assertIn("预计", script)
 
-    def test_push_form_uses_placeholders_and_example_tools(self):
+    def test_push_form_uses_placeholders(self):
         html = read("index.html")
-        for marker in ('id="sg-dry-example"', 'id="sg-dry-clear"', 'id="sg-dry-empty"'):
+        self.assertIn('id="sg-dry-empty"', html)
+        for marker in ('placeholder="例如 web-demo"', 'placeholder="例如 虚构公司"',
+                       'placeholder="例如 产品经理"', 'placeholder="例如 已采集"',
+                       'placeholder="例如 manual_paste"'):
             with self.subTest(marker=marker):
                 self.assertIn(marker, html)
-        self.assertIn('placeholder="例如 web-demo"', html)
         self.assertNotIn('id="dry-job-id" type="text" value=', html)
 
 

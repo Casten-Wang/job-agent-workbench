@@ -8568,40 +8568,6 @@ function bindEvents() {
     if (emptyNote) emptyNote.hidden = true;
   });
 
-  const dryExample = document.getElementById('sg-dry-example');
-  if (dryExample) {
-    dryExample.addEventListener('click', () => {
-      const example = {
-        id: dom.dryJobId,
-        company: dom.dryCompany,
-        title: dom.dryTitle,
-        status: dom.dryStatus,
-        channel: dom.dryChannel
-      };
-      const values = {
-        id: 'web-demo',
-        company: '虚构公司',
-        title: '产品经理',
-        status: '已采集',
-        channel: 'manual_paste'
-      };
-      Object.keys(example).forEach((key) => {
-        if (example[key]) example[key].value = values[key];
-      });
-    });
-  }
-  const dryClear = document.getElementById('sg-dry-clear');
-  if (dryClear) {
-    dryClear.addEventListener('click', () => {
-      [dom.dryJobId, dom.dryCompany, dom.dryTitle, dom.dryStatus, dom.dryChannel].forEach((input) => {
-        if (input) input.value = '';
-      });
-      dom.dryRunResult.hidden = true;
-      dom.dryRunResult.textContent = '';
-      const emptyNote = document.getElementById('sg-dry-empty');
-      if (emptyNote) emptyNote.hidden = false;
-    });
-  }
 }
 
 function bindAmbient() {
