@@ -160,6 +160,15 @@ class Store:
                               (_identifier(owner), limit, offset))
             return [_material(row) for row in rows]
 
+    def list_sessions(self, owner, *, state, limit=100, offset=0):
+        _pagination(limit, offset)
+        if state not in {"in_progress", "completed"}:
+            raise ValueError("Invalid session state")
+        with self._connection() as db:
+            rows = db.execute("SELECT * FROM sessions WHERE owner=? AND state=? ORDER BY created_at DESC, session_id ASC LIMIT ? OFFSET ?",
+                              (_identifier(owner), state, limit, offset))
+            return [_session(row) for row in rows]
+
     def create_session(self, owner, session_id, material_id, payload):
         owner, session_id, material_id = map(_identifier, (owner, session_id, material_id))
         encoded = _payload_json(payload)

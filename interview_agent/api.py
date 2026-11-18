@@ -51,6 +51,14 @@ def create_app(db_path, checkpoint_path, owner, token, agent=None, *, career_roo
                     career=getattr(app.state, "career", None), token=token,
                     notes=getattr(app.state, "note_subscriptions", None),
                     mode="user" if career_root is not None else "demo")
+                from .comprehensive_graph import ComprehensiveInterviewWorkflow
+                app.state.comprehensive = ComprehensiveInterviewWorkflow(
+                    repo,
+                    execution,
+                    saver,
+                    knowledge=getattr(app.state, "knowledge", None),
+                    notes=getattr(app.state, "note_subscriptions", None),
+                )
                 if getattr(execution, "managed", False):
                     execution.is_busy = lambda: any(not task.done() for task in list(app.state.workbench.tasks.values())) or any(
                         not task.done() for task in list(getattr(getattr(app.state, "career", None), "tasks", [])))
@@ -78,6 +86,8 @@ def create_app(db_path, checkpoint_path, owner, token, agent=None, *, career_roo
     app = FastAPI(title="Interview Agent Local", version="0.1.0", lifespan=lifespan, dependencies=[Depends(authorized)])
     from .workbench_api import install_workbench_routes
     install_workbench_routes(app)
+    from .comprehensive_api import install_comprehensive_routes
+    install_comprehensive_routes(app)
     if career_root is not None:
         from .career_api import install_career_routes
         install_career_routes(app, repo)

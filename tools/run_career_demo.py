@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser = argparse.ArgumentParser(description="OfferPilot public project verification demo")
-    parser.add_argument("--engine-root", type=Path, default=ROOT.parent,
+    parser.add_argument("--engine-root", type=Path, default=ROOT,
                         help="Directory containing interview_agent and interview_hub")
     parser.add_argument("--knowledge-only", action="store_true", help="Start workbench and offline knowledge without a model key")
     parser.add_argument("--langsmith", action="store_true", help="Enable opt-in LangSmith tracing; reads its key hidden when absent")
@@ -43,6 +43,9 @@ def main():
         os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
     sys.path.insert(0, str(args.engine_root.resolve()))
     sys.path.insert(0, str(ROOT / "web"))
+    sys.path.insert(0, str(ROOT / "tools"))
+    from configure_langfuse import apply_saved
+    apply_saved()
     import uvicorn
     from interview_agent.api import create_app
     from interview_hub.recap import validate_result

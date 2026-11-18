@@ -59,7 +59,7 @@ def _run_node(harness_body: str, payload: dict, label: str):
     completed = subprocess.run(
         [node, "-e", harness],
         input=json.dumps(payload, ensure_ascii=False),
-        text=True,
+        text=True, encoding="utf-8",
         capture_output=True,
         check=False,
     )
@@ -134,6 +134,11 @@ class HrInboxOrderTests(unittest.TestCase):
     def _run(cls, payload):
         body = (
             "const now = new Date(input.now);\n"
+            "const RealDate = Date;\n"
+            "global.Date = class extends RealDate {\n"
+            "  constructor(...args) { super(...(args.length ? args : [input.now])); }\n"
+            "  static now() { return now.getTime(); }\n"
+            "};\n"
             "process.stdout.write(JSON.stringify({\n"
             "  times: input.values.map((value) => {\n"
             "    const time = hrMessageTime(value, now);\n"

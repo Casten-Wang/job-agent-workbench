@@ -174,7 +174,7 @@ class MaterialsModelTests(unittest.TestCase):
         completed = subprocess.run(
             [node, "-e", harness],
             input=json.dumps({"job": job}, ensure_ascii=False),
-            text=True,
+            text=True, encoding="utf-8",
             capture_output=True,
             check=False,
         )
@@ -195,7 +195,7 @@ class MaterialsModelTests(unittest.TestCase):
         completed = subprocess.run(
             [node, "-e", harness],
             input=json.dumps({"text": text}, ensure_ascii=False),
-            text=True,
+            text=True, encoding="utf-8",
             capture_output=True,
             check=False,
         )

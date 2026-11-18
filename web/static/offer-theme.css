@@ -4261,6 +4261,52 @@ body.offer-ui .home-task-count {
   .career-panel .integration-head { display: grid; grid-template-columns: 40px minmax(0, 1fr); }
   .career-panel .integration-head > .badge { grid-column: 2; justify-self: start; }
 }
+
+.cu-check { display: flex; align-items: flex-start; gap: 10px; margin-block: 12px; line-height: 1.6; }
+.cu-check input { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 3px; }
+.cu-source-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border: 0; padding: 0; margin: 18px 0; }
+.cu-source-choice legend { margin-bottom: 10px; font-weight: 600; }
+.cu-source-choice label { display: flex; align-items: flex-start; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.cu-source-choice label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.cu-source-choice input { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 3px; }
+.cu-source-choice strong, .cu-source-choice small { display: block; }
+.cu-source-choice small { color: var(--mute); font-size: 13px; line-height: 1.6; margin-top: 5px; }
+#cu-experience-panel details { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+#cu-experience-panel summary { cursor: pointer; font-weight: 600; }
+#cu-experience-panel details .form-field { margin-top: 14px; }
+@media (max-width: 600px) { .cu-source-choice { grid-template-columns: minmax(0, 1fr); } }
+.cu-repo-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.cu-repo-row > div { min-width: 0; overflow-wrap: anywhere; }
+.cu-preview-frame { max-height: 820px; overflow: auto; margin-block: 16px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: #e9edf2; }
+.cu-template-choice { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; padding: 0; border: 0; }
+.cu-template-choice legend { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+.cu-template-choice label { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.cu-template-choice label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.cu-template-choice input { width: 18px; height: 18px; }
+.cu-template-choice strong, .cu-template-choice small { display: block; }
+.cu-template-choice small { margin-top: 3px; color: var(--mute); font-size: 12px; }
+#cu-setup { border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-block: 14px; }
+#cu-setup summary { cursor: pointer; font-weight: 600; }
+#cu-setup p { line-height: 1.65; }
+#cu-personal h4 { margin-block: 22px 12px; }
+#cu-files { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: 320px; overflow: auto; }
+#cu-files button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+#cu-versions { display: flex; flex-wrap: wrap; gap: 8px; }
+#cu-version-label, #cu-session-meta { overflow-wrap: anywhere; }
+.cu-document { box-shadow: 0 2px 12px #18212b0d; }
+@media (max-width: 650px) { .cu-preview-frame { padding: 8px; } .cu-template-choice label { flex: 1 1 180px; } }
+#cu-repository-section { margin-block: 16px; }
+#cu-repository-section summary { cursor: pointer; font-weight: 600; }
+.profile-import-text { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.career-claim-note { display: block; margin-top: 4px; color: var(--mute); font-size: 12px; line-height: 1.5; }
+.resume-dropzone { padding: 18px; margin-block: 12px; border: 1px dashed var(--mute); border-radius: 16px; background: var(--surface); }
+.resume-dropzone[role="button"] { cursor: pointer; }
+.resume-dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.resume-dropzone.is-dragging { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.resume-dropzone[aria-disabled="true"] { opacity: .65; cursor: default; }
+.resume-drop-status { margin: 6px 0 0; color: var(--ink-2); overflow-wrap: anywhere; }
+#profile-result p { white-space: pre-line; }
+
 #profile-result p { white-space: pre-line; }
 
 /* HR 会话页（2026-11-18）：沿用 02 对话助理的沉浸式气泡与输入框。

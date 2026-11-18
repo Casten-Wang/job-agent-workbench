@@ -11,6 +11,9 @@ def public_text(stage, raw):
         return ""
     if not isinstance(value, dict):
         return ""
+    if stage == "ci_next_move":
+        prompt = value.get("interviewer_prompt")
+        return prompt if isinstance(prompt, str) else ""
     if stage == "workbench_decide":
         decision = value.get("decision")
         if not isinstance(decision, dict) or decision.get("action") not in {"ask", "reply"}:

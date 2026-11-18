@@ -42,7 +42,48 @@ def install_workbench_routes(app):
 
     @app.get("/v1/workbench/overview")
     async def overview():
-        return workflow().overview()
+        from interview_hub.store import ConflictError, NotFoundError
+        result = workflow().overview()
+        repo, offset = workflow().repo, 0
+        while True:
+            rows = repo.store.list_sessions(repo.owner, state="in_progress", offset=offset)
+            for row in rows:
+                try:
+                    view = await app.state.workflow.get(row["session_id"])
+                    if view["status"] == "completed":
+                        continue
+                    status = view["status"]
+                except (ConflictError, NotFoundError):
+                    status = "waiting_input"
+                role = row["payload"].get("target", {}).get("role", "项目")
+                result["tasks"].append({"id": row["session_id"], "title": role + " 面试", "status": status,
+                    "capability": "interview", "interview_id": row["session_id"], "interview_kind": "project"})
+            if len(rows) < 100:
+                break
+            offset += 100
+        recaps = [{"id": row["session_id"], "title": row["payload"].get("target", {}).get("role", "项目") + " 面试复盘",
+                   "kind": "面试复盘", "capability": "interview", "interview_id": row["session_id"], "interview_kind": "project"}
+                  for row in repo.store.list_sessions(repo.owner, state="completed", limit=5)]
+        comprehensive = getattr(app.state, "comprehensive", None)
+        if comprehensive is not None:
+            for ci_row in comprehensive.records.list("ci_session", limit=10):
+                ci_sid = ci_row.get("session_id")
+                if not ci_sid:
+                    continue
+                role_label = ci_row.get("role") or ci_row.get("role_family") or "综合"
+                try:
+                    ci_view = await comprehensive.get(ci_sid)
+                    ci_status = ci_view.get("status", "active")
+                except (ConflictError, NotFoundError):
+                    ci_status = "waiting_input"
+                if ci_status in {"completed", "early_terminated"}:
+                    recaps.insert(0, {"id": ci_sid, "title": f"{role_label} 综合模拟复盘", "kind": "综合复盘",
+                                      "capability": "interview", "interview_id": ci_sid, "interview_kind": "comprehensive"})
+                else:
+                    result["tasks"].append({"id": ci_sid, "title": f"{role_label} 综合模拟面试", "status": ci_status,
+                                            "capability": "interview", "interview_id": ci_sid, "interview_kind": "comprehensive"})
+        result["results"] = recaps + result["results"]
+        return result
 
     @app.get("/v1/workbench/conversations")
     async def conversations():

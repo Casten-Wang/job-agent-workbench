@@ -1,6 +1,6 @@
 # 公开项目核验接口 v0.1
 
-本文件记录工作台接入的公开项目核验桥接（`web/career_agent_runtime.py`）。**本次只接入后端与路由**：页面、启动脚本与面试引擎本身不在本仓库内，工作台也没有对应前端入口。
+本文件记录固定公开样例的项目核验桥接（`web/career_agent_runtime.py`），不读取个人求职资料。统一工作台使用单一 `user` 数据集；个人资料导入、简历版本及正式面试见 [PERSONAL-CAREER-API.md](PERSONAL-CAREER-API.md)，任务与对话入口见 [UNIFIED-WORKBENCH.md](UNIFIED-WORKBENCH.md)。公开样例的历史接口和记录继续保留，普通工作台不展示该练习入口；外部面试引擎仍需通过启动器的 `--engine-root` 指定。
 
 ## Agent 层覆盖情况
 
@@ -42,6 +42,39 @@ sh run_web.sh
 会话 id 必须以 `opdemo_` 开头。读取、答题与复盘前检查计划与固定材料/源码绑定，其他材料的会话返回 403。
 
 ## 恢复与验证
+
+### Langfuse 监控与本机规则评测（2026-11-18）
+
+统一模型入口 `interview_agent.model_adapter.ModelAdapter.decide` 使用手动 Langfuse observation。
+仅上传固定阶段名、输入输出字节数、执行状态、时间与数值分数；不上传简历、源码、问题、回答、生成配置、异常正文或评分理由。
+使用独立 OpenTelemetry TracerProvider，不安装自动模型/HTTP/LangGraph instrumentation。
+旧 LangSmith 正文采集被强制关闭；启用 Langfuse 后旧 LangSmith 手动追踪停用。
+
+需先创建 Langfuse Cloud 项目或部署具有后端、数据库与后台任务的 Langfuse；纯静态托管无法运行它。
+在项目根目录用以下命令隐藏输入密钥，验证连接成功后保存在本机现有 DPAPI 加密文件，不覆盖模型凭据：
+
+```powershell
+& 'D:\上海虹桥黑客松\.venv-interview\Scripts\python.exe' 'D:\上海虹桥黑客松\offerpilot\tools\configure_langfuse.py' --base-url https://us.cloud.langfuse.com
+```
+
+填写所建项目实际区域地址；欧洲为 `https://cloud.langfuse.com`，也支持自部署 HTTPS 地址和本机 HTTP。
+配置后重启 `run_career_demo.py` 工作台；未配置时不发送数据。`GET /api/agent/capabilities` 的 `architecture.langfuse`
+返回配置状态、启用状态与评测类型，不返回密钥。运行状态表示配置启用，不表示远端已收到事件。
+回退使用同一配置命令加 `--disable` 并重启。监控/评测故障不改变业务返回值。
+
+评测均在本机执行，无云端裁判调用：`schema_valid`（阶段结构）、`evidence_references_valid`（引用属于给定证据集）、
+`resume_writing_rules`（现有简历书写规则）、`experience_source_supported`（原文引用和数字依据）、
+`extracted_fields_supported`（抽取字段原文支持率）。另报执行成功和评测完成状态。
+这些指标不证明语义正确、信息完整或任务完成；无适用证据的指标不生成，仍需人工审核回答质量。
+
+离线 JSONL 每行包含 `stage`、`input`、`output`，可附 `expected_scores` 检查已知正常/错误案例。
+命令仅输出行号、分数和通过状态，不上传测试集、不调用模型；未知阶段、无指标和格式错误会失败。
+
+```powershell
+& 'D:\上海虹桥黑客松\.venv-interview\Scripts\python.exe' -m interview_agent.evaluate_local 'D:\上海虹桥黑客松\interview_agent\tests\langfuse_cases.jsonl'
+```
+
+截至本次接入验证，用户尚未创建 Langfuse 服务，远端接收与真实仪表盘仍待项目地址、密钥配置后验证。
 
 浏览器（接入页面时）只保存随机会话 ID，不把答案保存到 localStorage。暂停、刷新和服务重启均查询同一 session。网络操作失败时保留原事件 ID；刷新后依据引擎侧的 checkpoint 状态继续，不把未评估回答记成答错。
 

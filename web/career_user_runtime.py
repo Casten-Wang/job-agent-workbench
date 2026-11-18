@@ -1,6 +1,9 @@
 """Personal career routes. Only this module may bridge user mode to port 18748."""
 
 import base64
+import http.client
+import json
+import os
 import re
 from urllib.parse import urlencode
 
@@ -47,6 +50,145 @@ def print_document(path, query):
 
 def upstream(method, path, payload=None):
     return service_request(18748, "OFFERPILOT_CAREER_USER_TOKEN", method, path, payload)
+
+
+def _enrich_comprehensive_start(payload):
+    """在本地服务端自动汇聚画像、已选岗位快照与同目标面经/知识，避免浏览器伪造或遗漏。"""
+    enriched = dict(payload)
+    try:
+        store = backend.get_store("user")
+    except Exception:
+        return enriched
+    if "profile_snapshot" not in enriched or not enriched["profile_snapshot"]:
+        try:
+            enriched["profile_snapshot"] = backend.profile_public(store.profile())
+        except Exception:
+            pass
+    job_id = enriched.get("job_id")
+    company = ""
+    role = ""
+    if isinstance(enriched.get("job_snapshot"), dict):
+        company = str(enriched["job_snapshot"].get("company") or "")
+        role = str(enriched["job_snapshot"].get("role") or "")
+    try:
+        snap = store.snapshot()
+        jobs = snap.get("jobs") or []
+    except Exception:
+        jobs = []
+    if job_id and (not enriched.get("job_snapshot")) and jobs:
+        matched = next((j for j in jobs if str(j.get("id")) == str(job_id)), None)
+        if matched:
+            company = str(matched.get("company") or "")
+            role = str(matched.get("title") or matched.get("role") or "")
+            enriched["job_snapshot"] = {
+                "job_id": str(matched.get("id")),
+                "company": company,
+                "role": role,
+                "jd": str(matched.get("jd") or matched.get("description") or enriched.get("jd_text") or ""),
+                "risk_signals": [],
+                "mandatory_conditions": [],
+            }
+    if not enriched.get("external_materials"):
+        try:
+            materials = store.interview_materials() if hasattr(store, "interview_materials") else []
+            ext = []
+            for item in materials or []:
+                if not isinstance(item, dict) or not item.get("body"):
+                    continue
+                item_co = str(item.get("company") or "")
+                item_role = str(item.get("role") or "")
+                if company and item_co and company.lower() not in item_co.lower():
+                    continue
+                ext.append(
+                    {
+                        "ref_id": str(item.get("id") or f"mat_{len(ext) + 1}")[:120],
+                        "kind": "knowledge" if item.get("kind") == "knowledge" else "jingyan",
+                        "scope": "company_jingyan" if item_co else "similar_role_other_company",
+                        "company": item_co[:200],
+                        "role": item_role[:200],
+                        "title": str(item.get("title") or "")[:300],
+                        "body": str(item.get("body") or "")[:8000],
+                        "source_url": str(item.get("source_url") or "")[:1000],
+                    }
+                )
+                if len(ext) >= 12:
+                    break
+            if ext:
+                enriched["external_materials"] = ext
+        except Exception:
+            pass
+    return enriched
+
+
+def export_comprehensive_markdown(path, query):
+    query = dict(query)
+    if query.get("mode") != "user" or set(query) - {"mode", "format"}:
+        raise backend.ApiError("综合面试导出参数无效", 400)
+    match = re.fullmatch(rf"/api/career-user/comprehensive-interviews/({ID})/export", path)
+    if not match:
+        raise backend.ApiError("综合面试会话参数无效", 400)
+    data = upstream("GET", f"/v1/comprehensive-interviews/{match.group(1)}/export")
+    return str(data.get("markdown") or "").encode("utf-8"), str(data.get("filename") or f"mock-interview-{match.group(1)}.md")
+
+
+def stream_comprehensive(path, query, payload=None):
+    """代理综合模拟面试的 SSE 流式接口（逐帧透传 token 与 done/error）。"""
+    payload = dict(payload or {})
+    query = dict(query)
+    if query.pop("mode", None) != "user" or payload.pop("mode", "user") != "user" or query:
+        raise backend.ApiError("个人综合模拟面试仅在我的 user 模式开放", 400)
+    match = re.fullmatch(rf"/api/career-user/comprehensive-interviews/({ID})/stream", path)
+    if not match:
+        raise backend.ApiError("综合面试流式参数无效", 400)
+    token = os.environ.get("OFFERPILOT_CAREER_USER_TOKEN", "")
+    if len(token) < 20:
+        raise backend.ApiError("综合面试服务未启动：请先在本机启动服务后重试", 503)
+
+    sid = match.group(1)
+    connection = http.client.HTTPConnection("127.0.0.1", 18748, timeout=150)
+    try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        connection.request(
+            "POST",
+            f"/v1/comprehensive-interviews/{sid}/stream",
+            body=body,
+            headers={
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+        )
+        response = connection.getresponse()
+        if response.status >= 400:
+            connection.close()
+            messages = {400: "流式参数无效", 404: "综合面试会话不存在", 409: "会话状态冲突或已结束", 422: "流式请求格式无效"}
+            raise backend.ApiError(messages.get(response.status, "综合面试流式服务暂不可用"), response.status)
+
+        def _iter_frames():
+            try:
+                buf = b""
+                while True:
+                    chunk = response.readline(64 * 1024)
+                    if not chunk:
+                        if buf:
+                            yield buf
+                        break
+                    buf += chunk
+                    if chunk in (b"\n", b"\r\n"):
+                        yield buf
+                        buf = b""
+            finally:
+                connection.close()
+
+        gen = _iter_frames()
+        first = next(gen, b"")
+        yield first
+        yield from gen
+    except backend.ApiError:
+        raise
+    except (OSError, http.client.HTTPException):
+        connection.close()
+        raise backend.ApiError("综合面试流式连接中断，可点击重试恢复草稿", 503) from None
 
 
 def dispatch(method, path, query, payload=None):
@@ -151,4 +293,32 @@ def dispatch(method, path, query, payload=None):
             if view.get("is_demo") is not False:
                 raise backend.ApiError("个人与演示会话不能混用", 403)
             return {"ok": True, "view": view, "evidence": context["evidence"]}, 200
+    if suffix == "/comprehensive-interviews" and method == "POST" and not query:
+        enriched = _enrich_comprehensive_start(payload)
+        view = upstream("POST", "/v1/comprehensive-interviews", enriched)
+        return {"ok": True, "view": view}, 201
+    comp_match = re.fullmatch(
+        rf"/comprehensive-interviews/({ID})(?:/(turns|finish|recap|export|drill))?",
+        suffix,
+    )
+    if comp_match:
+        sid, op = comp_match.groups()
+        if op == "export" and method == "GET" and not (set(query) - {"format"}):
+            fmt = query.get("format", "json")
+            if fmt not in {"json", "markdown"}:
+                raise backend.ApiError("导出格式仅支持 json 或 markdown", 400)
+            return {"ok": True, **upstream("GET", f"/v1/comprehensive-interviews/{sid}/export?format={fmt}")}, 200
+        if query:
+            raise backend.ApiError("综合面试接口参数无效", 400)
+        if op is None and method == "GET":
+            return {"ok": True, "view": upstream("GET", f"/v1/comprehensive-interviews/{sid}")}, 200
+        if op == "turns" and method == "POST":
+            return {"ok": True, "view": upstream("POST", f"/v1/comprehensive-interviews/{sid}/turns", payload)}, 200
+        if op == "finish" and method == "POST":
+            return {"ok": True, "view": upstream("POST", f"/v1/comprehensive-interviews/{sid}/finish", payload or {})}, 200
+        if op == "recap" and method == "GET":
+            return {"ok": True, "recap": upstream("GET", f"/v1/comprehensive-interviews/{sid}/recap")}, 200
+        if op == "drill" and method == "POST":
+            return {"ok": True, "feedback": upstream("POST", f"/v1/comprehensive-interviews/{sid}/drill", payload)}, 200
+        raise backend.ApiError("未找到综合面试操作", 404)
     raise backend.ApiError("未找到个人项目操作", 404)

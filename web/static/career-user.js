@@ -83,11 +83,14 @@
     $('download-pdf').disabled = busy || !version;
     document.querySelectorAll('[name="cu-template"]').forEach(input=>{input.disabled=busy;input.checked=input.value===resumeTemplate;});
     $('start-formal').disabled = busy || !version;
+    $('start-formal').hidden = !window.OfferPilotWorkbench?.enabled || !version;
     $('reload').disabled = busy;
     $('more-repositories').disabled = busy;
     const active = personal && current?.status === 'active' && !current.pending_evaluation;
     $('answer').disabled = busy || !active || Boolean(failedEvent);
     $('submit').disabled = busy || !active || Boolean(failedEvent);
+    if (!$('submit').dataset.defaultText) $('submit').dataset.defaultText = $('submit').textContent;
+    $('submit').textContent = busy && active ? '正在整理反馈…' : $('submit').dataset.defaultText;
     $('refresh-session').disabled = busy || !sessionId;
     commands.forEach(b => {
       const c = b.dataset.cuCommand;
@@ -104,12 +107,25 @@
     sourceMode=source; safeLocalSet(key('source'),source);
     $('github-panel').hidden=source!=='github'; $('experience-panel').hidden=source!=='manual';
     document.querySelectorAll('[name="cu-source-type"]').forEach(input=>{input.checked=input.value===source;});
-    $('connection').textContent=source==='manual' ? '自主导入 · 无需 GitHub' : connected ? 'GitHub 已连接' : 'GitHub 项目';
+    $('connection').textContent=source==='manual' ? '自主导入（无需 GitHub）' : connected ? 'GitHub 已连接' : 'GitHub 项目';
   }
-  function message(text) { $('message').textContent = text; $('interview-message').textContent = text; }
+  function message(text) { $('message').textContent = text; $('interview-message').textContent = text;window.OfferPilotWorkbench?.careerNotice(text); }
+  function renderEmptyResumePreview() {
+    const doc = $('markdown');
+    if (!doc) return;
+    doc.replaceChildren(
+      node('p', '右侧实时预览区已就绪。在左侧整理并确认项目经历后，点击“生成简历预览”，A4 排版效果会实时展示在这里。', 'hint')
+    );
+  }
   function clearResume() {
     draft=null; version=null;
-    $('resume-preview').hidden=true; $('saved-resume').hidden=true;
+    if (window.OfferPilotWorkbench?.enabled) {
+      $('resume-preview').hidden=false;
+      renderEmptyResumePreview();
+    } else {
+      $('resume-preview').hidden=true;
+    }
+    $('saved-resume').hidden=true;
     $('save-confirmed').checked=false;
     safeLocalSet(key('version'), '');
   }
@@ -169,8 +185,8 @@
     if (busy || state.mode !== 'user') return;
     const startEpoch = epoch;
     const valid = () => epoch === startEpoch && state.mode === 'user';
-    busy = true; controls(); message('正在处理，请勿重复提交…');
-    try { await action(valid); } catch(e) { if (valid()) message(e.message); }
+    busy = true; controls(); message('正在处理，马上就好…');
+    try { await action(valid);if(valid())window.OfferPilotWorkbench?.careerNotice(''); } catch(e) { if (valid()) message(e.message); }
     finally { if (valid()) { busy = false; controls(); } }
   }
   function sourceLink(item) {
@@ -269,7 +285,7 @@
     value.claims.forEach(claim => {
       const row=node('div',undefined,'career-task'); const label=node('label',undefined,'cu-check'); const input=node('input'); input.type='checkbox'; input.value=claim.claim_id; input.checked=selected.has(claim.claim_id);
       const body=node('span',claim.pillar ? `${claim.pillar}：${claim.text}` : claim.text);
-      const notes=[claim.fit_reason ? `岗位相关：${claim.fit_reason}` : '', claim.boundary ? `职责边界：${claim.boundary}` : '', claim.risk ? `待确认：${claim.risk}` : ''].filter(Boolean).join(' · ');
+      const notes=[claim.fit_reason ? `岗位相关：${claim.fit_reason}` : '', claim.boundary ? `职责边界：${claim.boundary}` : '', claim.risk ? `待确认：${claim.risk}` : ''].filter(Boolean).join(' / ');
       if (notes) body.append(node('small',notes,'career-claim-note'));
       label.append(input,body); row.append(label);
       const evidence=(value.evidence || []).filter(item=>claim.evidence_ids.includes(item.evidence_id));
@@ -295,13 +311,13 @@
     safeLocalSet(key('session-material'),materialId); safeLocalSet(key('session-kind'),kind);
     const data=await api('/interviews',{material_id:materialId,session_id:id,interview_mode:kind});
     if (!valid()) return;
-    failedEvent=null; $('answer').value=''; renderSession(data); showView('interview'); $('question').focus();
+    failedEvent=null; $('answer').value=''; renderSession(data); showView('interview');$('interview-panel').hidden=false;window.OfferPilotWorkbench?.projectInterview();$('question').focus();
   }
   function renderRecap(value) {
-    const out=$('recap'); out.replaceChildren(node('h4','本轮复盘 · 待确认'));
+    const out=$('recap'); out.replaceChildren(node('h4','本轮复盘（待确认）'));
     out.append(node('p','以下是对本轮回答的反馈。辅助作答不等于独立掌握；建议不会自动改写已保存简历。','notice'));
     const labels={consistent:'与证据一致',partial:'需要补充',conflict:'存在待核实差异',insufficient_evidence:'证据不足'};
-    [...value.what_went_well,...value.needs_review].forEach(item=>out.append(node('h5',`${item.question_id} · ${labels[item.status] || item.status}`),node('p',item.notes,'career-message'),node('p',`作答方式：${{independent:'独立作答',hinted:'提示后作答',open_book:'查阅资料',ai_assisted:'AI辅助'}[item.assistance_mode] || item.assistance_mode}；掌握程度仍待确认。`,'hint')));
+    [...value.what_went_well,...value.needs_review].forEach(item=>out.append(node('h5',`${item.question_id} | ${labels[item.status] || item.status}`),node('p',item.notes,'career-message'),node('p',`作答方式：${{independent:'独立作答',hinted:'提示后作答',open_book:'查阅资料',ai_assisted:'AI辅助'}[item.assistance_mode] || item.assistance_mode}；掌握程度仍待确认。`,'hint')));
     out.append(node('p',`未评估：${value.not_assessed.length} 题。跳过或缺少反馈不记成答错。`));
     value.improvement_tasks.forEach(task=>{
       const card=node('div',undefined,'career-task'); card.append(node('p',task.action),node('p',`完成标准：${task.completion_criterion}`),node('p',`复测：${task.retest.prompt}`));
@@ -312,7 +328,7 @@
   function renderSession(data) {
     current=data.view;
     $('session-status').textContent=statusLabels[current.status] || current.status;
-    $('session-meta').textContent=`${current.interview_mode==='mock_interview'?'正式模拟面试':'项目前置核验'} · 已记录 ${current.answered}/${current.total} 题${current.resume_version_id?' · 简历 '+current.resume_version_id:''}`;
+    $('session-meta').textContent=`${current.interview_mode==='mock_interview'?'正式模拟面试':'项目前置核验'} | 已记录 ${current.answered}/${current.total} 题${current.resume_version_id?' | 简历 '+current.resume_version_id:''}`;
     $('question').textContent=current.question?.text || '本轮题目已完成，请结束保存复盘。';
     $('interview-message').textContent=current.message || '请回答当前问题。';
     $('source').hidden=true;
@@ -348,7 +364,7 @@
     showView('resume'); $('resume-preview').scrollIntoView({block:'start'});
   }
   function showVersion(value) {
-    draft=null; version=value; safeLocalSet(key('version'),value.resume_version_id); $('saved-resume').hidden=false; $('version-label').textContent=`${value.resume_version_id} · ${new Date(value.created_at).toLocaleString()} · ${value.source_type==='manual'?'材料':'源码'} ${value.source_commit.slice(0,12)}`;
+    draft=null; version=value; safeLocalSet(key('version'),value.resume_version_id); $('saved-resume').hidden=false; $('version-label').textContent=`${value.resume_version_id} | ${new Date(value.created_at).toLocaleString()} | ${value.source_type==='manual'?'材料':'源码'} ${value.source_commit.slice(0,12)}`;
     $('project-review').hidden=true;
     renderResume(value.markdown); $('resume-preview').hidden=false; $('repository-section').open=false;
     $('save-version').hidden=true; $('save-confirmed').closest('label').hidden=true; controls();
@@ -356,7 +372,7 @@
   async function loadVersions(valid) {
     const data=await api('/resumes'); if (!valid()) return;
     $('versions').replaceChildren(); $('history').hidden=!data.items.length;
-    data.items.forEach(item=>$('versions').append(button(`${item.job_snapshot.role} · ${new Date(item.created_at).toLocaleString()} · ${item.resume_version_id.slice(-8)}`,async v=>{const value=await api(`/resumes/${item.resume_version_id}`);if(v())showVersion(value);})));
+    data.items.forEach(item=>$('versions').append(button(`${item.job_snapshot.role} | ${new Date(item.created_at).toLocaleString()} | ${item.resume_version_id.slice(-8)}`,async v=>{const value=await api(`/resumes/${item.resume_version_id}`);if(v())showVersion(value);})));
   }
   function resetMode() {
     if (mode===state.mode) return; mode=state.mode; epoch++;
@@ -367,7 +383,13 @@
     $('personal').hidden=!personal; $('interview-panel').hidden=true;
     document.querySelectorAll('.career-panel').forEach(p=>{p.hidden=true;});
     ['repositories','files','claims','recap','source','versions'].forEach(id=>$(id).replaceChildren());
-    ['project-review','project-form','resume-preview','saved-resume','repository-section','browser','device','recap'].forEach(id=>{$(id).hidden=true;});
+    ['project-review','project-form','saved-resume','repository-section','browser','device','recap'].forEach(id=>{$(id).hidden=true;});
+    if (window.OfferPilotWorkbench?.enabled) {
+      $('resume-preview').hidden=false;
+      renderEmptyResumePreview();
+    } else {
+      $('resume-preview').hidden=true;
+    }
     ['answer','contribution','jd','role','repository','client-id'].forEach(id=>{$(id).value='';});
     $('experience-form').reset(); $('extract-status').textContent=''; showSource(sourceMode);
     $('question').textContent=''; $('session-meta').textContent='在定制简历页选择并确认项目后开始。';
@@ -417,12 +439,12 @@
     const value=await api('/projects',{repository:$('repository').value,role:$('role').value,jd:$('jd').value,contribution:$('contribution').value,confirmed:$('contribution-confirmed').checked,model_consent:$('model-consent').checked});
     if(valid()){safeLocalSet(key('project'),value.project_id);$('project-review').hidden=true;await projectStatus(value.project_id,valid);}
   });});
-  $('start-readiness').addEventListener('click',()=>run(async valid=>{const ids=[...$('claims').querySelectorAll('input:checked')].map(i=>i.value);if(!ids.length)throw new Error('请至少确认一条实际属于你的工作。');if(!await checkProfile(valid))return;const value=await api(`/projects/${project.project_id}/confirm`,{claim_ids:ids,confirmed:true});if(valid())await makeDraft(valid,value.material_id);}));
+  $('start-readiness').addEventListener('click',()=>run(async valid=>{const ids=[...$('claims').querySelectorAll('input:checked')].map(i=>i.value);if(!ids.length)throw new Error('请至少确认一条实际属于你的工作。');if(!await checkProfile(valid))return;const value=await api(`/projects/${project.project_id}/confirm`,{claim_ids:ids,confirmed:true});if(valid()){window.OfferPilotWorkbench?.onMutation('confirm_material',value);await makeDraft(valid,value.material_id);}}));
   $('answer-form').addEventListener('submit',e=>{e.preventDefault();run(v=>send(null,v));});
   commands.forEach(b=>b.addEventListener('click',()=>run(v=>send(b.dataset.cuCommand,v))));
   $('refresh-session').addEventListener('click',()=>run(recover));
   $('to-draft').addEventListener('click',()=>run(makeDraft));
-  $('save-version').addEventListener('click',()=>run(async valid=>{if(!$('save-confirmed').checked)throw new Error('请核对预览并勾选保存确认。');const value=await api(`/resume-drafts/${draft.draft_id}/save`,{confirmed:true});if(valid()){showVersion(value);await loadVersions(valid);message('简历版本已保存，可以下载或打印；后续修改会保存为新版本。');}}));
+  $('save-version').addEventListener('click',()=>run(async valid=>{if(!$('save-confirmed').checked)throw new Error('请核对预览并勾选保存确认。');const value=await api(`/resume-drafts/${draft.draft_id}/save`,{confirmed:true});if(valid()){showVersion(value);await loadVersions(valid);window.OfferPilotWorkbench?.onMutation('save_version',value);message('简历版本已保存，可以下载或打印；后续修改会保存为新版本。');}}));
   $('start-formal').addEventListener('click',()=>run(v=>startInterview(version.interview_material_id,'mock_interview',v)));
   $('regenerate').addEventListener('click',()=>run(v=>makeDraft(v,version.material_id)));
   $('download').addEventListener('click',()=>{if(!version)return;const url=URL.createObjectURL(new Blob([version.markdown],{type:'text/markdown;charset=utf-8'}));const a=node('a');a.href=url;a.download=`${version.resume_version_id}.md`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
@@ -435,7 +457,8 @@
   $('print').addEventListener('click',()=>{if(version)window.open(`/api/career-user/resumes/${version.resume_version_id}/print?mode=user&template=${resumeTemplate}`,'_blank','noopener');});
   resetMode();
   window.OfferPilotCareer={
+    refreshVersions:()=>{const ticket=epoch;return loadVersions(()=>ticket===epoch&&state.mode==='user');},
     openVersion:id=>run(async valid=>{const value=await api(`/resumes/${encodeURIComponent(id)}`);if(valid())showVersion(value);}),
-    openInterview:id=>run(async valid=>{const data=await api(`/interviews/${encodeURIComponent(id)}`);if(valid()){sessionId=id;safeLocalSet(key('session'),id);$('interview-panel').hidden=false;renderSession(data);}}),
+    openInterview:id=>run(async valid=>{const data=await api(`/interviews/${encodeURIComponent(id)}`);if(valid()){sessionId=id;safeLocalSet(key('session'),id);$('interview-panel').hidden=false;renderSession(data);window.OfferPilotWorkbench?.projectInterview();}}),
   };
 })();

@@ -16,12 +16,10 @@ import backend
 import career_user_runtime
 import workbench_agent_runtime
 
-# 引擎包按本次合入放在仓库根目录（interview_agent/ 等）；旧布局中它在
-# 项目目录的同级，因此两处都加入 sys.path。
+# 引擎包与综合面试实现在本仓库根目录。
 ENGINE_ROOT = backend.ROOT
-for _engine_root in (ENGINE_ROOT, ENGINE_ROOT.parent):
-    if str(_engine_root) not in sys.path:
-        sys.path.insert(0, str(_engine_root))
+if str(ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(ENGINE_ROOT))
 from interview_agent.workbench_catalog import BUSINESS_TOOLS, CAPABILITIES, validate_arguments
 
 controller = None
@@ -32,9 +30,10 @@ def fingerprint(value):
 
 
 def catalog(mode):
+    personal = {"github", "knowledge", "notes", "experience", "experience_details", "settings"}
     return [{"id": key, "label": label, "group": group, "view": view, "anchor": anchor,
-             "kind": kind, "available": mode == "user" or key not in {"github", "knowledge", "notes", "experience", "settings"},
-             "reason": "仅在我的资料模式开放" if mode != "user" and key in {"github", "knowledge", "notes", "experience", "settings"} else ""}
+             "kind": kind, "available": mode == "user" or key not in personal,
+             "reason": "仅在我的资料模式开放" if mode != "user" and key in personal else ""}
             for key, label, group, view, anchor, kind in CAPABILITIES]
 
 
@@ -53,15 +52,23 @@ def settings_status():
 
 
 def overview(mode):
+    if mode != "user":
+        raise backend.ApiError("工作台仅支持我的资料模式")
     store = backend.get_store(mode, seed_if_empty=False)
     jobs, queue, mails = store.jobs(), store.queue(), store.mails()
     profile = store.profile()
+    model_setup = settings_status()
     runtime = backend.get_offerpilot_state(mode)
     engine = engine_get(mode, "/v1/workbench/overview")
     tasks = list((engine or {}).get("tasks", []))
     task = runtime.get("task")
     if isinstance(task, dict) and task.get("status") in {"queued", "running", "stopping"}:
         tasks.append({"id": task.get("id"), "title": "平台岗位任务", "status": task.get("status"), "capability": "collect"})
+    session = store.interview_session()
+    if backend._in_progress_interview(session):
+        tasks.append({"id": session["id"], "title": "继续文字模拟面试", "capability": "interview",
+                      "status": "ready_to_finish" if session.get("user_status") == "ready_to_end" else "active",
+                      "interview_id": session["id"], "interview_kind": "legacy"})
     pending = list((engine or {}).get("pending", []))
     pending.extend({"id": str(row["id"]), "title": "待核对岗位", "capability": "queue"}
                    for row in queue if row.get("status") == "pending")
@@ -75,10 +82,26 @@ def overview(mode):
                  "capability": "experience", "material_id": row["material_id"]} for row in materials[:3]]
     results += [{"id": str(row.get("id", index)), "title": str(row.get("company") or "面试") + " 复盘", "kind": "面试复盘", "capability": "debrief"}
                 for index, row in enumerate(store.debriefs()[-3:])]
+    results += (engine or {}).get("results", [])[:8]
+    receipts = store.root / "workbench-operations.db"
+    if receipts.is_file():
+        connection = sqlite3.connect(receipts.as_uri() + "?mode=ro", uri=True)
+        try:
+            if "tool" in {r[1] for r in connection.execute("PRAGMA table_info(operation)")}:
+                for operation_id, tool, raw in connection.execute("SELECT id,tool,result FROM operation WHERE state='completed' ORDER BY created DESC LIMIT 20"):
+                    if tool in {"collect_note", "subscribe_note", "build_worksheet", "export_workspace", "save_experience_variant"}:
+                        result = json.loads(raw)
+                        if result.get("ok") is not False:
+                            results.append({"id": operation_id, "title": BUSINESS_TOOLS[tool][0], "kind": "已保存结果", "capability":
+                                {"collect_note": "notes", "subscribe_note": "notes", "build_worksheet": "worksheet", "export_workspace": "data", "save_experience_variant": "variants"}[tool]})
+        finally:
+            connection.close()
     if pending:
         next_action = {"title": "先核对待确认内容", "capability": pending[0].get("capability", "application"), "conversation_id": pending[0].get("conversation_id")}
     elif tasks:
         next_action = {"title": "继续当前任务", **tasks[0]}
+    elif mode == "user" and not profile.get("truth_confirmed") and not model_setup["configured"]:
+        next_action = {"title": "连接模型，开始导入简历", "capability": "settings"}
     elif not profile.get("truth_confirmed"):
         next_action = {"title": "导入简历，建立你的求职资料", "capability": "profile_import"}
     elif not jobs:
@@ -87,30 +110,35 @@ def overview(mode):
         next_action = {"title": "整理一段真实经历", "capability": "experience"}
     else:
         next_action = {"title": "为目标岗位准备申请材料", "capability": "application"}
-    session = store.interview_session()
     return {"ok": True, "mode": mode, "capabilities": catalog(mode), "next_action": next_action,
             "tasks": tasks, "pending": pending, "results": results, "materials": materials, "versions": versions,
             "interview_session": {k: session.get(k) for k in ("id", "user_status", "round")} if session else None,
             "counts": {"jobs": len(jobs), "materials": len(materials) if engine is not None else None,
                        "resumes": len(versions) if engine is not None else None, "mails": len(mails)},
-            "setup": {"model": settings_status(), "engine_connected": engine is not None,
+            "setup": {"model": model_setup, "engine_connected": engine is not None,
                       "platform_connected": bool(runtime.get("ok")), "platform_error": runtime.get("error", "")},
-            "partial": engine is None}
+            "partial": engine is None, "tool_labels": {name: spec[0] for name, spec in BUSINESS_TOOLS.items()}}
 
 
 def _receipts(mode):
     root = backend.get_store(mode, seed_if_empty=False).root
     connection = sqlite3.connect(root / "workbench-operations.db", timeout=15)
-    connection.execute("CREATE TABLE IF NOT EXISTS operation (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, state TEXT NOT NULL, result TEXT, created REAL NOT NULL)")
+    connection.execute("CREATE TABLE IF NOT EXISTS operation (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, state TEXT NOT NULL, result TEXT, created REAL NOT NULL, tool TEXT NOT NULL DEFAULT '')")
+    with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        if "tool" not in {r[1] for r in connection.execute("PRAGMA table_info(operation)")}:
+            connection.execute("ALTER TABLE operation ADD COLUMN tool TEXT NOT NULL DEFAULT ''")
     return connection
 
 
 def execute(mode, name, arguments, operation_id):
+    if mode != "user":
+        raise backend.ApiError("工作台仅支持我的资料模式")
     try:
         args = validate_arguments(name, arguments)
     except ValueError as error:
         raise backend.ApiError(str(error)) from None
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", str(operation_id)):
+    if not isinstance(operation_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", operation_id):
         raise backend.ApiError("操作编号无效")
     kind = BUSINESS_TOOLS[name][2]
     if kind in {"approval", "handoff"}:
@@ -121,7 +149,7 @@ def execute(mode, name, arguments, operation_id):
 
 
 def execute_once(mode, name, args, operation_id, operation):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", str(operation_id)):
+    if not isinstance(operation_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", operation_id):
         raise backend.ApiError("操作编号无效")
     signature = fingerprint({"name": name, "arguments": args, "mode": mode})
     connection = _receipts(mode)
@@ -135,7 +163,7 @@ def execute_once(mode, name, args, operation_id, operation):
                 if row[1] == "completed":
                     return json.loads(row[2])
                 raise backend.ApiError("该操作已提交；请先查看真实状态，不能重复执行", 409)
-            connection.execute("INSERT INTO operation VALUES (?,?,?,NULL,?)", (operation_id, signature, "started", time.time()))
+            connection.execute("INSERT INTO operation (id,fingerprint,state,result,created,tool) VALUES (?,?,?,NULL,?,?)", (operation_id, signature, "started", time.time(), name))
         try:
             result = operation()
         except Exception:
@@ -179,7 +207,7 @@ def confirmed_action(mode, payload):
                "sync-greeting": {"conversation_id", "artifact_id"},
                "offerpilot-deliver": {"ids", "confirm", "risk_acknowledged", "binding"},
                "offerpilot-start": {"mode", "data_mode", "confirm", "risk_acknowledged", "options"}}
-    if action not in allowed or set(args) - allowed[action]:
+    if not isinstance(action, str) or action not in allowed or set(args) - allowed[action]:
         raise backend.ApiError("未允许的确认操作")
     def commit():
         if action == "sync-greeting":
@@ -301,23 +329,27 @@ def perform(mode, name, a):
     }
     for tool, field, prefix, suffix in (("pause_note_subscription", "subscription_id", "/notes/subscriptions/", "/pause"),
             ("resume_note_subscription", "subscription_id", "/notes/subscriptions/", "/resume"),
-            ("read_note", "note_id", "/notes/items/", ""), ("mark_note_read", "message_id", "/notes/inbox/", "/read")):
+            ("read_note", "note_id", "/notes/items/", ""), ("mark_note_read", "message_id", "/notes/inbox/", "/read"),
+            ("project_knowledge_context", "snapshot_id", "/knowledge/snapshots/", "/context")):
         if name == tool:
             if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", a[field]):
                 raise backend.ApiError("记录编号无效")
-            routes[name] = ("GET" if name == "read_note" else "POST", prefix + a[field] + suffix, {})
+            routes[name] = ("GET" if name in {"read_note", "project_knowledge_context"} else "POST", prefix + a[field] + suffix, {})
     if name in routes:
         if mode != "user":
             raise backend.ApiError("个人知识库与面经仅在我的资料模式开放", 403)
         method, path, payload = routes[name]
         query = {"mode": mode, **({"offset": str(a["offset"]), "limit": "30"} if name == "note_inbox" else {})}
+        if name == "knowledge_sources":
+            query.update(offset=str(a.get("offset", 0)), limit="100")
         return career_user_runtime.dispatch(method, "/api/career-user" + path, query, payload)[0]
     raise backend.ApiError("该业务尚未接入", 404)
 
 
 def internal(headers, payload):
     mode = payload.get("mode")
-    token = os.getenv("OFFERPILOT_CAREER_USER_TOKEN", "") if mode == "user" else ""
+    token_name = {"user": "OFFERPILOT_CAREER_USER_TOKEN"}.get(mode)
+    token = os.getenv(token_name, "") if token_name else ""
     if not token or not hmac.compare_digest(str(headers.get("Authorization", "")).encode(), ("Bearer " + token).encode()):
         raise backend.ApiError("内部调用未授权", 403)
     if set(payload) != {"mode", "tool", "arguments", "operation_id"}:
@@ -328,8 +360,8 @@ def internal(headers, payload):
 
 def dispatch(method, path, query, payload=None):
     mode = query.get("mode")
-    if mode not in {"user"} or set(query) != {"mode"}:
-        raise backend.ApiError("请明确选择数据模式")
+    if mode != "user" or set(query) != {"mode"}:
+        raise backend.ApiError("工作台仅支持我的资料模式")
     payload = payload or {}
     if method == "GET" and path == "/api/workbench/overview":
         return overview(mode), 200

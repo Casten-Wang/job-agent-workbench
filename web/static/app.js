@@ -206,6 +206,8 @@ const state = {
   hrReplyBusy: false,
   hrReplyReturnFocus: null,
   hrSeq: 0,
+  profileImportBusy: false,
+  profileImportSeq: 0,
   // HR 会话页：本地列表即时显示，平台增量同步静默在后台跑。
   hrSummary: null,
   hrSummaryLoading: false,
@@ -781,6 +783,7 @@ async function loadState(options = {}) {
     if (seq !== state.fetchSeq) return;
     state.snapshot = data;
     renderAll(data);
+    window.dispatchEvent(new CustomEvent('offerpilot:state', { detail: { mode: state.mode } }));
     if (announce) {
       setStatus(`已载入本地数据；更新于 ${formatDateTime(data.generated_at)}。`, 'ok');
     }
@@ -805,7 +808,13 @@ async function postJson(path, payload) {
 }
 
 function postAction(action, payload = {}) {
-  return postJson('/api/action', { action, mode: state.mode, ...payload });
+  if (window.OfferPilotWorkbench?.enabled && ['save-profile','confirm','offerpilot-deliver'].includes(action)) {
+    const {mode, ...arguments_}=payload;
+    return window.OfferPilotWorkbench.confirmed(action, arguments_);
+  }
+  return postJson('/api/action', { action, mode: state.mode, ...payload }).then(result=>{
+    window.OfferPilotWorkbench?.onMutation(action,result);return result;
+  });
 }
 
 async function runAction(button, operation) {
@@ -919,6 +928,7 @@ function applyTheme(choice) {
 
 function showView(name) {
   clearStatus();
+  if (window.OfferPilotWorkbench?.enabled) return window.OfferPilotWorkbench.navigate(name);
   const hub = HUB_FOR_VIEW[name] || name;
   if (dom.topbarTitle) dom.topbarTitle.textContent = VIEW_TITLES[name] || '首页';
   dom.navItems.forEach((button) => {
@@ -961,6 +971,7 @@ function showView(name) {
 }
 
 const INTERVIEW_MODULES = ['chat', 'worksheet', 'debrief', 'library'];
+const INTERVIEW_STATUS_LABELS = { ready: '可开始', local: '本地可用', connected: '已接入', waiting: '待准备' };
 
 function interviewHubCards() {
   const snapshot = state.snapshot || {};
@@ -1016,7 +1027,7 @@ function renderInterviewHub() {
   if (!dom.interviewHub) return;
   clear(dom.interviewHub);
   interviewHubCards().forEach((card, index) => {
-    const statusLabel = PIPELINE_STATUS_LABELS[card.status] || '本地可用';
+    const statusLabel = INTERVIEW_STATUS_LABELS[card.status] || '本地可用';
     const node = el('button', {
       className: `pipeline-node owner-local status-${card.status}`,
       attrs: {
@@ -1057,6 +1068,14 @@ function showInterviewModule(module) {
 }
 
 function clearTransientResults() {
+  document.querySelectorAll('.resume-dropzone').forEach((zone) => {
+    zone.classList.remove('is-dragging');
+    zone.querySelector('.resume-drop-status').textContent = '';
+  });
+  state.profileImportSeq += 1;
+  dom.profileImportFile.value = '';
+  dom.profileImportPreview.hidden = true;
+  dom.profileImportText.textContent = '';
   [
     dom.jdResult,
     dom.importResult,
@@ -3060,8 +3079,10 @@ function renderProfile(profile) {
     dom.profileBadge.className = `badge ${level === 'ready' && !state.profileDirty ? 'badge-good' : 'badge-neutral'}`;
   }
   if (dom.profileImport) {
-    dom.profileImport.title = '读取本机 workspace/resume.md 并填入可识别字段';
+    dom.profileImport.disabled = state.mode !== 'user' || state.profileImportBusy;
+    dom.profileImport.title = state.mode === 'user' ? '选择本地 PDF、DOCX、Markdown 或 TXT 简历，核对后保存' : '演示模式不读取真实简历；请切换到「我的 user」';
   }
+  dom.profileDrop.setAttribute('aria-disabled', String(state.mode !== 'user' || state.profileImportBusy));
 }
 
 function populateProfileForm(profile) {
@@ -3161,11 +3182,16 @@ function chooseProfileCv() {
 
 async function importProfileFromCv(file) {
   if (!file || !file.name || state.profileImportBusy) return;
+  if (state.mode !== 'user') {
+    setStatus('演示模式不读取真实简历；请切换到「我的 user」。', 'warn');
+    return;
+  }
   if (!/\.(pdf|docx|md|txt)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
     showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD 或 TXT 文件，最大 5 MB。', 'error');
     return;
   }
-  if (state.profileDirty && !window.confirm('导入会用识别结果更新资料、教育和经历；没识别到的部分保持不变。继续吗？')) return;
+  if (state.profileDirty && !window.confirm('Agent 会更新识别到的资料及教育、工作和项目经历；未识别的资料保留。继续吗？')) return;
+  const seq = ++state.profileImportSeq;
   state.profileImportBusy = true;
   dom.profileImport.disabled = true;
   dom.profileImport.setAttribute('aria-busy', 'true');
@@ -3173,11 +3199,13 @@ async function importProfileFromCv(file) {
   dom.profileSave.disabled = true;
   dom.profileImportPreview.hidden = true;
   dom.profileImportText.textContent = '';
+  showInline(dom.profileResult, '正在读取简历文件…', 'info');
   try {
-    showInline(dom.profileResult, '正在读取简历文件…', 'info');
     const contentBase64 = await readFileAsBase64(file);
-    showInline(dom.profileResult, '正在解析整份简历，包括教育、工作和项目经历，请稍候…', 'info');
-    const data = await postAction('import-profile-cv', { filename: file.name, content_base64: contentBase64 });
+    if (state.mode !== 'user' || seq !== state.profileImportSeq) return;
+    showInline(dom.profileResult, 'Agent 正在解析整份简历及教育、工作、项目经历，请稍候…', 'info');
+    const data = await postAction('import-profile-cv', { mode: 'user', filename: file.name, content_base64: contentBase64 });
+    if (state.mode !== 'user' || seq !== state.profileImportSeq) return;
     if (data.ok === false) throw new Error(data.message || '简历导入失败，请重新选择。');
     const profile = collectProfileForm();
     const suggested = data.profile || {};
@@ -3200,17 +3228,19 @@ async function importProfileFromCv(file) {
     renderProfile(profile);
     dom.profileImportText.textContent = data.source_text || '';
     dom.profileImportPreview.hidden = !data.source_text;
-    const counts = `教育 ${suggested.education?.length || 0} 条，工作/实习 ${suggested.experiences?.length || 0} 条，项目 ${suggested.projects?.length || 0} 条。`;
+    const counts = `教育 ${suggested.education?.length || 0} 条 · 工作/实习 ${suggested.experiences?.length || 0} 条 · 项目 ${suggested.projects?.length || 0} 条。`;
     showInline(dom.profileResult, [data.message, counts, ...(data.warnings || [])].join('\n'), data.warnings?.length ? 'warn' : 'ok');
     setStatus('简历已解析，请核对并确认真实性后保存。', 'ok');
   } catch (error) {
-    showInline(dom.profileResult, friendlyError(error), 'error');
-    setStatus(friendlyError(error), 'error');
+    if (state.mode === 'user' && seq === state.profileImportSeq) {
+      showInline(dom.profileResult, friendlyError(error), 'error');
+      setStatus(friendlyError(error), 'error');
+    }
   } finally {
     state.profileImportBusy = false;
-    dom.profileImport.disabled = false;
+    dom.profileImport.disabled = state.mode !== 'user';
     dom.profileImport.removeAttribute('aria-busy');
-    dom.profileDrop.setAttribute('aria-disabled', 'false');
+    dom.profileDrop.setAttribute('aria-disabled', String(state.mode !== 'user'));
     dom.profileSave.disabled = false;
   }
 }
@@ -3981,7 +4011,8 @@ async function startOfferPilotTask(button) {
     risk_acknowledged: true
   };
   if (options) payload.options = options;
-  const data = await runAction(button, () => postJson('/api/offerpilot/tasks', payload));
+  const data = await runAction(button, () => window.OfferPilotWorkbench?.enabled
+    ? window.OfferPilotWorkbench.confirmed('offerpilot-start',payload) : postJson('/api/offerpilot/tasks', payload));
   if (!data) return;
   setStatus(data.message || '任务已提交，正在后台运行。', 'ok');
   showInline(dom.offerpilotResult, data.message || '任务已提交，正在后台运行。', 'ok');
@@ -4096,7 +4127,11 @@ async function maybeAutoImportCollected(task) {
 }
 
 async function uploadOfferPilotResume(file) {
-  if (!file) return;
+  if (!file || dom.collectResumeUpload.disabled) return;
+  if (state.mode !== 'user') {
+    setStatus('演示模式不能上传简历；请切换到「我的 user」。', 'warn');
+    return;
+  }
   const name = String(file.name || '');
   if (!/\.(md|docx|pdf)$/i.test(name)) {
     setStatus('简历只支持 Markdown、DOCX 或 PDF 格式。', 'error');
@@ -4106,22 +4141,12 @@ async function uploadOfferPilotResume(file) {
     setStatus('简历文件超过 5 MB 上限。', 'error');
     return;
   }
-  const dataUrl = await new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => resolve('');
-    reader.readAsDataURL(file);
+  const data = await runAction(dom.collectResumeUpload, async () => {
+    const content = await readFileAsBase64(file);
+    if (state.mode !== 'user') return null;
+    return postAction('offerpilot-resume', { mode: 'user', filename: name, content_base64: content });
   });
-  if (!dataUrl) {
-    setStatus('没能读取这份简历文件；请换一份再试。', 'error');
-    return;
-  }
-  const base64 = dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl;
-  const data = await runAction(dom.collectResumeUpload, () => postAction('offerpilot-resume', {
-    filename: name,
-    content_base64: base64
-  }));
-  if (!data) return;
+  if (!data || state.mode !== 'user') return;
   state.offerpilotAutoScoreTouched = false;
   setStatus(data.message || '简历已保存。', 'ok');
   await refreshOfferPilot();
@@ -4704,10 +4729,10 @@ function deliveryConfirmPhrase(count) {
 }
 
 function openDeliveryPanel(trigger) {
-  openDeliveryModal(selectedApprovedRows(), trigger);
+  return openDeliveryModal(selectedApprovedRows(), trigger);
 }
 
-function openDeliveryModal(rows, trigger) {
+async function openDeliveryModal(rows, trigger) {
   if (!dom.queueDeliveryPanel) return;
   const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
   if (!list.length) {
@@ -4717,6 +4742,17 @@ function openDeliveryModal(rows, trigger) {
   if (!list.every((row) => row.greeting && row.greeting.ready)) {
     setStatus('所选岗位需要先生成招呼语。', 'warn');
     return;
+  }
+  state.wbDeliveryBinding = null;
+  if (window.OfferPilotWorkbench?.enabled) {
+    try {
+      const preview = await window.OfferPilotWorkbench.deliveryPreview(list.map(row => String(row.id)));
+      state.wbDeliveryBinding = preview.binding;
+      preview.items.forEach(item => {
+        const row = list.find(row => String(row.id) === item.job_id);
+        if (row) row.greeting = { ...row.greeting, greeting: item.greeting, ready: true };
+      });
+    } catch (error) { setStatus(error.message, 'error'); return; }
   }
   if (!state.queueDeliveryOpen) {
     state.queueDeliveryOpen = true;
@@ -4819,7 +4855,8 @@ function updateDeliveryStartState() {
   const riskChecked = Boolean(dom.queueDeliveryRisk && dom.queueDeliveryRisk.checked);
   const blocked = state.queueDeliveryBusy
     || state.queueDeliverySubmitted
-    || Boolean(state.offerpilotTaskActive);
+    || Boolean(state.offerpilotTaskActive)
+    || (window.OfferPilotWorkbench?.enabled && !state.wbDeliveryBinding);
   dom.queueDeliveryStart.disabled = !(count > 0 && riskChecked && !blocked);
   dom.queueDeliveryStart.textContent = `确认发送本批 ${count} 条`;
   if (dom.queueDeliveryCancel) dom.queueDeliveryCancel.disabled = state.queueDeliveryBusy;
@@ -4860,6 +4897,7 @@ function closeDeliveryModal() {
   dom.queueDeliveryPanel.hidden = true;
   state.queueDeliveryOpen = false;
   state.queueDeliveryIds = [];
+  state.wbDeliveryBinding = null;
   state.queueDeliverySubmitted = false;
   state.queueDeliveryBatchId = null;
   document.body.classList.remove('queue-modal-open');
@@ -4888,7 +4926,8 @@ async function startQueueDelivery(button) {
   const data = await runAction(button, () => postAction('offerpilot-deliver', {
     ids,
     confirm: deliveryConfirmPhrase(count),
-    risk_acknowledged: true
+    risk_acknowledged: true,
+    ...(window.OfferPilotWorkbench?.enabled ? {binding:state.wbDeliveryBinding} : {})
   }));
   state.queueDeliveryBusy = false;
   if (!data || data.ok === false) {
@@ -4910,7 +4949,7 @@ async function startQueueDelivery(button) {
 
 async function stopQueueDelivery(button, taskId) {
   if (!taskId) return;
-  const data = await runAction(button, () => postAction('offerpilot-stop', { task_id: taskId }));
+  const data = await runAction(button, () => postJson(`/api/offerpilot/tasks/${encodeURIComponent(taskId)}/stop`, { data_mode: state.mode }));
   if (!data) return;
   setStatus('已请求停止；当前条完成后停止，剩余岗位会标记为延后。', 'ok');
   await refreshOfferPilot();
@@ -8699,12 +8738,12 @@ function readFileAsBase64(file) {
       const result = String(reader.result || '');
       const comma = result.indexOf(',');
       if (comma < 0) {
-        reject(new Error('无法读取 PDF 内容。'));
+        reject(new Error('无法读取文件内容。'));
         return;
       }
       resolve(result.slice(comma + 1));
     };
-    reader.onerror = () => reject(new Error('读取本地 PDF 失败。'));
+    reader.onerror = () => reject(new Error('读取本地文件失败。'));
     reader.readAsDataURL(file);
   });
 }

@@ -115,16 +115,19 @@ class ConfigurableModel:
             ticks += 1
             if ticks % 20 == 0:
                 self.settings.sync_workbench_config()
-            with self.settings.lock:
-                key, revision = self.settings.pending_key, self.settings.revision
-            if key and revision != self.applied_revision and self.settings.idle():
-                from interview_agent.model_adapter import ModelAdapter
-                replacement = await ModelAdapter(self.settings.configured_environment(key)).start()
-                previous, self.delegate = self.delegate, replacement
-                self.applied_revision = revision
-                if previous:
-                    await previous.close()
-                self.settings.applied()
+            await self.apply_pending()
+
+    async def apply_pending(self):
+        with self.settings.lock:
+            key, revision = self.settings.pending_key, self.settings.revision
+        if key and revision != self.applied_revision and self.settings.idle():
+            from interview_agent.model_adapter import ModelAdapter
+            replacement = await ModelAdapter(self.settings.configured_environment(key)).start()
+            previous, self.delegate = self.delegate, replacement
+            self.applied_revision = revision
+            if previous:
+                await previous.close()
+            self.settings.applied()
 
     async def decide(self, stage, value, **kwargs):
         from interview_agent.model_adapter import ModelError

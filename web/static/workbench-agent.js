@@ -16,6 +16,8 @@
   let noteTimer = null, noteSnapshot = '', noteEpoch = 0;
   let materialSubmission = null, materialSubmitting = false, availableMaterials = [];
   let materialSnapshot = '', retrySubmission = null;
+  let contextChanges = Promise.resolve();
+  let workspaceOverview = null, guiMilestone = null;
   const storage = {get(key) { try {return localStorage.getItem(key);} catch {return null;} }, set(key,value) { try {localStorage.setItem(key,value);} catch {} }};
   const key = suffix => `offerpilot.workbench.${mode}.${suffix}`;
   const active = () => ['queued','running','committing','stopping'].includes(current?.status);
@@ -57,12 +59,84 @@
     $('panel').setAttribute('aria-busy',String(active()));
     $('activity').hidden=!active();
     const last=events.at(-1);
-    $('activity-label').textContent=friendlyText(last?.message) || labels[current?.status] || '正在处理';
+    $('activity-label').textContent=last?.tool?`${last.type==='tool_completed'?'已完成':'正在处理'} ${toolLabels[last.tool] || last.tool}`:friendlyText(last?.message) || labels[current?.status] || '正在处理';
     const materialRun=materialSubmitting || current?.material_run?.run_id===current?.run_id;
     $('upload').textContent=materialSubmitting || (materialRun&&active())?'正在整理…':'整理并预览';
     renderMaterialProgress();
     $('approval').querySelectorAll('button').forEach(b=>{b.disabled=busy || active();});
     $('recommendations').querySelectorAll('button').forEach(b=>{b.disabled=busy || active();});
+    $('guidance').querySelectorAll('button').forEach(b=>{b.disabled=busy || active();});
+    $('gui-sync').querySelectorAll('button').forEach(b=>{b.disabled=busy || active();});
+  }
+  function welcomeGuidance() {
+    const ov=workspaceOverview;
+    if(!ov)return {key:'default',summary:'告诉我你当前的求职目标，或直接贴入 JD / 项目经历，我会在对话里带你一步步完成。',actions:[
+      {label:'找合适的岗位',kind:'prompt',text:'从已有岗位里推荐 3 个匹配岗位',primary:true},
+      {label:'准备申请材料',kind:'prompt',text:'帮我梳理已有材料，准备目标岗位的简历和招呼语'},
+      {label:'回顾求职进展',kind:'prompt',text:'汇总我的岗位、HR 回复和面试准备状态'},
+    ]};
+    const counts=ov.counts || {}, next=ov.next_action || {}, actions=[];
+    const parts=[];
+    if(counts.jobs!==null&&counts.jobs!==undefined)parts.push(`${counts.jobs} 个岗位`);
+    if(counts.materials!==null&&counts.materials!==undefined)parts.push(`${counts.materials} 份已确认经历`);
+    if(counts.resumes!==null&&counts.resumes!==undefined)parts.push(`${counts.resumes} 份简历版本`);
+    const summary=`${parts.length?'当前工作区：'+parts.join(' / ')+'。':''}下一步建议：${next.title || '告诉我你的求职目标'}。`;
+    if(next.capability==='settings')actions.push({label:'连接模型，启用对话引导',kind:'capability',capability:'settings',primary:true});
+    else if(next.capability==='profile_import')actions.push({label:'上传简历自动提取资料',kind:'capability',capability:'profile_import',primary:true},{label:'手动填写个人资料',kind:'capability',capability:'profile'});
+    else if(next.capability==='jobs'){
+      actions.push({label:'在对话中粘贴 JD 录入',kind:'compose',prefill:'请帮我录入这个目标岗位 JD：\n',placeholder:'把公司、岗位名称和 JD 正文粘贴到这里，发给助手即可自动解析入库…',primary:true});
+      actions.push({label:'打开平台采集向导',kind:'capability',capability:'collect'});
+    }else if(next.capability==='experience'){
+      actions.push({label:'在对话里提交项目经历',kind:'material',primary:true});
+      actions.push({label:'连接 GitHub 核验项目',kind:'capability',capability:'github'});
+    }else{
+      actions.push({label:'推荐匹配岗位并准备材料',kind:'prompt',text:'从已有岗位中推荐 3 个匹配岗位，并结合我的已确认经历规划下一步',primary:true});
+      actions.push({label:'准备简历与招呼语草稿',kind:'prompt',text:'帮我梳理已有材料，准备目标岗位的简历和招呼语'});
+    }
+    actions.push({label:'汇总求职进展',kind:'prompt',text:'汇总我的岗位、HR 回复和面试准备状态'});
+    return {key:JSON.stringify([counts,next.capability,next.title]),summary,actions};
+  }
+  async function executeGuidance(item) {
+    if(!item)return;
+    if(item.kind==='prompt'){await send({text:item.text});return;}
+    if(item.kind==='compose'){
+      $('input').value=item.prefill || '';
+      if(item.placeholder)$('input').placeholder=item.placeholder;
+      keepInput();resizeInput();controls();$('input').focus();return;
+    }
+    if(item.kind==='material'){
+      if(window.OfferPilotWorkbench?.enabled){await window.OfferPilotWorkbench.open('experience');return;}
+      $('material-form').hidden=false;$('toggle-material').setAttribute('aria-expanded','true');$('material-name').focus();return;
+    }
+    if(item.kind==='capability'){
+      if(window.OfferPilotWorkbench?.enabled){await window.OfferPilotWorkbench.open(item.capability,item);return;}
+      showView(item.capability);
+    }
+  }
+  function guideButton(item) {
+    const b=button(item.label,()=>executeGuidance(item));
+    b.className=`button button-quiet button-small wa-guide-btn${item.primary?' is-primary':''}`;
+    return b;
+  }
+  function renderGuidance() {
+    const box=$('guidance'), items=(current?.messages?.length&&!active())?(current?.guidance || []):[];
+    box.replaceChildren();box.hidden=!items.length;
+    if(!items.length)return;
+    const head=node('div',undefined,'wa-guidance-head');
+    head.append(node('span','接下来可以这样做'));
+    const row=node('div',undefined,'wa-guidance-actions');
+    items.forEach(item=>row.append(guideButton(item)));
+    box.append(head,row);
+  }
+  function renderGuiSync() {
+    const box=$('gui-sync');box.replaceChildren();
+    if(!guiMilestone||active()){box.hidden=true;return;}
+    box.hidden=false;
+    const head=node('div',undefined,'wa-gui-sync-head');
+    head.append(node('strong',`✓ ${guiMilestone.summary}`),button('知道了',()=>{guiMilestone=null;renderGuiSync();}));
+    const row=node('div',undefined,'wa-guidance-actions');
+    (guiMilestone.actions || []).forEach(item=>row.append(guideButton(item)));
+    box.append(head,row);
   }
   function renderSessions() {
     $('session-list').replaceChildren();
@@ -79,12 +153,15 @@
   function renderMessages(animate=false) {
     const panel=$('messages');
     if(!current?.messages?.length) {
-      $('jump').hidden=true;if(panel.querySelector('.wa-welcome'))return;
+      $('jump').hidden=true;
+      const guide=welcomeGuidance(), existing=panel.querySelector('.wa-welcome');
+      if(existing && existing.dataset.key===guide.key)return;
       const welcome=node('div',undefined,'wa-welcome'),mark=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      welcome.dataset.key=guide.key;
       mark.setAttribute('viewBox','0 0 48 48');mark.setAttribute('aria-hidden','true');mark.classList.add('wa-welcome-mark');path.setAttribute('d','M24 3v12M24 33v12M3 24h12M33 24h12M9 9l9 9M30 30l9 9M9 39l9-9M30 18l9-9');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','3');path.setAttribute('stroke-linecap','round');mark.append(path);
-      welcome.append(mark,node('p','OfferPilot','wa-eyebrow'),node('h4','下一份机会，从这里开始。'));
+      welcome.append(mark,node('p','OfferPilot','wa-eyebrow'),node('h4','下一份机会，从这里开始。'),node('p',guide.summary,'wa-welcome-summary'));
       const prompts=node('div',undefined,'wa-prompts');
-      [['找合适的岗位','从已有岗位里推荐 3 个上海后端岗'],['准备申请材料','帮我梳理已有材料，准备目标岗位的简历和招呼语'],['回顾求职进展','汇总我的岗位、HR 回复和面试准备状态']].forEach(([label,text])=>prompts.append(button(label,async()=>{$('input').value=text;keepInput();resizeInput();controls();$('input').focus();})));
+      guide.actions.forEach(item=>prompts.append(guideButton(item)));
       welcome.append(prompts);panel.replaceChildren(welcome);return;
     }
     panel.querySelector('.wa-welcome')?.remove();
@@ -156,7 +233,7 @@
     if(!result&&!materialSubmitting)return;
     const status=materialSubmitting?'submitting':result.status;
     $('material-progress').dataset.state=status;
-    $('material-heading').textContent=({submitting:'正在提交材料',queued:'材料已收到',preparing:'正在整理材料',validating:'正在校验整理结果',waiting_approval:'整理成功 · 待你核对',saving:'正在保存材料',confirmed:'已确认并保存',failed:'材料处理失败',stopped:'材料整理已停止',rejected:'本次预览未保存',invalidated:'本次预览需要重新整理'})[status] || '材料整理';
+    $('material-heading').textContent=({submitting:'正在提交材料',queued:'材料已收到',preparing:'正在整理材料',validating:'正在校验整理结果',waiting_approval:'整理成功 / 待你核对',saving:'正在保存材料',confirmed:'已确认并保存',failed:'材料处理失败',stopped:'材料整理已停止',rejected:'本次预览未保存',invalidated:'本次预览需要重新整理'})[status] || '材料整理';
     $('material-status').textContent=materialSubmitting?'正在提交原文或提取文件，请稍候。':result.message+(result.error_code?`（错误代码：${result.error_code}）`:'');
     const stages={queued:0,preparing:1,validating:1,waiting_approval:2,saving:3,confirmed:4,rejected:2,invalidated:2};
     const stage=stages[['failed','stopped'].includes(status)?result.failed_at:status] ?? -1;
@@ -178,7 +255,7 @@
     const p=result.preview;
     panel.append(node('h2',p.name || result.name || '项目整理结果'),node('p',result.message || '请核对整理内容。'));
     [['project_overview','项目背景'],['summary','项目理解'],['positioning','岗位匹配方向']].forEach(([key,label])=>{if(p[key])panel.append(node('h3',label),node('p',p[key]));});
-    panel.append(node('h3',`核心贡献 · ${p.claims?.length || 0} 条`));
+    panel.append(node('h3',`核心贡献（${p.claims?.length || 0} 条）`));
     (p.claims || []).forEach((c,index)=>{
       const section=node('section',undefined,'wa-material-claim');section.append(node('h4',`${index+1}. ${c.pillar || '核心贡献'}`),node('p',c.text));
       [['fit_reason','岗位相关性'],['boundary','职责边界'],['risk','待核实项']].forEach(([key,label])=>{if(c[key])section.append(node('p',`${label}：${c[key]}`,'wa-material-meta'));});
@@ -240,7 +317,7 @@
     $('process').hidden=!rows.length;
   }
   function render(animate=false) {
-    $('title').textContent=current?.title || '新的求职目标';renderMessages(animate);renderJobs();renderContext();renderApproval();renderArtifacts();renderEvents();renderSessions();controls();
+    $('title').textContent=current?.title || '新的求职目标';renderMessages(animate);renderGuidance();renderGuiSync();renderJobs();renderContext();renderApproval();renderArtifacts();renderEvents();renderSessions();controls();
   }
   async function accept(value,animate=true) {
     const grew=(value.artifacts?.length || 0)>(current?.artifacts?.length || 0);
@@ -279,13 +356,14 @@
   async function poll() {if(!current)return;const sid=current.id,ticket=epoch;try{const data=await api(`/conversations/${sid}/events?after=${events.at(-1)?.cursor || 0}`);if(ticket===epoch&&current?.id===sid)await receive(data);}catch(error){if(ticket===epoch){notice(error.message);timer=setTimeout(poll,3000);}}}
   async function open(sid) {
     keepInput();closeStream();const ticket=epoch;const data=await api(`/conversations/${sid}/events?after=0`);if(ticket!==epoch)return;
-    current=null;selectedArtifact=null;events=data.events;$('messages').replaceChildren();followMessages=true;await accept(data.view,false);$('input').value=storage.get(key(`draft.${sid}`)) || '';resizeInput();submitted=null;notice('');
+    current=null;selectedArtifact=null;guiMilestone=null;events=data.events;$('messages').replaceChildren();followMessages=true;await accept(data.view,false);$('input').value=storage.get(key(`draft.${sid}`)) || '';resizeInput();submitted=null;notice('');
   }
   async function ensureConversation() {
     if(current)return;const title=$('input').value.trim().slice(0,60) || '新的求职目标';await accept(await api('/conversations',{title}));
   }
   async function send(override={}) {
     if(active())return;await ensureConversation();const text=override.text || $('input').value.trim();if(!text)return;
+    guiMilestone=null;
     const payload={event_id:crypto.randomUUID(),text,...override};
     if(!override.text && submitted?.text===text)payload.event_id=submitted.event_id;
     submitted=payload;const ticket=epoch;const value=await api(`/conversations/${current.id}/messages`,payload);
@@ -336,14 +414,14 @@
   window.addEventListener('pagehide',()=>{closeStream();clearTimeout(noteTimer);});
   window.addEventListener('pageshow',event=>{if(event.persisted){schedule();refreshNotes();}});
   if($('tab-chat')&&$('tab-overview')){$('tab-chat').addEventListener('click',()=>tab('chat'));$('tab-overview').addEventListener('click',()=>tab('overview'));}
-  $('new').addEventListener('click',()=>{keepInput();epoch++;closeStream();busy=false;current=null;events=[];submitted=null;selectedArtifact=null;followMessages=true;$('messages').replaceChildren();$('input').value=storage.get(key('draft.new')) || '';showResults(false);render();resizeInput();notice('');$('input').focus();});
+  $('new').addEventListener('click',()=>{keepInput();epoch++;contextChanges=Promise.resolve();closeStream();busy=false;current=null;events=[];submitted=null;selectedArtifact=null;guiMilestone=null;followMessages=true;$('messages').replaceChildren();$('input').value=storage.get(key('draft.new')) || '';showResults(false);render();resizeInput();notice('');$('input').focus();});
   $('form').addEventListener('submit',event=>{event.preventDefault();run(()=>send());});
   function resizeInput() {const input=$('input');if(!CSS.supports('field-sizing','content')){input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,240)}px`;}controls();}
   $('input').addEventListener('input',()=>{keepInput();resizeInput();});
   $('messages').addEventListener('scroll',()=>{const p=$('messages');followMessages=p.scrollHeight-p.scrollTop-p.clientHeight<40;$('jump').hidden=followMessages;},{passive:true});
   $('jump').addEventListener('click',()=>{followMessages=true;$('messages').scrollTop=$('messages').scrollHeight;$('jump').hidden=true;});
-  $('input').addEventListener('compositionstart',()=>{composing=true;});$('input').addEventListener('compositionend',()=>{composing=false;compositionEnded=Date.now();});
-  $('input').addEventListener('keydown',event=>{if(event.key!=='Enter'||event.shiftKey)return;if(event.isComposing||composing||event.keyCode===229)return;event.preventDefault();if(compositionEnded&&Date.now()-compositionEnded<500){compositionEnded=0;return;}$('form').requestSubmit();});
+  $('input').addEventListener('compositionstart',()=>{composing=true;});$('input').addEventListener('compositionend',()=>{composing=false;compositionEnded=performance.now();});
+  $('input').addEventListener('keydown',event=>{if(event.key!=='Enter'||event.shiftKey)return;if(event.isComposing||composing||event.keyCode===229)return;if(compositionEnded&&performance.now()-compositionEnded<500){compositionEnded=0;return;}event.preventDefault();$('form').requestSubmit();});
   $('stop').addEventListener('click',()=>run(async()=>accept(await api(`/conversations/${current.id}/stop`,{}))));
   $('toggle-material').addEventListener('click',()=>{$('material-form').hidden=!$('material-form').hidden;$('toggle-material').setAttribute('aria-expanded',String(!$('material-form').hidden));});
   $('show-results').addEventListener('click',()=>{if(current?.artifacts?.length || materialResult()?.preview)showResults();else notice(current?.material_run?.message || '提交项目材料后，这里显示整理预览；确认材料并选择岗位后可生成简历和招呼语。');});
@@ -385,13 +463,18 @@
     try {const value=await api(`/conversations/${current.id}/attachments`,payload);if(ticket!==epoch)return;await accept(value);materialSubmission=null;$('material-form').hidden=true;$('toggle-material').setAttribute('aria-expanded','false');}
     finally {materialSubmitting=false;controls();}
   });});
-  document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{queueMicrotask(()=>{if(mode===state.mode)return;keepInput();epoch++;closeStream();mode=state.mode;availableMaterials=[];current=null;events=[];busy=false;submitted=null;selectedArtifact=null;followMessages=true;$('messages').replaceChildren();showResults(false);$('material-form').hidden=true;$('input').value='';render();load();noteEpoch++;noteSnapshot='';$('note-messages').replaceChildren();$('note-status').textContent='';refreshNotes();});}));
+  document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{queueMicrotask(()=>{if(mode===state.mode)return;keepInput();epoch++;contextChanges=Promise.resolve();closeStream();mode=state.mode;availableMaterials=[];workspaceOverview=null;guiMilestone=null;current=null;events=[];busy=false;submitted=null;selectedArtifact=null;followMessages=true;$('messages').replaceChildren();showResults(false);$('material-form').hidden=true;$('input').value='';render();load();noteEpoch++;noteSnapshot='';$('note-messages').replaceChildren();$('note-status').textContent='';refreshNotes();});}));
   tab('chat');render();load().then(resizeInput);refreshNotes();
   window.OfferPilotAgent={
     snapshot:()=>current,
-    send:overrides=>run(()=>send(overrides)),
+    contextReady:()=>contextChanges,
+    setToolLabels:values=>{Object.assign(toolLabels,values);eventsSnapshot='';renderEvents();},
+    setOverview:value=>{workspaceOverview=value;if(!current?.messages?.length)renderMessages(false);},
+    notifyGuiMilestone:payload=>{guiMilestone=payload;renderGuiSync();},
+    send:async overrides=>{await contextChanges;if(busy||active())throw new Error('当前任务仍在处理中，请稍后继续或停止当前任务。');return run(()=>send(overrides));},
     open:sid=>run(()=>open(sid)),
-    selectContext:async values=>{if(busy||active())throw new Error('当前任务正在执行，请先停止后再切换选择。');busy=true;controls();try{await ensureConversation();await accept(await api(`/conversations/${current.id}/context`,values),false);}finally{busy=false;controls();}},
+    selectContext:values=>{const expectedMode=mode,ticket=epoch;contextChanges=contextChanges.catch(()=>{}).then(async()=>{if(mode!==expectedMode||ticket!==epoch)throw new Error('会话范围已切换');if(busy||active())throw new Error('当前任务正在执行，请先停止后再切换选择。');busy=true;controls();try{await ensureConversation();await accept(await api(`/conversations/${current.id}/context`,values),false);}finally{busy=false;controls();}});return contextChanges;},
+    showArtifact:id=>{selectedArtifact=id;$('artifact').value=id;renderArtifact();showResults();},
     material:()=>{ $('material-form').hidden=false;$('toggle-material').setAttribute('aria-expanded','true'); },
   };
 })();

@@ -24,7 +24,8 @@ BUSINESS_TOOLS = {
     "review_transcript": ("逐字稿复盘", "interview", "write", {"text": ("text", None, 30000)}),
     "add_interview_question": ("加入题库", "interview", "write", {"question": ("text", None, 3000), "section": ("text", "项目深挖", 100)}),
     "prepare_github_project": ("解读 GitHub 项目", "resume", "handoff", {"repository": ("text", None, 200), "role": ("text", None, 200), "contribution": ("text", None, 4000)}),
-    "knowledge_sources": ("查看项目知识库", "resume", "read", {}),
+    "knowledge_sources": ("查看项目知识库", "resume", "read", {"offset": ("offset", 0, 100000)}),
+    "project_knowledge_context": ("查看项目资料覆盖", "resume", "read", {"snapshot_id": ("text", None, 100)}),
     "search_project_knowledge": ("检索项目证据", "resume", "read", {"snapshot_ids": ("ids", None, 100), "query": ("text", None, 1000)}),
     "collect_note": ("收藏单条面经", "notes", "write", {"url": ("text", None, 4096)}),
     "subscribe_note": ("订阅单条面经更新", "notes", "write", {"url": ("text", None, 4096), "interval_hours": ("int", 24, 168), "keywords": ("strings", [], 10)}),
@@ -44,8 +45,9 @@ CAPABILITIES = [
     ("profile_import", "导入简历", "资料与经历", "profile", "profile-resume-drop", "file"),
     ("profile", "编辑个人资料", "资料与经历", "profile", "profile-form", "form"),
     ("experience", "整理项目与工作经历", "资料与经历", "experience", "", "form"),
+    ("experience_details", "按类型录入经历或作品集", "资料与经历", "resume", "cu-experience-form", "form"),
     ("github", "GitHub 项目核验", "资料与经历", "resume", "cu-repository-section", "form"),
-    ("knowledge", "项目知识库与证据", "资料与经历", "resume", "cu-knowledge-title", "read"),
+    ("knowledge", "项目知识库与证据", "资料与经历", "knowledge", "", "read"),
     ("jobs", "选择或录入岗位", "寻找岗位", "jobs", "", "form"),
     ("collect", "采集平台岗位", "寻找岗位", "collect", "", "form"),
     ("job_import", "导入岗位 JSON", "寻找岗位", "jobs", "import-form", "form"),
@@ -68,7 +70,7 @@ CAPABILITIES = [
 
 
 def validate_arguments(name, arguments):
-    if name not in BUSINESS_TOOLS or not isinstance(arguments, dict):
+    if not isinstance(name, str) or name not in BUSINESS_TOOLS or not isinstance(arguments, dict):
         raise ValueError("未知工作台能力")
     fields = BUSINESS_TOOLS[name][3]
     if set(arguments) - set(fields):

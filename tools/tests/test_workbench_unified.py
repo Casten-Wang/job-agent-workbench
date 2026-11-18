@@ -38,7 +38,7 @@ class UnifiedWorkbenchTests(unittest.TestCase):
         self.assertEqual(result["counts"]["jobs"], 1)
         self.assertIsNone(result["counts"]["materials"])
         self.assertTrue(result["partial"])
-        self.assertEqual(result["next_action"]["capability"], "profile_import")
+        self.assertEqual(result["next_action"]["capability"], "settings")
         self.assertFalse((store.root / "workbench-operations.db").exists())
 
     def test_reading_overview_does_not_start_tasks_or_inference(self):
@@ -48,6 +48,13 @@ class UnifiedWorkbenchTests(unittest.TestCase):
             result = wb.overview("user")
         self.assertEqual(result["tasks"][0]["status"], "running")
 
+    def test_overview_keeps_ongoing_legacy_interviews_in_task_list(self):
+        store = backend.get_store("user", seed_if_empty=False)
+        store.set_interview_session({"id": "ongoing", "user_status": "ready_to_end"})
+        with patch.object(backend, "get_offerpilot_state", return_value={"ok": True}), patch.object(wb, "engine_get", return_value={}):
+            task = wb.overview("user")["tasks"][0]
+        self.assertEqual((task["interview_id"], task["status"], task["interview_kind"]), ("ongoing", "ready_to_finish", "legacy"))
+
     def test_catalog_covers_every_existing_panel_and_has_real_anchor_targets(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
         ids = re.findall(r'\bid="([^"]+)"', html)
@@ -56,7 +63,7 @@ class UnifiedWorkbenchTests(unittest.TestCase):
             with self.subTest(capability=key):
                 if anchor:
                     self.assertIn(anchor, ids)
-                self.assertTrue("view-" + view in ids or view in {"experience", "application", "notes", "settings", "overview"})
+                self.assertTrue("view-" + view in ids or view in {"experience", "application", "notes", "settings", "overview", "knowledge"})
         self.assertTrue({"collect", "jobs", "queue", "mail", "profile", "interview", "resume", "push", "data"}.issubset({c[3] for c in CAPABILITIES}))
 
     def test_every_named_business_tool_rejects_arbitrary_execution_arguments(self):
@@ -79,6 +86,10 @@ class UnifiedWorkbenchTests(unittest.TestCase):
             domain.assert_called_once()
             with self.assertRaises(backend.ApiError):
                 wb.execute("user", "record_job", {"text": "另一岗位"}, "once")
+            with self.assertRaises(backend.ApiError) as invalid_mode:
+                wb.execute("demo", "record_job", {"text": "虚构岗位"}, "once")
+            self.assertEqual(invalid_mode.exception.status, 400)
+            self.assertEqual(domain.call_count, 1)
             # 本产品只有本机单一数据集（demo 模式已移除）；换一个操作编号才会真正再执行一次。
             wb.execute("user", "record_job", {"text": "虚构岗位"}, "twice")
             self.assertEqual(domain.call_count, 2)
@@ -114,6 +125,7 @@ class UnifiedWorkbenchTests(unittest.TestCase):
     def test_note_and_knowledge_adapters_use_owner_bound_existing_routes(self):
         cases = [
             ("knowledge_sources", {}, "GET", "/knowledge/sources"),
+            ("project_knowledge_context", {"snapshot_id": "ksnap_one"}, "GET", "/knowledge/snapshots/ksnap_one/context"),
             ("search_project_knowledge", {"snapshot_ids": ["s1"], "query": "校验"}, "POST", "/knowledge/search"),
             ("collect_note", {"url": "https://www.xiaohongshu.com/explore/synthetic"}, "POST", "/notes/collect"),
             ("subscribe_note", {"url": "https://www.xiaohongshu.com/explore/synthetic", "interval_hours": 24, "keywords": []}, "POST", "/notes/subscriptions"),
@@ -204,6 +216,13 @@ class UnifiedWorkbenchTests(unittest.TestCase):
         response = connection.getresponse();response.read();self.assertEqual(response.status, 400)
         connection.request("POST", "/api/workbench/settings?mode=demo", json.dumps({"api_key": "synthetic-secret"}), {"Content-Type": "application/json"})
         response = connection.getresponse();raw=response.read();self.assertEqual(response.status, 400);self.assertNotIn(b"synthetic-secret", raw)
+        connection.request("POST", "/api/workbench/settings?mode=user", json.dumps({"api_key": "synthetic-secret"}), {"Content-Type": "application/json", "Origin": "http://127.0.0.1:1"})
+        response = connection.getresponse();raw=response.read();self.assertEqual(response.status, 403);self.assertNotIn(b"synthetic-secret", raw)
+        with patch.object(backend, "stop_offerpilot_task", return_value={"ok": True, "task": {"status": "stopping"}}) as stop:
+            connection.request("POST", "/api/offerpilot/tasks/fixture-delivery/stop", json.dumps({"data_mode": "user"}), {"Content-Type": "application/json"})
+            response = connection.getresponse();value=json.loads(response.read());self.assertEqual(response.status, 200)
+            self.assertEqual(value["task"]["status"], "stopping")
+            stop.assert_called_once_with("fixture-delivery", "user")
 
 
 if __name__ == "__main__":

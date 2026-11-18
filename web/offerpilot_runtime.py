@@ -282,7 +282,7 @@ def start_greet_task(ids: Any) -> dict[str, Any]:
     from offerpilot.db import add_history, query_jobs, update_job_status  # type: ignore
     from offerpilot.web.tasks import TaskAlreadyRunningError  # type: ignore
 
-    config = server.load_config(server.CONFIG_PATH)
+    config = effective_ai_config(server.load_config(server.CONFIG_PATH))
     error = greeting_config_error(config)
     if error:
         raise ValueError(error)
@@ -490,7 +490,7 @@ def get_state() -> dict[str, Any]:
     """Return the same credential-free shape the old HTTP bridge returned."""
     try:
         server = load_backend()
-        config = server.load_config(server.CONFIG_PATH)
+        config = effective_ai_config(server.load_config(server.CONFIG_PATH))
         status = server.task_runner.status()
         capabilities = {
             "collect_without_ai": True,
@@ -694,7 +694,7 @@ def preflight(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str,
     from offerpilot.config import load_config  # type: ignore
     from offerpilot.web.preflight import collect_preflight_checks, error_messages  # type: ignore
 
-    config = load_config(server.CONFIG_PATH)
+    config = effective_ai_config(load_config(server.CONFIG_PATH))
     try:
         options = _task_options(mode, config, raw_options)
     except ValueError as exc:
@@ -788,7 +788,7 @@ def start_task(mode: str, raw_options: dict[str, Any] | None = None) -> dict[str
     from offerpilot.config import load_config  # type: ignore
     from offerpilot.web.preflight import collect_preflight_checks, error_messages  # type: ignore
 
-    config = load_config(server.CONFIG_PATH)
+    config = effective_ai_config(load_config(server.CONFIG_PATH))
     resume_blocker = _resume_blocker(server, mode, config)
     if resume_blocker:
         raise ValueError(resume_blocker)

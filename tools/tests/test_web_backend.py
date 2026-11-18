@@ -2274,6 +2274,25 @@ class PdfCheckTests(SeededStoreTestCase):
         self.assertIsNone(result["all_keywords_found"])
         self.assertTrue(all(value is None for value in result["keyword_matches"].values()))
 
+    def test_empty_keywords_do_not_turn_a_readable_pdf_into_a_failure(self):
+        raw = (
+            b"%PDF-1.4\n"
+            b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+            b"2 0 obj\n<< /Type /Pages /Count 1 >>\nendobj\n"
+            b"3 0 obj\n<< /Length 42 >>\nstream\nBT (readable resume) Tj ET\nendstream\nendobj\n"
+            b"trailer\n<< /Root 1 0 R >>\n%%EOF\n"
+        )
+        response = backend.check_pdf({
+            "mode": "demo",
+            "content_base64": base64.b64encode(raw).decode("ascii"),
+            "keywords": "",
+            "filename": "readability-only.pdf",
+        })
+        result = response["result"]
+        self.assertEqual(result["text_layer"], "available")
+        self.assertIsNone(result["all_keywords_found"])
+        self.assertEqual(result["verdict"], "needs_manual_check")
+
     def test_non_pdf_payload_is_rejected(self):
         with self.assertRaises(backend.ApiError):
             backend.check_pdf(
@@ -2523,7 +2542,7 @@ class HttpServerTests(unittest.TestCase):
             "startQueueDelivery",
             "renderDeliveryResults",
             "deliveryStatusBadge",
-            "offerpilot-stop",
+            "/api/offerpilot/tasks/${encodeURIComponent(taskId)}/stop",
             "offerpilot.importedTasks",
             "renderHomeToday",
             "collectProfileForm",
@@ -2675,6 +2694,19 @@ class HttpServerTests(unittest.TestCase):
         self.assertIn("button-draft", script)
         self.assertIn("button-draft", (WEB_DIR / "static" / "offer-theme.css").read_text(encoding="utf-8"))
 
+    def test_agent_capabilities_explain_shared_and_deterministic_layers(self):
+        status, headers, raw = self.request("GET", "/api/agent/capabilities")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", headers.get("Content-Type", ""))
+        data = json.loads(raw.decode("utf-8"))
+        self.assertEqual(data["architecture"]["model"], "step-5-preview")
+        stages = {item["stage"] for item in data["agent_stages"]}
+        self.assertTrue({"profile_extract", "prepare", "plan", "intent", "observation", "hint"} <= stages)
+        modules = {item["module"]: item["execution"] for item in data["modules"]}
+        self.assertEqual(modules["定制简历版本"], "deterministic+confirmed_material")
+        self.assertIn("邮件分类", data["not_yet_unified"])
+        self.assertTrue(any("未知字段" in item for item in data["guarantees"]))
+
     def test_pipeline_api_document_is_downloadable(self):
         status, headers, raw = self.request("GET", "/api/doc/pipeline-api")
         self.assertEqual(status, 200)
@@ -2736,7 +2768,7 @@ class WorkbenchFlowTests(unittest.TestCase):
         completed = subprocess.run(
             [node, "-e", harness],
             input=json.dumps(snapshot),
-            text=True,
+            text=True, encoding="utf-8",
             capture_output=True,
             check=False,
         )

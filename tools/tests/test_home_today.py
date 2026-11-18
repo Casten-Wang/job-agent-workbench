@@ -139,7 +139,7 @@ class HomeModelTests(unittest.TestCase):
         completed = subprocess.run(
             [node, "-e", harness],
             input=json.dumps({"snapshot": snapshot, "now": now}, ensure_ascii=False),
-            text=True,
+            text=True, encoding="utf-8",
             capture_output=True,
             check=False,
         )

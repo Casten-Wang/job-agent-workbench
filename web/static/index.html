@@ -4,17 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>秋招规划师 · OfferPilot</title>
+  <title>秋招规划师 | OfferPilot</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/offer-theme.css">
   <link rel="stylesheet" href="/ui-signals.css">
-  <link rel="stylesheet" href="/workbench-agent.css">
   <link rel="stylesheet" href="/career-resume.css">
   <link rel="stylesheet" href="/sg-base.css">
   <link rel="stylesheet" href="/sg-pipeline.css">
   <link rel="stylesheet" href="/sg-tools.css">
   <link rel="stylesheet" href="/mj-base.css">
   <link rel="stylesheet" href="/mj-pages.css">
+<link rel="stylesheet" href="/workbench-agent.css">
+<link rel="stylesheet" href="/workbench.css">
+<link rel="stylesheet" href="/comprehensive-interview.css">
 </head>
 <body class="offer-ui">
   <div class="ambient" aria-hidden="true">
@@ -33,7 +35,7 @@
         <span class="brand-rule" aria-hidden="true"></span>
         <div>
           <p class="brand-title">秋招规划师</p>
-          <p class="brand-sub">OfferPilot · 本地工作台</p>
+          <p class="brand-sub">OfferPilot 本地工作台</p>
         </div>
       </div>
 
@@ -81,6 +83,42 @@
 
       <div class="views" id="views" aria-busy="true">
         <section class="view" id="view-workbench" data-view-panel="workbench" aria-labelledby="workbench-title">
+
+          <section id="wb-shell" class="wb-shell" aria-label="求职任务工作台" hidden>
+            <header class="wb-toolbar">
+              <div><button type="button" id="wb-home-button" class="button button-quiet">工作总览</button><span id="wb-breadcrumb" aria-live="polite"></span></div>
+              <div class="wb-toolbar-actions"><button type="button" id="wb-all-tools" class="button button-quiet">全部工具</button><button type="button" id="wb-settings-button" class="button button-quiet">连接与设置</button><button type="button" id="wb-assistant-toggle" class="button button-quiet" aria-expanded="false">对话助手</button></div>
+            </header>
+            <div class="wb-layout">
+              <div id="wb-main" class="wb-main" tabindex="-1">
+                <p id="wb-notice" class="wb-notice" role="status" aria-live="polite" hidden></p>
+                <div id="wb-approval-slot"></div><div id="wb-progress-slot"></div>
+                <section id="wb-home" aria-labelledby="wb-home-title">
+                  <div class="wb-heading"><h2 id="wb-home-title">工作总览</h2><button id="wb-refresh" type="button" class="button button-quiet">刷新</button></div>
+                  <section class="wb-next" aria-label="建议下一步"><span>下一步</span><h3 id="wb-next-title">正在读取本机工作区</h3><button id="wb-next" type="button" class="button" disabled>继续</button></section>
+                  <div id="wb-counts" class="wb-counts" aria-label="已有成果计数"></div>
+                  <section><h3>常用任务</h3><div id="wb-shortcuts" class="wb-shortcuts"></div></section>
+                  <div class="wb-home-columns"><section><h3>进行中的任务</h3><div id="wb-tasks"></div><h3>待你确认</h3><div id="wb-pending"></div></section><section><h3>最近成果</h3><div id="wb-results"></div></section></div>
+                  <p id="wb-setup-hint" class="wb-setup-hint" hidden></p>
+                </section>
+                <section id="wb-tools" aria-labelledby="wb-tools-title" hidden><h2 id="wb-tools-title">全部工具</h2><label for="wb-tool-filter">查找功能</label><input id="wb-tool-filter" type="search" placeholder="例如：导入、面经、简历"><div id="wb-tool-list"></div></section>
+                <section id="wb-application" aria-labelledby="wb-application-title" hidden><h2 id="wb-application-title">准备申请材料</h2><p>选择目标岗位和已确认经历，助手会准备简历与招呼语草稿。</p><div id="wb-context" class="wb-context"><label>目标岗位<select id="wb-context-job"><option value="">选择岗位</option></select></label><label>经历材料<select id="wb-context-material"><option value="">选择已确认经历</option></select></label><label>简历版本<select id="wb-context-version"><option value="">暂不选择</option></select></label><label>面试会话<select id="wb-context-interview"><option value="">暂不选择</option></select></label></div><div class="wb-actions"><button id="wb-prepare" type="button" class="button">准备简历与招呼语</button><button id="wb-add-experience" type="button" class="button button-quiet">补充经历</button><button id="wb-add-job" type="button" class="button button-quiet">录入岗位</button></div></section>
+                <section id="wb-material" aria-label="经历与资料整理" hidden><div class="wb-heading"><h2>整理真实经历</h2><button id="wb-detailed-experience" type="button" class="button button-quiet">按经历类型填写</button></div><div id="wb-material-host"></div></section>
+                <section id="wb-knowledge" aria-labelledby="wb-knowledge-title" hidden><div class="wb-heading"><h2 id="wb-knowledge-title">项目知识库与证据</h2><button id="wb-knowledge-refresh" type="button" class="button button-quiet">刷新项目资料</button></div><p id="wb-knowledge-status" role="status"></p><div id="wb-knowledge-sources"></div><form id="wb-knowledge-form"><label for="wb-knowledge-project">检索范围</label><select id="wb-knowledge-project" required></select><label for="wb-knowledge-query">想了解项目的什么内容</label><input id="wb-knowledge-query" type="search" maxlength="1000" required placeholder="例如：登录校验、失败处理"><button id="wb-knowledge-search" type="submit" class="button">查找项目依据</button></form><section id="wb-knowledge-results" aria-live="polite"></section><section id="wb-knowledge-coverage"></section></section>
+                <section id="wb-notes" aria-labelledby="wb-notes-title" hidden>
+                  <h2 id="wb-notes-title">面经收藏与更新订阅</h2><p>收藏你提供的单条小红书笔记，或定期检查这条笔记的更新。</p>
+                  <form id="wb-note-form" class="form-grid"><div class="form-field full"><label for="wb-note-url">单条笔记链接</label><input id="wb-note-url" type="url" required maxlength="4096" placeholder="粘贴笔记分享链接"></div><div class="form-field"><label for="wb-note-hours">检查间隔（小时）</label><input id="wb-note-hours" type="number" min="1" max="168" value="24" required></div><div class="form-field"><label for="wb-note-keywords">关键词（可选，逗号分隔）</label><input id="wb-note-keywords" type="text" maxlength="500"></div><div class="form-actions full"><button id="wb-note-collect" type="submit" class="button">收藏这条面经</button><button id="wb-note-subscribe" type="button" class="button button-quiet">订阅更新</button></div></form>
+                  <p id="wb-note-status" role="status" aria-live="polite"></p><article id="wb-note-document" hidden></article><div class="wb-heading"><h3>我的订阅</h3><div class="wb-actions"><button id="wb-note-check" type="button" class="button button-quiet">检查更新</button><button id="wb-note-refresh" type="button" class="button button-quiet">刷新订阅与消息</button></div></div><div id="wb-note-subscriptions"></div><h3>面经消息</h3><div id="wb-note-inbox"></div><button id="wb-note-more" type="button" class="button button-quiet" hidden>加载更多消息</button>
+                </section>
+                <section id="wb-settings" aria-labelledby="wb-settings-title" hidden><h2 id="wb-settings-title">连接与必要配置</h2><section><h3>模型连接</h3><p id="wb-model-status" role="status"></p><p class="hint">工作台、Agent 和综合面试共用设置页中的 AI 接口，任务结束后自动应用更新。</p><button id="wb-model-settings" type="button" class="button">打开 AI 接口设置</button></section><section><h3>GitHub</h3><p>分析 GitHub 项目时再连接；手动整理经历无需 GitHub 账号。</p><button id="wb-connect-github" type="button" class="button button-quiet">打开 GitHub 连接</button></section><section><h3>招聘平台</h3><p id="wb-platform-status"></p><button id="wb-connect-platform" type="button" class="button button-quiet">打开采集与启动前检查</button></section><section><h3>工作台外观</h3><a href="/?workbench=legacy">使用原工作台</a><p class="hint">切换前请保存尚未提交的表单。</p></section></section>
+                <section id="wb-business-result" aria-label="业务处理结果" hidden></section>
+                <div id="wb-content-host"></div><div id="wb-result-host"></div>
+              </div>
+              <aside id="wb-assistant" class="wb-assistant" aria-label="求职对话助手"><div class="wb-heading"><h3>求职助手</h3><button id="wb-show-main" type="button" class="button button-quiet">返回操作区</button></div><details id="wb-history"><summary>历史会话</summary></details><div id="wb-assistant-host"></div></aside>
+            </div>
+          </section>
+
+          <div id="wa-overview">
           <div class="home-today" id="home-today">
             <div class="sg-home-main">
               <header class="home-head">
@@ -143,6 +181,7 @@
               </section>
             </aside>
           </div>
+        </div>
         </section>
 
         <section class="view" id="view-collect" data-view-panel="collect" aria-labelledby="collect-title" hidden>
@@ -225,7 +264,7 @@
                   <input type="file" id="collect-resume-file" accept=".md,.docx,.pdf" hidden>
                   <button class="button button-quiet button-small" type="button" id="collect-resume-upload">上传简历</button>
                 </div>
-              </div>
+              <p class="resume-drop-status" aria-live="polite"></p></div>
               <details class="offerpilot-details collect-advanced" data-collect-search>
                 <summary>高级设置</summary>
                 <div class="form-grid">
@@ -318,7 +357,7 @@
               <p id="wa-notice" class="wa-notice" role="status"></p>
               <details id="wa-note-inbox" class="wa-note-inbox" hidden>
                 <summary><span id="wa-note-count" role="status" aria-atomic="true">面经消息</span></summary>
-                <p>这里显示你收藏的面经链接；运行时会自动检查更新，遇到登录或验证会暂停。</p>
+                <p>收藏和订阅用户给出的单条链接；应用运行时检查更新，遇到登录或验证会暂停。</p>
                 <button type="button" id="wa-note-help" class="button button-quiet button-small">面经怎么用</button>
                 <button type="button" id="wa-note-check" class="button button-quiet button-small">检查更新</button>
                 <p id="wa-note-status" role="status"></p>
@@ -329,6 +368,8 @@
                 <button type="button" id="wa-jump" class="button button-quiet button-small wa-jump" hidden>新回复 ↓</button>
               </div>
               <div id="wa-activity" class="wa-activity" role="status" hidden><span class="wa-quiet-dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="wa-activity-label">正在处理</span></div>
+              <div id="wa-gui-sync" class="wa-gui-sync" role="status" hidden></div>
+              <div id="wa-guidance" class="wa-guidance" aria-label="下一步建议" hidden></div>
               <div id="wa-recommendations" class="wa-recommendations"></div>
               <div id="wa-approval" class="wa-approval" hidden></div>
               <section id="wa-material-progress" class="wa-material-progress" aria-label="材料整理进度" hidden>
@@ -342,7 +383,7 @@
                 <div id="wa-context" class="wa-context"></div>
                 <label for="wa-input" class="wa-input-label">发送给 OfferPilot</label>
                 <textarea id="wa-input" rows="2" maxlength="12000" placeholder="描述求职目标，或继续完善你的草稿…"></textarea>
-                <div class="wa-composer-actions"><button type="button" id="wa-toggle-material" class="button button-quiet button-small" aria-expanded="false" aria-controls="wa-material-form">＋ 材料</button><button type="button" id="wa-show-results" class="button button-quiet button-small">草稿与结果</button><span class="wa-key-hint">Shift + Enter 换行</span><button type="button" id="wa-stop" class="button button-quiet button-small" disabled hidden>停止</button><button type="submit" id="wa-send" class="button button-small" aria-label="发送消息">发送</button></div>
+                <div class="wa-composer-actions"><button type="button" id="wa-toggle-material" class="button button-quiet button-small" aria-expanded="false" aria-controls="wa-material-form">＋ 材料</button><button type="button" id="wa-show-results" class="button button-quiet button-small">草稿与结果</button><span class="wa-key-hint">Shift + Enter 换行</span><button type="button" id="wa-stop" class="button button-quiet button-small" disabled hidden>停止</button><button type="submit" id="wa-send" class="button button-small" aria-label="发送消息">发送 ↑</button></div>
               </form>
               <form id="wa-material-form" class="wa-material-form" hidden>
                 <h4>补充材料</h4>
@@ -367,7 +408,7 @@
               <details><summary>修改差异</summary><pre id="wa-diff"></pre></details>
               <details><summary>事实来源与复核</summary><div id="wa-sources"></div></details>
               </div>
-              <div id="wa-result-actions" class="wa-result-actions"><button type="button" id="wa-save" class="button button-small">保存正式版本</button><button type="button" id="wa-copy" class="button button-quiet button-small">复制草稿</button><button type="button" id="wa-delivery" class="button button-quiet button-small">去确认发送</button></div>
+              <div id="wa-result-actions" class="wa-result-actions"><button type="button" id="wa-save" class="button button-small">保存正式版本</button><button type="button" id="wa-copy" class="button button-quiet button-small">复制草稿</button><button type="button" id="wa-delivery" class="button button-quiet button-small">去发送复核</button></div>
               <div id="wa-versions"></div>
             </aside>
           </section>
@@ -830,15 +871,172 @@
 
         <section class="view" id="view-interview" data-view-panel="interview" aria-labelledby="interview-title" hidden>
           <header class="view-head">
-            <h2 class="view-title" id="interview-title">模拟面试</h2>
-            <p class="view-lede">题库、对话与复盘都在本机进行；题库为空时不会编造题目。</p>
-            <details class="sg-help">
-              <summary>这页怎么用</summary>
-              <p>题单只从本地题库取题；复盘只摘录逐字稿里写出来的内容。四张卡片分别是本场对话、Mock 题单、面试复盘与题库，进入后可以随时返回。</p>
-            </details>
+            <div class="view-head-row">
+              <div>
+                <h2 class="view-title" id="interview-title">模拟面试</h2>
+                <p class="view-lede">结合个人简历、真实项目与目标岗位进行 1v1 模拟面试、项目源码核验或本地题单训练。</p>
+              </div>
+              <nav class="ui-hub-tabs iv-mode-tabs" aria-label="模拟面试模式切换">
+                <button class="ui-hub-tab is-active" type="button" data-iv-tab="ci" aria-current="page">1v1 综合模拟面试室</button>
+                <button class="ui-hub-tab" type="button" data-iv-tab="project">项目源码核验</button>
+                <button class="ui-hub-tab" type="button" data-iv-tab="tools">题单与本地题库</button>
+              </nav>
+            </div>
           </header>
 
-          <div class="pipeline interview-hub" id="interview-hub" aria-label="模拟面试四张卡片"></div>
+          <div class="pipeline interview-hub" id="interview-hub" aria-label="模拟面试四张卡片" hidden></div>
+
+          <section class="panel integration-panel ci-panel" id="ci-panel" aria-labelledby="ci-title">
+            <div class="integration-head">
+              <div>
+                <h3 id="ci-title">1v1 模拟面试室</h3>
+                <p>结合你的简历、真实项目和目标岗位，带你走一遍贴近真人大厂面试官的开场、深挖与复盘。</p>
+              </div>
+              <div class="ci-badge-row">
+                <span class="badge badge-neutral" id="ci-status-badge">准备开始</span>
+                <span class="ci-timer" id="ci-timer-badge" hidden>已聊 00:00</span>
+              </div>
+            </div>
+            <p class="hint" id="ci-status-msg" role="status" aria-live="polite"></p>
+
+            <div id="ci-setup">
+              <form class="form-grid" id="ci-setup-form">
+                <div class="form-field">
+                  <label for="ci-role-family">面试方向</label>
+                  <select id="ci-role-family">
+                    <option value="engineering">工程研发（后端 / AI Agent / 前端）</option>
+                    <option value="algorithm">算法 / 模型研发</option>
+                    <option value="product_biz">产品 / 业务分析</option>
+                    <option value="general">通用综合</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ci-round">模拟哪一轮</label>
+                  <select id="ci-round">
+                    <option value="first">一面（基础与项目深挖）</option>
+                    <option value="second">二面（系统设计与排障）</option>
+                    <option value="manager">主管 / 终面</option>
+                    <option value="hr">HR 综合面</option>
+                    <option value="comprehensive" selected>全流程模拟</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ci-duration">预计时长</label>
+                  <select id="ci-duration">
+                    <option value="20">20 分钟（快节奏）</option>
+                    <option value="30" selected>30 分钟（标准）</option>
+                    <option value="45">45 分钟（完整一轮）</option>
+                    <option value="60">60 分钟（深度聊透）</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ci-cold-start">没绑定代码/项目资料时</label>
+                  <select id="ci-cold-start">
+                    <option value="warmup_if_empty" selected>先按口述经历热身开聊</option>
+                    <option value="strict">只针对已核验项目深挖</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ci-job">目标岗位</label>
+                  <select id="ci-job">
+                    <option value="">不限岗位（自由发挥 / 贴 JD）</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ci-resume-version">参考哪份简历</label>
+                  <select id="ci-resume-version">
+                    <option value="">自动用我最新的简历</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ci-prev-session">接续上次没聊完的场次（可选）</label>
+                  <input id="ci-prev-session" type="text" autocomplete="off" placeholder="填上次场次编号，会自动接着追问上次卡住的地方">
+                </div>
+                <div class="form-field full">
+                  <label>参考你的项目源码与文档</label>
+                  <div class="ci-knowledge-list" id="ci-knowledge-list"></div>
+                </div>
+                <div class="form-field full">
+                  <label for="ci-jd">想面的岗位要求 / JD（可选）</label>
+                  <textarea id="ci-jd" rows="3" placeholder="可以贴一段你想投的岗位职责或痛点，面试官会重点盯着这些要求问。"></textarea>
+                </div>
+                <div class="form-actions full">
+                  <button class="button" type="submit" id="ci-start">开始这场面试</button>
+                  <span class="ci-inline-status" id="ci-setup-inline-status" role="status" aria-live="polite"></span>
+                </div>
+              </form>
+            </div>
+
+            <div id="ci-stage" hidden>
+              <div class="form-actions">
+                <span class="hint" id="ci-section-label"></span>
+                <button class="button button-quiet" type="button" id="ci-new-session">重开一场</button>
+              </div>
+              <div class="ci-clarify-banner" id="ci-clarify-banner" hidden>
+                小提示：开放题可以先花两三句把业务场景、量级边界和核心指标定下来，再展开讲方案。
+              </div>
+              <div class="ci-incomplete-banner" id="ci-incomplete-banner" hidden>
+                <span id="ci-incomplete-preview"></span>
+                <button class="button button-quiet" type="button" id="ci-retry-stream">重新生成这句（不扣时间）</button>
+              </div>
+              <div class="ci-transcript" id="ci-transcript" role="log" aria-live="polite"></div>
+
+              <div id="ci-composer">
+                <div class="form-field full" id="ci-code-wrap" hidden>
+                  <label for="ci-code-box">手写代码 / 思路草稿区</label>
+                  <textarea id="ci-code-box" class="ci-code-box" rows="5" placeholder="可以把关键代码、SQL 或伪代码写在这里，发送时会和上面的话一起发给面试官。"></textarea>
+                </div>
+                <div class="form-field full">
+                  <label for="ci-answer">你的回答（回车发送，Shift+回车换行）</label>
+                  <textarea id="ci-answer" rows="4" maxlength="12000" placeholder="像真实面试一样聊聊你的思路、自己动手做了什么、结果怎么样；卡住可以点“给点提示”或“先过这题”。"></textarea>
+                </div>
+                <div class="ci-controls">
+                  <button class="button" type="button" id="ci-submit-answer">发送回答</button>
+                  <button class="button button-quiet" type="button" data-ci-cmd="request_hint">给点提示</button>
+                  <button class="button button-quiet" type="button" data-ci-cmd="skip">先过这题</button>
+                  <button class="button button-quiet" type="button" data-ci-cmd="force_skip">换下一题</button>
+                  <button class="button button-quiet" type="button" data-ci-cmd="open_book">我刚翻了下资料</button>
+                  <button class="button button-quiet" type="button" id="ci-cmd-pause" data-ci-cmd="pause">暂停一下</button>
+                  <button class="button button-quiet" type="button" id="ci-cmd-resume" data-ci-cmd="resume" hidden>继续面试</button>
+                  <button class="button button-quiet" type="button" data-ci-cmd="early_terminate">先到这里，提前复盘</button>
+                  <button class="button button-quiet" type="button" data-ci-cmd="finish">结束面试看复盘</button>
+                </div>
+                <p class="ci-inline-status" id="ci-stage-inline-status" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+
+            <section id="ci-debrief-section" hidden aria-label="面试复盘与改进建议">
+              <hr>
+              <h4>面试复盘与改进建议</h4>
+              <p class="notice" id="ci-debrief-summary"></p>
+              <p><strong id="ci-debrief-top-fix"></strong></p>
+              <div class="ci-debrief-grid" id="ci-debrief-dims"></div>
+              <h5>亮眼表现与避坑提醒</h5>
+              <ul id="ci-debrief-flags"></ul>
+              <h5>可顺手优化的简历细节（供你参考）</h5>
+              <ul id="ci-debrief-resume-drafts"></ul>
+              <div class="form-actions">
+                <button class="button button-quiet" type="button" id="ci-export-md">保存复盘笔记 (.md)</button>
+              </div>
+              <hr>
+              <h4>薄弱点再练一遍</h4>
+              <form class="form-grid" id="ci-drill-form">
+                <div class="form-field">
+                  <label for="ci-drill-question">选一道刚聊过的题</label>
+                  <select id="ci-drill-question"></select>
+                </div>
+                <div class="form-field full">
+                  <label for="ci-drill-answer">重新组织一下你的回答</label>
+                  <textarea id="ci-drill-answer" rows="3" placeholder="试着花 60 秒再讲一遍，重点讲清你亲自做了什么、为什么这么选、真实结果怎样。"></textarea>
+                </div>
+                <div class="form-actions full">
+                  <button class="button" type="submit" id="ci-drill-submit">再练一次看看反馈</button>
+                  <span class="ci-inline-status" id="ci-drill-inline-status" role="status" aria-live="polite"></span>
+                </div>
+              </form>
+              <div class="ci-card" id="ci-drill-result" hidden></div>
+            </section>
+          </section>
 
           <div class="interview-module" id="interview-module-chat" hidden>
             <p class="interview-module-nav">
@@ -1079,7 +1277,47 @@
             <section id="cu-recap" class="career-recap" hidden aria-label="个人面试复盘"></section>
             <button class="button" type="button" id="cu-to-draft" hidden>生成本次简历预览</button>
           </section>
-        </section>
+
+<section hidden class="panel integration-panel career-panel" aria-labelledby="interview-agent-title">
+            <div class="integration-head">
+              <div>
+                <h3 id="interview-agent-title">项目核验面试</h3>
+                <p>与定制简历页沿用同一轮练习。公开样例不计入个人经历，反馈为待确认建议。</p>
+              </div>
+              <span class="badge badge-neutral" id="career-session-status">尚未开始</span>
+            </div>
+            <p class="notice">当前是公开项目练习，不是基于个人简历的正式面试。回答将发送至 Step 模型生成反馈，请勿填写个人信息。</p>
+            <div class="form-actions career-actions">
+              <button class="button button-quiet" type="button" id="career-back-resume" data-view-link="resume">选择项目 / 开始核验</button>
+              <button class="button button-quiet" type="button" id="career-refresh">恢复 / 刷新本轮</button>
+            </div>
+            <p id="career-message" class="career-message" role="status" aria-live="polite">请先在定制简历页开始公开样例核验。</p>
+            <div id="career-session" hidden>
+              <p class="card-meta" id="career-session-meta"></p>
+              <h4 id="career-question" class="career-question" tabindex="-1"></h4>
+              <p class="hint" id="career-evidence-range"></p>
+              <form id="career-answer-form" class="form-grid">
+                <div class="form-field full">
+                  <label for="career-answer">你的回答</label>
+                  <textarea id="career-answer" rows="6" maxlength="12000" aria-describedby="career-answer-note" placeholder="用自己的话说明实现、原因和边界。"></textarea>
+                  <p class="hint" id="career-answer-note">可以跳过、暂停，或先查看源码；查阅资料与提示会记录为辅助作答。</p>
+                </div>
+                <div class="form-actions full career-actions">
+                  <button class="button" type="submit" id="career-submit">提交回答</button>
+                  <button class="button button-quiet" type="button" data-career-command="request_hint">给我提示</button>
+                  <button class="button button-quiet" type="button" data-career-command="open_book">查看源码</button>
+                  <button class="button button-quiet" type="button" data-career-command="skip">跳过本题</button>
+                  <button class="button button-quiet" type="button" data-career-command="pause">暂停</button>
+                  <button class="button button-quiet" type="button" data-career-command="resume" hidden>继续练习</button>
+                  <button class="button button-quiet" type="button" data-career-command="retry" hidden>重试未完成操作</button>
+                  <button class="button button-quiet" type="button" data-career-command="finish">结束并生成复盘</button>
+                </div>
+              </form>
+              <div id="career-source" hidden></div>
+            </div>
+            <section id="career-recap" class="career-recap" aria-label="本轮项目核验复盘" hidden></section>
+          </section>
+</section>
 
         <section class="view" id="view-push" data-view-panel="push" aria-labelledby="push-title" hidden>
           <header class="view-head">
@@ -1140,13 +1378,40 @@
 
         <section class="view" id="view-resume" data-view-panel="resume" aria-labelledby="resume-title" hidden>
           <header class="view-head">
-            <h2 class="view-title" id="resume-title">定制简历</h2>
-            <p class="view-lede">整理可核实的经历原文，检查 ATS 能否读懂；不改动主简历。</p>
-            <details class="sg-help">
-              <summary>这页怎么用</summary>
-              <p>围绕一个岗位整理可核实的经历原文，并检查简历筛选系统（ATS）能不能读懂。不改动主简历，不编造数字。已保存的经历变体单独放在下方，可以逐段与主稿对比。</p>
-            </details>
+            <div class="view-head-row">
+              <div>
+                <h2 class="view-title" id="resume-title">定制简历</h2>
+                <p class="view-lede">围绕目标岗位整理可核实的真实经历，右侧实时预览 A4 简历排版并导出 PDF。</p>
+              </div>
+              <nav class="ui-hub-tabs resume-mode-tabs" aria-label="定制简历视图切换">
+                <button class="ui-hub-tab is-active" type="button" data-resume-tab="craft" aria-current="page">经历整理与 A4 简历画布</button>
+                <button class="ui-hub-tab" type="button" data-resume-tab="tools">ATS 预检与经历变体库</button>
+              </nav>
+            </div>
           </header>
+
+
+          <section hidden class="panel integration-panel career-panel" aria-labelledby="career-public-title">
+            <div class="integration-head">
+              <div>
+                <h3 id="career-public-title">写简历前，先核验项目</h3>
+                <p>先用公开样例体验：理解项目 → 回答源码问题 → 查看复盘与补强建议。</p>
+              </div>
+              <span class="badge badge-neutral" id="career-connection">检查连接中</span>
+            </div>
+            <dl class="integration-meta">
+              <div><dt>公开样例</dt><dd>pallets/itsdangerous (Python)</dd></div>
+              <div><dt>核验重点</dt><dd>时间戳签名、过期检查与实现边界</dd></div>
+              <div><dt>固定版本</dt><dd><code>672971d66a2e</code>（不计入个人经历）</dd></div>
+            </dl>
+            <p class="notice" id="career-resume-note" role="status" aria-live="polite">正在检查公开样例服务。</p>
+            <div class="form-actions career-actions">
+              <button class="button" type="button" id="career-start" disabled>开始项目核验</button>
+              <button class="button button-quiet" type="button" id="career-continue" hidden>继续 / 查看本轮</button>
+              <button class="button button-quiet" type="button" id="career-connect">重新检查连接</button>
+              <button class="button button-quiet" type="button" id="career-demo-mode" hidden>切到演示模式</button>
+            </div>
+          </section>
 
           <div class="two-col">
             <section class="panel" aria-labelledby="ats-title">
@@ -1213,6 +1478,8 @@
 
           <section class="panel career-user-panel" id="cu-resume-panel" aria-labelledby="cu-title">
             <div class="panel-head"><div><h3 id="cu-title">从真实经历到定制简历</h3><p class="panel-note">先选导入方式，再整理并确认经历，然后预览，最后保存并导出。</p></div><span class="badge" id="cu-connection">经历导入</span></div>
+            <p class="notice" id="cu-mode-note">导入自己的项目、实习经历或作品集。</p>
+            <button class="button" type="button" id="cu-switch-user" hidden>继续编辑我的资料</button>
             <div id="cu-personal" hidden>
               <p class="hint">生成简历会使用你在个人资料中确认的信息。<button class="button button-quiet" type="button" data-view-link="profile">填写 / 更新个人资料</button></p>
               <fieldset class="cu-source-choice"><legend>选择导入方式</legend>
@@ -1273,12 +1540,11 @@
                 </form>
               </section>
               <section id="cu-project-review" hidden><h4>确认实际属于你的经历表述</h4><p class="career-message" id="cu-project-positioning"></p><p class="career-message" id="cu-project-summary"></p><p class="hint" id="cu-coverage"></p><div id="cu-claims"></div><p class="hint">只勾选你实际负责且愿意在简历中陈述的工作。模型整理的表述仍需你核对。</p><button class="button" id="cu-start-readiness" type="button">确认所选经历，生成简历预览</button></section>
-              <section id="cu-resume-preview" hidden><h4>简历预览</h4><fieldset class="cu-template-choice"><legend>选择简历模板（A4 单栏）</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级 · 克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文 · 黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据导入材料和本人确认生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
+              <section id="cu-resume-preview"><h4>A4 简历实时预览</h4><fieldset class="cu-template-choice"><legend>选择简历模板（A4 单栏）</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级，克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文，黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据导入材料和本人确认生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"><p class="resume-contact">在左侧导入并确认经历，或从版本记录中选择一份已保存简历后，此处将实时渲染标准 A4 简历排版。</p></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
               <section id="cu-saved-resume" hidden><h4>已保存的简历版本</h4><p class="hint" id="cu-version-label"></p><div class="career-actions"><button class="button button-quiet" id="cu-download" type="button">下载 Markdown</button><button class="button button-quiet" id="cu-download-pdf" type="button">下载 PDF</button><button class="button button-quiet" id="cu-print" type="button">打印 / 导出 PDF</button><button class="button button-quiet" id="cu-regenerate" type="button">用最新个人资料生成新版</button><button class="button" id="cu-start-formal" type="button" hidden>基于此版本开始正式模拟面试</button></div></section>
               <section id="cu-history" hidden><h4>简历版本记录</h4><div id="cu-versions"></div></section>
             </div>
           </section>
-
           <details class="sg-dev-note">
             <summary><span id="resume-agent-title">定制简历 Agent（未接入）</span><span class="badge badge-neutral">待接入</span></summary>
             <p>外部简历 Agent 可以按岗位生成单栏简历；现在可用的是经历变体、关键词核对和 PDF 预检。</p>
@@ -1466,7 +1732,10 @@
   </div>
   <script src="/app.js"></script>
   <script src="/ui-signals.js"></script>
-  <script src="/career-user.js"></script>
-  <script src="/workbench-agent.js"></script>
+<script src="/career-agent.js"></script>
+<script src="/career-user.js"></script>
+<script src="/workbench-agent.js"></script>
+<script src="/workbench.js"></script>
+<script src="/comprehensive-interview.js"></script>
 </body>
 </html>

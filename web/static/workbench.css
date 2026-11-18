@@ -1,0 +1,1163 @@
+/* Unified Desktop Agent + B-End Workbench Layout (desktop-agent-ui & b-end-design-system) */
+.wb-enabled {
+  --wb-gap: 20px;
+}
+
+.wb-enabled .wa-tabs,
+.wb-enabled .footer {
+  display: none !important;
+}
+
+.wb-enabled #view-workbench {
+  padding: 0;
+  gap: 0;
+}
+
+.wb-enabled #wa-overview #home-today {
+  display: none;
+}
+
+.wb-shell {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.wb-shell [hidden] {
+  display: none !important;
+}
+
+.wb-shell,
+.wb-shell * {
+  box-sizing: border-box;
+}
+
+/* Unified 52px Desktop PageHeader */
+.wb-toolbar,
+.wb-heading,
+.wb-actions,
+.wb-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wb-toolbar {
+  flex: none;
+  min-height: 52px;
+  padding: 8px 24px;
+  justify-content: space-between;
+  background: var(--surface);
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+#wb-breadcrumb {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: var(--wa-medium, 500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#wb-breadcrumb:not(:empty)::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--line);
+}
+
+#wb-assistant-toggle[aria-expanded="true"] {
+  background: var(--accent-soft);
+  color: var(--wa-brand);
+  border-color: color-mix(in srgb, var(--wa-brand) 40%, var(--line));
+}
+
+/* Main + Collapsible Right Agent Copilot Split Layout */
+.wb-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  flex: 1;
+  min-height: 0;
+}
+
+.wb-shell.wb-assistant-collapsed .wb-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.wb-shell.wb-assistant-collapsed .wb-assistant {
+  display: none;
+}
+
+.wb-main {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding: 24px 28px 36px;
+}
+
+.wb-main:focus {
+  outline: none;
+}
+
+/* Typography Hierarchy (3-4 levels, >=12px gate, balance & tabular-nums) */
+.wb-shell h2,
+.wb-main .view-title {
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0 0 8px;
+  font-weight: var(--wa-semibold, 600);
+  color: var(--ink);
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.wb-shell h3 {
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+  font-weight: var(--wa-medium, 500);
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.wb-shell h4,
+.wb-shell h5 {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+  font-weight: var(--wa-medium, 500);
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.wb-shell p,
+.wb-shell label,
+.wb-shell input,
+.wb-shell select,
+.wb-shell textarea,
+.wb-shell button,
+.wb-shell a,
+.wb-shell li,
+.wb-shell td,
+.wb-shell dd {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wb-shell small,
+.wb-shell .hint,
+.wb-shell .panel-note,
+.wb-shell .view-lede,
+.wb-shell .panel-count,
+.wb-shell .badge,
+.wb-shell th,
+.wb-shell dt,
+.wb-shell legend {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.wb-shell p {
+  overflow-wrap: anywhere;
+}
+
+.wb-counts strong,
+.wb-shell .panel-count,
+.wb-shell .kpi-value,
+.wb-shell .badge,
+.wb-shell .ci-timer,
+.wb-shell .home-task-count,
+.wb-shell td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus & Atomic Controls (Concentric Radius & Single Primary Hierarchy) */
+.wb-shell :is(button, input, select, textarea, a, summary):focus-visible {
+  outline: 2px solid var(--wa-focus, #184f95);
+  outline-offset: 2px;
+}
+
+.wb-shell .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 0.5px solid transparent;
+  background: var(--wa-brand, #ad5132);
+  color: var(--accent-ink, #ffffff);
+  font-size: 14px;
+  font-weight: var(--wa-medium, 500);
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 70ms ease;
+}
+
+.wb-shell .button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--wa-brand, #ad5132) 88%, #000);
+}
+
+.wb-shell .button:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.wb-shell .button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wb-shell .button-small {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.wb-shell .button-quiet {
+  background: var(--wa-elevated, var(--surface));
+  color: var(--ink-2);
+  border: 0.5px solid var(--line);
+}
+
+.wb-shell .button-quiet:not(:disabled):hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 20%, var(--line));
+}
+
+.wb-shell .button-danger {
+  background: var(--bad-bg);
+  color: var(--bad);
+  border: 0.5px solid color-mix(in srgb, var(--bad) 30%, var(--line));
+}
+
+.wb-shell .button-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--bad) 18%, var(--bad-bg));
+}
+
+.wb-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.wb-shell select,
+.wb-shell textarea {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--line);
+  background: var(--wa-elevated, var(--surface));
+  color: var(--ink);
+  border-radius: 6px;
+  box-shadow: none !important;
+  transition: border-color 120ms ease;
+}
+
+.wb-shell input:not([type="checkbox"]):not([type="radio"]):focus,
+.wb-shell select:focus,
+.wb-shell textarea:focus {
+  border-color: var(--wa-focus, #184f95);
+  outline: none;
+}
+
+.wb-shell input:is([type="checkbox"], [type="radio"]) {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: var(--wa-brand, #ad5132);
+}
+
+/* Badges (80% Light Background + Dark Semantic Text) */
+.wb-shell .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: var(--wa-medium, 500);
+  background: var(--neutral-bg);
+  color: var(--ink-2);
+  border: 0.5px solid var(--line);
+  box-shadow: none !important;
+}
+
+.wb-shell .badge-good {
+  background: var(--good-bg);
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 25%, transparent);
+}
+
+.wb-shell .badge-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 25%, transparent);
+}
+
+.wb-shell .badge-bad {
+  background: var(--bad-bg);
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 25%, transparent);
+}
+
+/* B-End Page Header & Segmented Hub Tabs */
+.wb-main .view {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wb-main .view-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 0.5px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.wb-main .view-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wb-main .view-lede {
+  color: var(--mute);
+  margin: 2px 0 0;
+  max-width: 72ch;
+}
+
+.wb-main .ui-hub-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--accent-soft);
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  width: fit-content;
+}
+
+.wb-main .ui-hub-tab {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: var(--wa-medium, 500);
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.wb-main .ui-hub-tab:hover {
+  color: var(--ink);
+}
+
+.wb-main .ui-hub-tab.is-active {
+  background: var(--wa-elevated, var(--surface));
+  color: var(--ink);
+  font-weight: var(--wa-semibold, 600);
+}
+
+/* B-End Panels & Cards (0.5px Hairline, Concentric 12px->8px->6px, Zero Shadow Clip) */
+.wb-main .panel,
+.wb-main .offerpilot-card,
+.wb-main .career-task {
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  padding: 20px 24px;
+  margin: 0;
+  backdrop-filter: none !important;
+}
+
+.wb-main .panel-head,
+.wb-main .integration-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-main .integration-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  border: 0.5px solid var(--line);
+  color: var(--wa-brand);
+  font-size: 12px;
+  font-weight: var(--wa-semibold, 600);
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-main .notice,
+.wb-main .action-result,
+.wb-main .resume-dropzone {
+  padding: 12px 14px;
+  border-radius: 8px !important;
+  border: 0.5px solid var(--line) !important;
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-size: 12px;
+  box-shadow: none !important;
+  margin: 8px 0;
+}
+
+.wb-main .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.wb-main .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wb-main .form-field.full {
+  grid-column: 1 / -1;
+}
+
+.wb-main .form-field > label {
+  font-size: 12px;
+  font-weight: var(--wa-medium, 500);
+  color: var(--ink-2);
+}
+
+.wb-main .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.wb-main .two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* Data Tables: Isolated Scroll & 3-Way Alignment */
+.wb-main :is(.panel, .table-wrap, .form-grid) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wb-main .table-wrap,
+.wb-main #jobs-table,
+.wb-main #queue-pending-table,
+.wb-main #queue-approved-table,
+.wb-main #offerpilot-jobs-table,
+.wb-main #downloads-table,
+.wb-main #boundaries-table {
+  overflow-x: auto;
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.wb-main table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.wb-main th,
+.wb-main td {
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.wb-main th {
+  font-size: 12px;
+  font-weight: var(--wa-medium, 500);
+  color: var(--mute);
+  background: var(--accent-soft);
+  white-space: nowrap;
+}
+
+.wb-main tr:hover td {
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+
+.wb-main th:has(input[type="checkbox"]),
+.wb-main td:has(input[type="checkbox"]) {
+  width: 40px;
+  text-align: center;
+}
+
+/* Module 01: Workbench Home Dashboard */
+.wb-heading {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.wb-heading :is(h2, h3) {
+  margin: 0;
+}
+
+.wb-next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 16px;
+  padding: 18px 20px;
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  margin: 0 0 20px;
+}
+
+.wb-next > span {
+  color: var(--wa-brand);
+  font-size: 12px;
+  font-weight: var(--wa-semibold, 600);
+  grid-column: 1 / -1;
+}
+
+.wb-next h3 {
+  margin: 0;
+  align-self: center;
+}
+
+.wb-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.wb-counts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+
+.wb-counts strong {
+  font-size: 20px;
+  font-weight: var(--wa-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.wb-counts span {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.wb-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.wb-shortcut {
+  padding: 14px 16px;
+  text-align: left;
+  color: var(--ink);
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 52px;
+  font-weight: var(--wa-medium, 500);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.wb-shortcut:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--wa-brand) 35%, var(--line));
+}
+
+.wb-shortcut:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.wb-home-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.wb-home-columns > section {
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.wb-home-columns h3 {
+  margin-top: 16px;
+}
+
+.wb-home-columns h3:first-child {
+  margin-top: 0;
+}
+
+.wb-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 0.5px solid var(--line);
+  padding: 10px 0;
+}
+
+.wb-entry:last-child {
+  border-bottom: 0;
+}
+
+.wb-entry > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.wb-entry > small {
+  flex-basis: 100%;
+  color: var(--mute);
+}
+
+.wb-empty {
+  color: var(--mute);
+  font-size: 12px !important;
+  margin: 6px 0 14px;
+}
+
+.wb-notice,
+.wb-setup-hint {
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+
+.wb-setup-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.wb-tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 20px;
+}
+
+#wb-tool-filter {
+  margin: 8px 0 20px;
+}
+
+.wb-context {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+
+.wb-context label {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.wb-context select {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* Module 04: Custom Resume Left-Right Split Canvas + Tool Tabs */
+.wb-enabled #view-profile > .integration-panel,
+.wb-enabled #view-push > .integration-panel {
+  display: none;
+}
+
+#view-resume:not([data-resume-mode="tools"]) > .two-col {
+  display: none;
+}
+
+#view-resume[data-resume-mode="tools"] > #cu-resume-panel {
+  display: none;
+}
+
+body[data-wb-capability="ats"] #view-resume > .two-col > .panel:not(:has(#ats-form)),
+body[data-wb-capability="variants"] #view-resume > .two-col > .panel:not(:has(#variant-form)) {
+  display: none;
+}
+
+body[data-wb-capability="ats"] #view-resume > .two-col,
+body[data-wb-capability="variants"] #view-resume > .two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-wb-capability="ats"] #cu-resume-panel,
+body[data-wb-capability="variants"] #cu-resume-panel {
+  display: none;
+}
+
+#cu-personal:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(340px, 1fr) minmax(400px, 48%);
+  gap: 20px;
+  align-items: start;
+}
+
+#cu-personal > :not(#cu-resume-preview):not(#cu-saved-resume) {
+  grid-column: 1;
+}
+
+#cu-personal > #cu-resume-preview,
+#cu-personal > #cu-saved-resume {
+  grid-column: 2;
+}
+
+#cu-resume-preview {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+#cu-resume-preview .cu-preview-frame {
+  max-height: calc(100dvh - 260px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  margin: 10px 0;
+}
+
+.cu-source-choice,
+.cu-template-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 10px 0;
+}
+
+.cu-source-choice label,
+.cu-template-choice label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.cu-source-choice label:has(input:checked),
+.cu-template-choice label:has(input:checked) {
+  border-color: var(--wa-brand);
+  background: var(--accent-soft);
+}
+
+.cu-source-choice span,
+.cu-template-choice span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Module 05: Mock Interview Three-Mode Stage */
+#view-interview:not([data-iv-mode]) :is(#cu-interview-panel, .career-panel, #interview-hub, [id^="interview-module-"]),
+#view-interview[data-iv-mode="ci"] :is(#cu-interview-panel, .career-panel, #interview-hub, [id^="interview-module-"]) {
+  display: none !important;
+}
+
+#view-interview[data-iv-mode="project"] :is(#ci-panel, #interview-hub, [id^="interview-module-"]) {
+  display: none !important;
+}
+
+#view-interview[data-iv-mode="tools"] :is(#ci-panel, #cu-interview-panel, .career-panel) {
+  display: none !important;
+}
+
+/* Modals at Golden Ratio 38.2% Vertical Position */
+.wb-main .queue-delivery-modal,
+.wb-main .hr-reply-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: min(14vh, 112px) 20px 24px;
+  background: rgba(20, 20, 19, 0.45);
+}
+
+.wb-main .queue-modal,
+.wb-main .hr-reply-dialog {
+  width: 100%;
+  max-width: 560px;
+  max-height: 76dvh;
+  overflow-y: auto;
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: none;
+}
+
+/* Knowledge, Notes & Right Assistant Sidebar */
+#wb-knowledge-form {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+#wb-knowledge-form .button {
+  justify-self: start;
+}
+
+#wb-knowledge-results pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wb-main #wa-results {
+  border: 0;
+  padding: 0;
+  overflow: visible;
+  height: auto;
+}
+
+.wb-main #wa-material-form {
+  margin: 0;
+  padding: 0;
+}
+
+.wb-main #wa-material-progress {
+  margin: 0 0 16px;
+}
+
+.wb-main #wa-approval:not([hidden]) {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+}
+
+.wb-main #wa-material-result :is(h2, h3, h4) {
+  margin-top: 16px;
+}
+
+.wb-main .wa-document {
+  overflow: visible;
+}
+
+.wb-assistant {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 0.5px solid var(--line);
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.wb-assistant > .wb-heading {
+  flex: none;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-assistant #wb-history {
+  flex: none;
+  margin-bottom: 10px;
+}
+
+.wb-assistant summary {
+  font-size: 12px;
+  color: var(--mute);
+  cursor: pointer;
+}
+
+.wb-assistant .wa-sessions {
+  display: block;
+  padding: 8px 0;
+  width: auto;
+  border: 0;
+  max-height: 160px;
+  overflow: auto;
+  background: transparent;
+}
+
+.wb-assistant .wa-session-footer {
+  display: none;
+}
+
+#wb-assistant-host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.wb-assistant #wa-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  background: transparent;
+}
+
+.wb-assistant .wa-conversation {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.wb-assistant .wa-conversation > .wa-section-head {
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 0 6px;
+}
+
+.wb-assistant .wa-thread {
+  flex: 1;
+  min-height: 80px;
+}
+
+.wb-assistant #wa-messages {
+  padding: 8px 0;
+  min-width: 0;
+}
+
+.wb-assistant .wa-message {
+  max-width: 100%;
+}
+
+.wb-assistant .wa-message p {
+  font-size: 14px;
+}
+
+.wb-assistant .wa-message-user {
+  margin-left: auto;
+}
+
+.wb-assistant #wa-form {
+  flex: none;
+  padding: 10px 12px;
+  margin: 6px 0 0;
+}
+
+.wb-assistant #wa-input {
+  min-height: 52px;
+  max-height: 150px;
+  font-size: 14px;
+}
+
+.wb-assistant .wa-composer-actions {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wb-assistant .wa-key-hint {
+  display: none;
+}
+
+.wb-assistant .wa-welcome-mark {
+  width: 28px;
+  height: 28px;
+}
+
+.wb-assistant .wa-welcome {
+  padding: 16px 0;
+}
+
+.wb-assistant .wa-welcome h3 {
+  font-size: 16px;
+}
+
+.wb-assistant .wa-note-inbox {
+  max-height: 160px;
+  overflow: auto;
+}
+
+.wb-note-row {
+  border-bottom: 0.5px solid var(--line);
+  padding: 14px 0;
+  overflow-wrap: anywhere;
+}
+
+#wb-note-document {
+  margin: 16px 0;
+  padding: 14px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+}
+
+#wb-note-document p {
+  white-space: pre-wrap;
+}
+
+#wb-settings > section {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+}
+
+#wb-model-key {
+  display: block;
+  margin: 8px 0;
+}
+
+.wb-enabled #wa-results[hidden] {
+  display: none !important;
+}
+
+@media(max-width: 1180px) {
+  #cu-personal:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #cu-personal > #cu-resume-preview,
+  #cu-personal > #cu-saved-resume {
+    grid-column: 1;
+    position: static;
+  }
+  .wb-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .wb-shortcuts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .wb-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media(max-width: 960px) {
+  .wb-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .wb-main {
+    flex: 1;
+    padding: 16px 18px;
+  }
+  .wb-assistant {
+    display: none;
+    flex: 1;
+    border-left: 0;
+  }
+  .wb-show-assistant .wb-main {
+    display: none;
+  }
+  .wb-show-assistant .wb-assistant {
+    display: flex;
+  }
+  .wb-toolbar {
+    padding: 8px 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .wb-main .two-col,
+  .wb-home-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media(max-width: 640px) {
+  .wb-shell {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+  .wb-toolbar-actions {
+    gap: 4px;
+  }
+  .wb-toolbar .button {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  #wb-breadcrumb {
+    display: none;
+  }
+  .wb-main {
+    padding: 14px;
+  }
+  .wb-context,
+  .wb-main .form-grid,
+  .cu-source-choice,
+  .cu-template-choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media(prefers-reduced-motion: reduce) {
+  .wb-shell * {
+    scroll-behavior: auto !important;
+  }
+}
+
+.wb-shell [aria-busy="true"] {
+  opacity: 0.68;
+  cursor: wait;
+  transition: opacity 150ms ease;
+}

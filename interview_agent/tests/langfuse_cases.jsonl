@@ -1,0 +1,4 @@
+{"stage":"intent","input":{"text":"synthetic answer"},"output":{"intent":"answer","reason":"synthetic","clarification":""},"expected_scores":{"schema_valid":1.0}}
+{"stage":"intent","input":{},"output":{"intent":"invalid"},"expected_scores":{"schema_valid":0.0}}
+{"stage":"profile_extract","input":{"resume_text":"Alice"},"output":{"basic":{"name":"Alice"},"job_intent":{},"skills":{},"education":[],"experiences":[],"projects":[]},"expected_scores":{"schema_valid":1.0,"extracted_fields_supported":1.0}}
+{"stage":"profile_extract","input":{"resume_text":"Bob"},"output":{"basic":{"name":"Alice"},"job_intent":{},"skills":{},"education":[],"experiences":[],"projects":[]},"expected_scores":{"schema_valid":1.0,"extracted_fields_supported":0.0}}

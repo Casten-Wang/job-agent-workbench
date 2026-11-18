@@ -24,6 +24,8 @@ def fingerprint(value):
 
 def workspace(mode):
     """Read explicit domain records; snapshot() also syncs deliveries, so avoid it."""
+    if mode != "user":
+        raise backend.ApiError("工作台仅支持我的资料模式")
     store = backend.get_store(mode)
     profile = backend.profile_public(store.profile())
     jobs = store.jobs()
@@ -59,7 +61,7 @@ def dispatch(method, path, query, payload=None):
         raise backend.ApiError("Agent 已关闭，可继续使用流程总览", 503)
     query, payload = dict(query), dict(payload or {})
     mode = query.pop("mode", None)
-    if mode not in {"user"} or "mode" in payload or "source" in payload or "owner" in payload:
+    if mode != "user" or "mode" in payload or "source" in payload or "owner" in payload:
         raise backend.ApiError("工作台模式或请求字段无效")
     suffix = path.removeprefix("/api/workbench-agent")
     if suffix == "/conversations" and not query:
@@ -129,7 +131,7 @@ def stream_events(path, query, last_event_id=None):
         raise backend.ApiError("未找到工作台事件流", 404)
     query = dict(query)
     mode = query.pop("mode", None)
-    if mode not in {"user"} or set(query) - {"after"}:
+    if mode != "user" or set(query) - {"after"}:
         raise backend.ApiError("工作台模式或请求字段无效")
     if last_event_id:
         if not re.fullmatch(r"\d{1,10}", last_event_id):

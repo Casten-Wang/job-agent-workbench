@@ -161,12 +161,119 @@ class WorkbenchWorkflow:
         data["events"].append({"cursor": len(data["events"]) + 1, "type": kind, "message": message,
                                "run_id": data.get("run_id"), "at": now(), **extra})
 
+    def workspace_progress(self, data):
+        """生成当前会话关联工作区的只读进度摘要，供对话主线引导与前端建议卡片使用。"""
+        source = data.get("source") or {}
+        profile = source.get("private_profile") or {}
+        job, material = self.selected(data)
+        materials = self.materials(public=True)
+        artifacts = data.get("artifacts") or []
+        saved_versions = data.get("saved_versions") or []
+        profile_confirmed = bool(profile.get("truth_confirmed"))
+        has_profile_name = bool((profile.get("basic") or {}).get("name"))
+        job_count = int(source.get("job_count", len(source.get("jobs") or [])))
+        material_count = len(materials)
+        has_resume = any(a.get("kind") == "resume" for a in artifacts)
+        has_greeting = any(a.get("kind") == "greeting" for a in artifacts)
+        pending_queue_count = int(source.get("approval_queue_count", 0))
+        mail_count = len(source.get("mails") or [])
+        interview_count = len(source.get("interviews") or [])
+        if not profile_confirmed or not has_profile_name:
+            next_step = "先导入简历或填写个人资料（至少填写真实姓名并确认）"
+        elif job_count == 0:
+            next_step = "还没有目标岗位，可直接在对话中粘贴 JD 录入，或打开平台采集向导"
+        elif material_count == 0:
+            next_step = "还没有已确认的项目或工作经历，可在对话里上传/粘贴经历材料，或核验 GitHub 项目"
+        elif not job or not material:
+            next_step = "请从已有岗位和已确认经历中各选定一项，随后即可生成定制简历与招呼语"
+        elif not has_resume:
+            next_step = "目标岗位与经历已就绪，可直接生成定制简历与招呼语草稿"
+        elif not saved_versions:
+            next_step = "已有最新草稿，可继续微调、核对保存正式简历版本，或同步招呼语到发送队列"
+        else:
+            next_step = "简历版本已保存，可复核并同步招呼语投递，或基于该简历开始模拟面试"
+        return {
+            "profile_confirmed": profile_confirmed,
+            "has_profile_name": has_profile_name,
+            "job_count": job_count,
+            "selected_job": bool(job),
+            "material_count": material_count,
+            "materials": [{"material_id": m["material_id"], "name": m.get("name") or "已确认经历"} for m in materials[:10]],
+            "selected_material": bool(material),
+            "artifact_count": len(artifacts),
+            "has_resume_artifact": has_resume,
+            "has_greeting_artifact": has_greeting,
+            "saved_version_count": len(saved_versions),
+            "pending_queue_count": pending_queue_count,
+            "mail_count": mail_count,
+            "interview_count": interview_count,
+            "recommended_next_step": next_step,
+        }
+
+    def guidance(self, data, progress):
+        """基于当前真实进度生成可在对话流直接点击的 GUI/LUI 协同引导动作。"""
+        if data.get("status") in {"queued", "running", "committing", "stopping", "waiting_approval"}:
+            return []
+        actions = []
+        if not progress["profile_confirmed"] or not progress["has_profile_name"]:
+            actions = [
+                {"id": "guide_profile_import", "label": "上传简历自动提取资料", "kind": "capability", "capability": "profile_import", "primary": True},
+                {"id": "guide_profile_form", "label": "手动填写并确认资料", "kind": "capability", "capability": "profile"},
+                {"id": "guide_overview", "label": "让助手梳理当前进度", "kind": "prompt", "text": "帮我查看当前工作区进度，并告诉我第一步该怎么准备"},
+            ]
+        elif progress["job_count"] == 0:
+            actions = [
+                {"id": "guide_paste_jd", "label": "在对话中粘贴 JD 录入", "kind": "compose", "prefill": "请帮我录入这个目标岗位 JD：\n", "placeholder": "把公司、岗位名称和 JD 正文粘贴到这里，发给助手即可自动解析入库…", "primary": True},
+                {"id": "guide_collect_jobs", "label": "打开平台采集向导", "kind": "capability", "capability": "collect"},
+                {"id": "guide_jobs_form", "label": "打开岗位池表单", "kind": "capability", "capability": "jobs"},
+            ]
+        elif progress["material_count"] == 0:
+            actions = [
+                {"id": "guide_material_chat", "label": "在对话里提交项目经历", "kind": "material", "primary": True},
+                {"id": "guide_github", "label": "连接 GitHub 核验项目", "kind": "capability", "capability": "github"},
+                {"id": "guide_exp_details", "label": "按类型录入经历", "kind": "capability", "capability": "experience_details"},
+            ]
+        elif not progress["selected_job"] or not progress["selected_material"]:
+            if not progress["selected_job"]:
+                actions.append({"id": "guide_recommend_jobs", "label": "让助手推荐 3 个匹配岗位", "kind": "prompt", "text": "从已有岗位中结合我的资料推荐 3 个最匹配的岗位，并说明理由和缺口", "primary": True})
+                actions.append({"id": "guide_select_job", "label": "去岗位池选择岗位", "kind": "capability", "capability": "jobs"})
+            if not progress["selected_material"]:
+                actions.append({"id": "guide_pick_material", "label": "列出已确认经历供选择", "kind": "prompt", "text": "列出我已确认的项目经历，帮我选定一份用于准备申请材料", "primary": progress["selected_job"]})
+                actions.append({"id": "guide_add_material", "label": "补充新项目经历", "kind": "material"})
+        elif not progress["has_resume_artifact"]:
+            actions = [
+                {"id": "guide_draft_app", "label": "生成定制简历与招呼语草稿", "kind": "prompt", "text": "为当前选定的岗位和已确认经历生成定制简历与招呼语草稿", "primary": True},
+                {"id": "guide_job_detail", "label": "查看岗位详情与匹配差距", "kind": "prompt", "text": "查看当前目标岗位的详细要求，并对比我的已确认经历"},
+            ]
+        elif not progress["saved_version_count"]:
+            actions = [
+                {"id": "guide_save_resume", "label": "保存当前最新简历版本", "kind": "prompt", "text": "请帮我保存当前最新简历版本", "primary": True},
+                {"id": "guide_revise_draft", "label": "微调简历要点或招呼语", "kind": "compose", "prefill": "请帮我把简历和招呼语调整一下：", "placeholder": "说明想调整的重点、表达或语气…"},
+                {"id": "guide_review_greeting", "label": "核对并同步招呼语", "kind": "capability", "capability": "queue"},
+            ]
+        else:
+            saved_id = (data.get("saved_versions") or [])[-1]["resume_version_id"]
+            actions = [
+                {"id": "guide_sync_delivery", "label": "复核并发送招呼语", "kind": "capability", "capability": "queue", "primary": True},
+                {"id": "guide_version_interview", "label": "基于这份简历模拟面试", "kind": "prompt", "text": f"基于简历版本 {saved_id} 开始一场模拟面试"},
+                {"id": "guide_export_pdf", "label": "导出 / 打印简历 PDF", "kind": "capability", "capability": "resume"},
+            ]
+        last_ui = (data.get("ui_actions") or [])[-1:]
+        if last_ui and last_ui[0].get("run_id") == data.get("run_id"):
+            cap = last_ui[0].get("capability")
+            if cap and not any(a.get("capability") == cap for a in actions):
+                label = dict((r[0], r[1]) for r in CAPABILITIES).get(cap, "对应表单")
+                actions.insert(0, {"id": f"guide_ui_{cap}", "label": f"打开「{label}」", "kind": "capability", "capability": cap})
+        return actions[:4]
+
     def view(self, data):
+        progress = self.workspace_progress(data)
         return {key: deepcopy(data.get(key)) for key in ("id", "title", "mode", "status", "run_id", "job_id",
             "material_id", "messages", "artifacts", "recommendations", "pending", "saved_versions",
             "error_code", "updated_at", "material_run", "resume_version_id", "interview_id", "business_results", "ui_actions")} | {"cursor": len(data["events"]),
                 "materials": self.materials(public=True), "generation": self.agent.generation,
-                "streaming_message": deepcopy(self.live_text.get(data["id"]))}
+                "streaming_message": deepcopy(self.live_text.get(data["id"])),
+                "progress": progress, "guidance": self.guidance(data, progress)}
 
     def create(self, title):
         data = {"id": "wb_" + uuid.uuid4().hex, "title": title, "mode": self.mode,
@@ -198,7 +305,10 @@ class WorkbenchWorkflow:
                            "capability": "application", "conversation_id": r["id"]}
                           for r in rows if r["status"] in {"queued", "running", "committing", "stopping"}],
                 "pending": [{"id": r["pending"]["id"], "title": r["title"], "capability": "application", "conversation_id": r["id"]}
-                            for r in rows if r.get("pending")]}
+                            for r in rows if r.get("pending")],
+                "results": [{"id": a["id"], "title": r["title"], "kind": "简历草稿" if a["kind"] == "resume" else "招呼语草稿",
+                             "capability": "application", "conversation_id": r["id"], "artifact_id": a["id"]}
+                            for r in rows[:10] for a in r.get("artifacts", [])[-2:]]}
 
     def validate_context(self, data):
         job, material = self.selected(data)
@@ -473,9 +583,11 @@ class WorkbenchWorkflow:
                 message = "面经操作未完成：请检查链接、周期（1至168小时）或编号；输入 /面经 查看用法。"
             return self.finish(data, message)
         job, material = self.selected(data)
+        progress = self.workspace_progress(data)
         decision = Decision.model_validate(await self.model_decide("workbench_decide", redact({
             "messages": [m for m in data["messages"] if not m.get("state")][-12:], "job": job, "material_id": data.get("material_id"),
-            "profile_confirmed": data["source"].get("profile", {}).get("truth_confirmed", False),
+            "profile_confirmed": progress["profile_confirmed"],
+            "workspace_progress": progress,
             "artifacts": [{"id": a["id"], "kind": a["kind"], "revision": a["revision"]} for a in data["artifacts"][-2:]],
             "tools": list(INPUTS), "capabilities": [{"id": r[0], "label": r[1]} for r in CAPABILITIES],
             "resume_version_id": data.get("resume_version_id"), "interview_id": data.get("interview_id"),
@@ -582,9 +694,10 @@ class WorkbenchWorkflow:
     async def tool(self, data, action, args):
         source = data["source"]
         if action == "open_workspace_tool":
-            ui = {"id": "ui_" + uuid.uuid4().hex, "capability": args["capability"]}
+            ui = {"id": "ui_" + uuid.uuid4().hex, "run_id": data.get("run_id"), "capability": args["capability"]}
             data.setdefault("ui_actions", []).append(ui)
-            return {"needs_input": "请在工作区继续操作。", "ui_action": ui}
+            label = dict((r[0], r[1]) for r in CAPABILITIES).get(args["capability"], "对应操作区")
+            return {"needs_input": f"已在工作区为你打开「{label}」，完成操作后可直接在对话里告诉我继续下一步。", "ui_action": ui}
         if action in BUSINESS_TOOLS:
             if action in {"collect_note", "subscribe_note"}:
                 link = data.get("note_links", {}).get(args["url"])
@@ -595,6 +708,10 @@ class WorkbenchWorkflow:
             if signature in data.setdefault("business_calls", {}):
                 return data["business_calls"][signature]
             operation_id = "wb_" + fingerprint({"conversation": data["id"], "run": data["run_id"], "signature": signature})
+            if BUSINESS_TOOLS[action][2] == "write":
+                data["status"] = "committing"
+                self.emit(data, "committing", "正在提交业务操作，请等待真实结果")
+                self.put(data)
             port = int(os.getenv("OFFERPILOT_WORKBENCH_PORT", "8766"))
             async with httpx.AsyncClient(trust_env=False, timeout=150) as client:
                 response = await client.post(f"http://127.0.0.1:{port}/api/workbench/internal/business",
@@ -606,7 +723,7 @@ class WorkbenchWorkflow:
             result = value["result"]
             data["source"] = value["source"]
             if result.get("ui_action"):
-                data.setdefault("ui_actions", []).append({"id": "ui_" + uuid.uuid4().hex, **result["ui_action"]})
+                data.setdefault("ui_actions", []).append({"id": "ui_" + uuid.uuid4().hex, "run_id": data.get("run_id"), **result["ui_action"]})
             else:
                 data.setdefault("business_results", []).append({"id": operation_id, "tool": action,
                     "title": BUSINESS_TOOLS[action][0], "result": result, "created_at": now()})

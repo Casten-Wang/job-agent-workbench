@@ -57,11 +57,11 @@ import interview_analytics  # noqa: E402
 import interview_debrief  # noqa: E402
 import interview_chat  # noqa: E402
 import mock_interview  # noqa: E402
-import interview_chat  # noqa: E402
 import precheck  # noqa: E402
 import state_machine  # noqa: E402
 import variants  # noqa: E402
 import degrade  # noqa: E402
+import profile_import  # noqa: E402
 
 MAX_TEXT = 60_000
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -494,8 +494,8 @@ def _now() -> str:
 # Structured personal profile
 #
 # profile.json is the local source of truth for "who the user is". It lives in
-# web/data/user/ and is gitignored. Nothing here sends data anywhere; contact
-# fields are kept out of generated greetings, worksheets, and exported documents.
+# web/data/user/ and is gitignored. Explicit resume import sends extracted text to the configured
+# model for user-reviewed suggestions; saving remains a separate local action.
 
 
 def _clean_text(value: Any, limit: int, multiline: bool = False) -> str:
@@ -1099,7 +1099,7 @@ def profile_for_api(mode: str, store: Store) -> dict[str, Any]:
     }
 
 
-def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
+def _import_profile_cv_legacy(payload: dict[str, Any]) -> dict[str, Any]:
     """Suggest profile fields from a local resume; never auto-save."""
     if "filename" in payload or "content_base64" in payload:
         return _import_profile_upload(payload)
@@ -1127,6 +1127,12 @@ def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
+    if "filename" not in payload and "content_base64" not in payload:
+        return _import_profile_cv_legacy(payload)
+    return _import_profile_upload(payload)
+
+
 def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
     """Uploaded PDF/DOCX/MD/TXT: parse text locally, let the resume Agent suggest fields.
 
@@ -1141,9 +1147,12 @@ def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
     filename = filename.replace("\\", "/").rsplit("/", 1)[-1]
     try:
         content = base64.b64decode(encoded, validate=True)
+    except ValueError as exc:
+        raise ApiError("简历文件传输失败，请重新选择文件") from exc
+    try:
         text = profile_import.extract_resume_text(filename, content)
     except ValueError as exc:
-        raise ApiError(str(exc) if str(exc) else "简历文件传输失败，请重新选择文件") from exc
+        raise ApiError(str(exc)) from exc
     from career_user_runtime import upstream
     try:
         extraction = upstream("POST", "/v1/career/profile-import", {"text": text})

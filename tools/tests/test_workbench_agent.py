@@ -60,12 +60,13 @@ class WorkbenchBridgeTests(unittest.TestCase):
                 with self.assertRaises(backend.ApiError):
                     next(bridge.stream_events("/api/workbench-agent/conversations/wb_x/stream", query, cursor))
 
-    def test_user_and_demo_are_fixed_services_and_browser_cannot_inject_context(self):
+    def test_single_mode_uses_personal_service_and_rejects_demo_or_injected_context(self):
         with patch.object(bridge, "service_request", return_value={"items": []}) as upstream:
             bridge.dispatch("GET", "/api/workbench-agent/conversations", {"mode": "user"})
             self.assertEqual(upstream.call_args.args[:2], (18748, "OFFERPILOT_CAREER_USER_TOKEN"))
             with self.assertRaises(backend.ApiError):
                 bridge.dispatch("GET", "/api/workbench-agent/conversations", {"mode": "demo"})
+            self.assertEqual(upstream.call_count, 1)
             for body in ({"owner": "other"}, {"source": {}}, {"mode": "demo"}):
                 with self.assertRaises(backend.ApiError):
                     bridge.dispatch("POST", "/api/workbench-agent/conversations/wb_x/messages", {"mode": "user"}, body)
@@ -221,3 +222,4 @@ class WorkbenchHTTPTests(unittest.TestCase):
                 connection.close()
         self.assertEqual(self.get(path, "https://example.com")[0], 403)
         self.assertEqual(self.get(path.replace("mode=user", "mode=other"))[0], 400)
+        self.assertEqual(self.get(path.replace("mode=user", "mode=demo"))[0], 400)

@@ -109,6 +109,7 @@ class PrecheckScenarioTests(unittest.TestCase):
         completed = subprocess.run(
             [
                 sys.executable,
+                "-X", "utf8",
                 "-I",
                 str(PRECHECK),
                 "--tracker",
@@ -125,6 +126,7 @@ class PrecheckScenarioTests(unittest.TestCase):
             ],
             cwd=PROJECT_ROOT,
             text=True,
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )

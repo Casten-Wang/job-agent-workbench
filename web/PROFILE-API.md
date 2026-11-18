@@ -142,6 +142,16 @@ POST /api/action
 
 页面据此决定是否在首次进入时自动预填一次草稿：仅当 `saved=false` 且 `cv_available=true` 时，预填结果只进入表单、不保存，并要求用户核对后再点「保存」。已保存过的资料（`saved=true`）不会被自动覆盖。
 
+页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后，完整文字发送给已配置的 `step-5-preview` Agent，经严格结构校验与原文核对后返回建议，不保存原始文件。加密或扫描图片 PDF 暂不支持，请先转成可复制文字的文件。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
+
+返回 `profile` 建议、`filename`、`source_text` 解析原文、`warnings` 和 `generation`。识别基本信息、求职意向、教育、工作/实习、项目经历、技能和简介；经历按条目附原文片段进行服务端核对，无法核对的字段留空并提示，不补造日期或成果。页面更新识别到的字段与经历列表，未识别的部分保留原资料，取消真实性勾选；**不会自动保存**。用户可逐项编辑，页面要求核对并勾选真实性确认后，仍通过 `save-profile` 保存。Agent 超时、不可用或返回无效结果时提示重试，原表单与已保存资料不变。
+
+个人 Agent 内部接口为鉴权的 `POST /v1/career/profile-import`（仅个人服务安装此路由），接收 `{"text":"完整简历文字"}`。复用现有 Python 模型适配器的 `profile_extract` 决策阶段，无文件读写、保存资料或面试状态变更。
+
+岗位采集的评分简历和 ATS 检查入口也支持拖入；前者沿用 PDF/DOCX/MD 上传流程，后者仅选择 PDF，仍需点击「检查 PDF」，不会发送给模型。
+
+兼容旧调用：同时省略 `filename` 与 `content_base64` 时，按上文修改时间规则读取较新的本机 Markdown 来源，使用本地规则预填草稿。显式上传文件仍由 Agent 解析；两条路径均不自动保存。
+
 ## 4. 被哪些模块使用
 
 | 模块 | 用法 |
@@ -157,7 +167,7 @@ POST /api/action
 
 个人简历预览会从 user profile 读取经用户确认的资料并冻结进简历版本；不接受浏览器另传一份 profile。联系方式用于本机最终简历正文；正式面试仅发送冻结版本的专业资料字段，不读取 basic 姓名/联系方式。现有字段与保存语义不变，详见 [PERSONAL-CAREER-API](PERSONAL-CAREER-API.md)。
 
-新增的公开项目核验接口不读取本接口或 `profile.json`，只处理公开样例与本轮回答。该能力独立于本节早期个人资料工具的离线边界；模型与运行数据说明见 [CAREER-AGENT-API](CAREER-AGENT-API.md)。个人资料字段、完整度和保存语义保持原样。
+新增的公开项目核验接口不读取本接口或 `profile.json`，只处理固定公开样例与本轮回答，接口参数沿用单一 `user` 模式。该能力独立于本节早期个人资料工具的离线边界；模型与运行数据说明见 [CAREER-AGENT-API](CAREER-AGENT-API.md)。个人资料字段、完整度和保存语义保持原样。
 
 - 仅绑定 `127.0.0.1`，校验 `Host` 与 `Origin` 为 loopback。
 - 不接收凭据、Cookie、平台账号或第三方个人信息。

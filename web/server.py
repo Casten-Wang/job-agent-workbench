@@ -35,6 +35,10 @@ STATIC_DIR = WEB_DIR / "static"
 MAX_BODY_BYTES = 8 * 1024 * 1024
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
 STATIC_FILES = {
+    "/workbench.js": ("workbench.js", "text/javascript; charset=utf-8"),
+    "/workbench.css": ("workbench.css", "text/css; charset=utf-8"),
+    "/workbench-agent.js": ("workbench-agent.js", "text/javascript; charset=utf-8"),
+    "/workbench-agent.css": ("workbench-agent.css", "text/css; charset=utf-8"),
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -42,15 +46,18 @@ STATIC_FILES = {
     "/offer-theme.css": ("offer-theme.css", "text/css; charset=utf-8"),
     "/ui-signals.css": ("ui-signals.css", "text/css; charset=utf-8"),
     "/ui-signals.js": ("ui-signals.js", "text/javascript; charset=utf-8"),
-    "/workbench-agent.css": ("workbench-agent.css", "text/css; charset=utf-8"),
+    "/career-agent.js": ("career-agent.js", "text/javascript; charset=utf-8"),
+    "/career-user.js": ("career-user.js", "text/javascript; charset=utf-8"),
     "/career-resume.css": ("career-resume.css", "text/css; charset=utf-8"),
+    "/comprehensive-interview.js": ("comprehensive-interview.js", "text/javascript; charset=utf-8"),
+    "/comprehensive-interview.css": ("comprehensive-interview.css", "text/css; charset=utf-8"),
+    "/workbench-agent.css": ("workbench-agent.css", "text/css; charset=utf-8"),
     "/sg-base.css": ("sg-base.css", "text/css; charset=utf-8"),
     "/sg-pipeline.css": ("sg-pipeline.css", "text/css; charset=utf-8"),
     "/sg-tools.css": ("sg-tools.css", "text/css; charset=utf-8"),
     "/mj-base.css": ("mj-base.css", "text/css; charset=utf-8"),
     "/mj-pages.css": ("mj-pages.css", "text/css; charset=utf-8"),
     "/workbench-agent.js": ("workbench-agent.js", "text/javascript; charset=utf-8"),
-    "/career-user.js": ("career-user.js", "text/javascript; charset=utf-8"),
 }
 CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -138,36 +145,6 @@ class JobAgentHandler(BaseHTTPRequestHandler):
     def _error(self, message: str, status: int = 400) -> None:
         self._json({"ok": False, "error": message}, status)
 
-    def _stream_workbench_agent(self, path: str, query: dict[str, str]) -> None:
-        """Relay the workbench agent SSE stream frame by frame.
-
-        The generator validates mode and tokens on first iteration, so the first frame is
-        read before headers are written. A validation failure becomes a plain JSON error.
-        """
-        last_event_id = self.headers.get("Last-Event-ID")
-        events = workbench_agent_runtime.stream_events(path, query, last_event_id)
-        try:
-            first = next(events)
-        except StopIteration:
-            return
-        except backend.ApiError as exc:
-            self._error(str(exc), exc.status)
-            return
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-store, max-age=0")
-        self.send_header("Connection", "close")
-        self.send_header("X-Accel-Buffering", "no")
-        self._security_headers()
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(b"retry: 1500\n\n")
-            self.wfile.write(first)
-            self.wfile.flush()
-            for line in events:
-                self.wfile.write(line)
-                self.wfile.flush()
-
     def _read_json_body(self) -> dict[str, Any]:
         try:
             length = int(self.headers.get("Content-Length") or "0")
@@ -195,6 +172,33 @@ class JobAgentHandler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
         self.do_GET()
 
+    def _workbench_stream(self, path: str, query: dict) -> None:
+        frames = workbench_agent_runtime.stream_events(path, query, self.headers.get("Last-Event-ID"))
+        first = next(frames)  # Validate mode, scope and cursor before sending 200.
+        self.send_response(200)
+        self._security_headers()
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        if self.command == "HEAD":
+            frames.close()
+            return
+        try:
+            self.wfile.write(b"retry: 1500\n\n" + first)
+            self.wfile.flush()
+            for frame in frames:
+                self.wfile.write(frame)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except backend.ApiError:
+            self.wfile.write(b'event: unavailable\ndata: {}\n\n')
+            self.wfile.flush()
+        finally:
+            frames.close()
+
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
         if not self._host_is_allowed():
             self._error("只允许 loopback 来源", 403)
@@ -203,32 +207,36 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
         try:
-            if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
-                result, status = career_agent_runtime.dispatch("GET", path, query)
+            if path.startswith("/api/workbench/"):
+                result, status = workbench_runtime.dispatch("GET", path, query)
                 self._json(result, status)
                 return
-            if path.startswith("/api/workbench-agent/") and path.endswith("/stream"):
-                self._stream_workbench_agent(path, query)
-                return
             if path.startswith("/api/workbench-agent/"):
+                if path.endswith("/stream"):
+                    self._workbench_stream(path, query)
+                    return
                 result, status = workbench_agent_runtime.dispatch("GET", path, query)
                 self._json(result, status)
                 return
-            if path.startswith("/api/career-user/") and path.endswith("/pdf"):
-                content = career_user_runtime.pdf_document(path, query)
-                filename = path.split("/")[-2] + ("_" + query["template"] if "template" in query else "") + ".pdf"
-                self._send_bytes(200, content, "application/pdf", self._attachment_disposition(filename))
-                return
-            if path.startswith("/api/career-user/") and path.endswith("/print"):
-                html = career_user_runtime.print_document(path, query)
-                self._send_bytes(200, html.encode("utf-8") if isinstance(html, str) else html, "text/html; charset=utf-8")
-                return
             if path.startswith("/api/career-user/"):
+                if path.endswith("/export") and "/comprehensive-interviews/" in path and query.get("format") == "markdown":
+                    content, filename = career_user_runtime.export_comprehensive_markdown(path, query)
+                    self._send_bytes(200, content, "text/markdown; charset=utf-8", self._attachment_disposition(filename))
+                    return
+                if path.endswith("/pdf"):
+                    content = career_user_runtime.pdf_document(path, query)
+                    filename = path.split('/')[-2] + ('_' + query['template'] if 'template' in query else '') + '.pdf'
+                    self._send_bytes(200, content, "application/pdf", self._attachment_disposition(filename))
+                    return
+                if path.endswith("/print"):
+                    html = career_user_runtime.print_document(path, query)
+                    self._send_bytes(200, html.encode("utf-8") if isinstance(html, str) else html, "text/html; charset=utf-8")
+                    return
                 result, status = career_user_runtime.dispatch("GET", path, query)
                 self._json(result, status)
                 return
-            if path.startswith("/api/workbench/"):
-                result, status = workbench_runtime.dispatch("GET", path, query)
+            if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
+                result, status = career_agent_runtime.dispatch("GET", path, query)
                 self._json(result, status)
                 return
             if path == "/api/agent/capabilities":
@@ -364,6 +372,12 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path.rstrip("/") or "/"
         try:
+            if path.startswith("/api/workbench/") and self.headers.get("Origin"):
+                origin = urllib.parse.urlsplit(self.headers["Origin"])
+                expected = urllib.parse.urlsplit("http://" + self.headers.get("Host", ""))
+                if origin.scheme != expected.scheme or origin.hostname != expected.hostname or origin.port != expected.port:
+                    self._error("工作台配置和业务操作只接受同源请求", 403)
+                    return
             payload = self._read_json_body()
             if deploy_mode.enabled():
                 reason = deploy_mode.blocked_reason(path, payload)
@@ -374,13 +388,13 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                         deploy_mode.client_id(self.headers, self.client_address[0])):
                     self._error("访问太频繁，请几分钟后再试", 429)
                     return
-            if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
-                query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
-                result, status = career_agent_runtime.dispatch("POST", path, query, payload)
-                self._json(result, status)
-                return
             if path == "/api/workbench/internal/business":
                 self._json(workbench_runtime.internal(self.headers, payload))
+                return
+            if path.startswith("/api/workbench/"):
+                query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
+                result, status = workbench_runtime.dispatch("POST", path, query, payload)
+                self._json(result, status)
                 return
             if path == "/api/workbench-agent/internal/profile":
                 self._json(workbench_agent_runtime.commit_profile(self.headers, payload))
@@ -392,12 +406,34 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/career-user/"):
                 query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
+                if path.endswith("/stream") and "/comprehensive-interviews/" in path:
+                    frames = career_user_runtime.stream_comprehensive(path, query, payload)
+                    first = next(frames, b"")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store, max-age=0")
+                    self.send_header("Connection", "close")
+                    self.send_header("X-Accel-Buffering", "no")
+                    self._security_headers()
+                    self.end_headers()
+                    self.close_connection = True
+                    if self.command != "HEAD":
+                        try:
+                            if first:
+                                self.wfile.write(first)
+                                self.wfile.flush()
+                            for frame in frames:
+                                self.wfile.write(frame)
+                                self.wfile.flush()
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                            pass
+                    return
                 result, status = career_user_runtime.dispatch("POST", path, query, payload)
                 self._json(result, status)
                 return
-            if path.startswith("/api/workbench/"):
+            if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
                 query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
-                result, status = workbench_runtime.dispatch("POST", path, query, payload)
+                result, status = career_agent_runtime.dispatch("POST", path, query, payload)
                 self._json(result, status)
                 return
             if path == "/api/interview/stream":
@@ -424,23 +460,6 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                     self._error(f"未知操作：{action}", 404)
                     return
                 self._json(handler(payload))
-                return
-            if path == "/api/interview/stream":
-                events = backend.interview_stream_events(payload)
-                first = next(events)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-                self.send_header("Cache-Control", "no-store, max-age=0")
-                self.send_header("Connection", "close")
-                self.send_header("X-Accel-Buffering", "no")
-                self._security_headers()
-                self.end_headers()
-                if self.command != "HEAD":
-                    self.wfile.write(backend.interview_chat.encode_sse(first[0], first[1]))
-                    self.wfile.flush()
-                    for event, data in events:
-                        self.wfile.write(backend.interview_chat.encode_sse(event, data))
-                        self.wfile.flush()
                 return
             if path == "/api/offerpilot/preflight":
                 self._json(backend.preflight_offerpilot_task(payload))

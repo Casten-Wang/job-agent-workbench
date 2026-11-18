@@ -129,6 +129,9 @@ class _FastBossMonitor:
         self.payload = payload
         self.closed: list[str] = []
 
+    def get_page_targets(self):
+        return []
+
     def _get_monitor_chat_target(self, chat_url, config):
         return "tab-boss", False
 
@@ -287,11 +290,12 @@ class _GatedClient:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.now = 0.0
 
     def evaluate(self, target_id, expression, timeout=30):
         self.calls.append(expression)
-        if "im-session-item" in expression:  # zhilian list: never answers
-            time.sleep(float(timeout))  # httpx gives up exactly at the timeout
+        if expression == runtime.JS_ZHILIAN_CHAT_LIST:  # zhilian list: never answers
+            self.now += float(timeout)  # controlled clock: the CDP call uses its entire budget
             return None
         if "im-ui-contact-list-item" in expression:
             return {"available": True, "rows": LIEPIN_ROWS}
@@ -346,7 +350,7 @@ class BrowserGateTests(_ChatReadCase):
         client = _GatedClient()
         with patch("offerpilot.browser.ensure_runtime", return_value=True), patch(
             "offerpilot.browser._client", return_value=client
-        ):
+        ), patch.object(runtime.time, "monotonic", side_effect=lambda: client.now):
             listing = runtime._list_platform_conversations("zhilian")
             self.assertEqual(listing["error"], "读取超时")
             # The gate must be free immediately: no abandoned worker keeps it.

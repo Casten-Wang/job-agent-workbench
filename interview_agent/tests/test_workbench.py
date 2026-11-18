@@ -487,6 +487,16 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(versions), 105)
         self.assertNotIn("resume_other", {v["resume_version_id"] for v in versions})
 
+    async def test_open_interview_listing_excludes_completed_and_other_owner_sessions(self):
+        store = self.repo.store
+        store.create_session("alice", "open", "mat_confirmed", {"mode": "mock_interview"})
+        store.create_session("alice", "done", "mat_confirmed", {"mode": "mock_interview"})
+        store.save_result("alice", "done", {"summary": "虚构复盘"})
+        store.put_material("bob", "mat_bob", {**fixture_material(), "material_id": "mat_bob"})
+        store.create_session("bob", "private", "mat_bob", {"mode": "mock_interview"})
+        self.assertEqual([r["session_id"] for r in store.list_sessions("alice", state="in_progress")], ["open"])
+        self.assertEqual([r["session_id"] for r in store.list_sessions("alice", state="completed")], ["done"])
+
     async def test_business_tool_uses_receipted_bridge_and_deduplicates_repeated_model_actions(self):
         import httpx
         from unittest.mock import AsyncMock, patch
@@ -540,6 +550,53 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         changed["private_profile"]["summary"] = "已变化"
         with self.assertRaises(ConflictError):
             self.workflow.greeting_for_sync(self.sid, greeting["id"], changed)
+
+    async def test_workspace_progress_and_guidance_advance_with_conversation_state(self):
+        from copy import deepcopy
+        from unittest.mock import AsyncMock, patch
+
+        # 1) 个人资料未确认时，进度与引导优先指引完善资料
+        unconfirmed = deepcopy(self.source)
+        unconfirmed["private_profile"]["truth_confirmed"] = False
+        with patch.object(self.agent, "decide", new=AsyncMock(return_value={"action": "reply", "arguments": {}, "message": "先完善个人资料"})) as decide_mock:
+            self.index += 1
+            await self.workflow.turn(self.sid, UserEvent(event_id=f"e{self.index}", text="查看进度"), unconfirmed)
+            await self.workflow.tasks[self.sid]
+        view = self.workflow.view(self.workflow.get(self.sid))
+        self.assertFalse(decide_mock.call_args.args[1]["workspace_progress"]["profile_confirmed"])
+        self.assertEqual(view["guidance"][0]["capability"], "profile_import")
+
+        # 2) 已确认资料但 0 岗位时，指引在对话粘贴 JD 或打开采集
+        no_jobs = deepcopy(self.source)
+        no_jobs["jobs"] = []
+        no_jobs["job_count"] = 0
+        with patch.object(self.agent, "decide", new=AsyncMock(return_value={"action": "reply", "arguments": {}, "message": "请粘贴 JD"})):
+            self.index += 1
+            await self.workflow.turn(self.sid, UserEvent(event_id=f"e{self.index}", text="下一步"), no_jobs)
+            await self.workflow.tasks[self.sid]
+        view = self.workflow.view(self.workflow.get(self.sid))
+        self.assertEqual(view["guidance"][0]["kind"], "compose")
+
+        # 3) 打开工作区工具后，返回带功能名称的友好提示并在 guidance 保留直达入口
+        with patch.object(self.agent, "decide", new=AsyncMock(return_value={"action": "open_workspace_tool", "arguments": {"capability": "github"}})):
+            result = await self.send("打开 GitHub 核验")
+        self.assertEqual(result["status"], "waiting_input")
+        self.assertIn("GitHub 项目核验", result["messages"][-1]["text"])
+        self.assertTrue(any(item.get("capability") == "github" for item in result["guidance"]))
+
+        # 4) 选定岗位与材料并生成草稿后，引导保存版本；保存后引导复核投递与模拟面试
+        await self.prepare()
+        draft_view = self.workflow.view(self.workflow.get(self.sid))
+        self.assertTrue(draft_view["progress"]["has_resume_artifact"])
+        self.assertEqual(draft_view["guidance"][0]["id"], "guide_save_resume")
+        pending = await self.send("保存简历")
+        self.assertEqual(pending["guidance"], [])
+        saved = await self.workflow.approve(self.sid, Approval(approval_id=pending["pending"]["id"], approved=True), self.source)
+        await self.workflow.tasks[self.sid]
+        final_view = self.workflow.view(self.workflow.get(self.sid))
+        self.assertEqual(final_view["progress"]["saved_version_count"], 1)
+        self.assertEqual(final_view["guidance"][0]["capability"], "queue")
+        self.assertTrue(any(item["id"] == "guide_version_interview" for item in final_view["guidance"]))
 
 
 if __name__ == "__main__":

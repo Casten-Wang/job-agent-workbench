@@ -321,6 +321,7 @@ class JdIntakeCliTests(unittest.TestCase):
             completed = subprocess.run(
                 [
                     sys.executable,
+                    "-X", "utf8",
                     "-I",
                     str(JD_INTAKE),
                     "--input",
@@ -332,6 +333,7 @@ class JdIntakeCliTests(unittest.TestCase):
                 ],
                 cwd=PROJECT_ROOT,
                 text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )
@@ -423,6 +425,7 @@ class AtsCheckTests(unittest.TestCase):
             completed = subprocess.run(
                 [
                     sys.executable,
+                    "-X", "utf8",
                     "-I",
                     str(ATS_CHECK),
                     "--pdf",
@@ -432,6 +435,7 @@ class AtsCheckTests(unittest.TestCase):
                 ],
                 cwd=PROJECT_ROOT,
                 text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )
@@ -494,6 +498,7 @@ class VariantTests(unittest.TestCase):
             added = subprocess.run(
                 [
                     sys.executable,
+                    "-X", "utf8",
                     "-I",
                     str(VARIANTS),
                     "add",
@@ -505,6 +510,7 @@ class VariantTests(unittest.TestCase):
                 ],
                 cwd=PROJECT_ROOT,
                 text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )
@@ -514,6 +520,7 @@ class VariantTests(unittest.TestCase):
             listed = subprocess.run(
                 [
                     sys.executable,
+                    "-X", "utf8",
                     "-I",
                     str(VARIANTS),
                     "list",
@@ -523,6 +530,7 @@ class VariantTests(unittest.TestCase):
                 ],
                 cwd=PROJECT_ROOT,
                 text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )

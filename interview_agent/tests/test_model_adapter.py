@@ -26,6 +26,74 @@ INTENT = {"intent": "answer", "reason": "synthetic transport test", "clarificati
 
 
 class ModelAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_comprehensive_json_contract_preserves_validation_and_repairs(self):
+        dimension = {"dimension_id": "verification", "label": "验证", "weight": 1,
+            "score": 3, "evidence_quotes": ["覆盖缺失和合法输入"], "comment": "补充失败用例。"}
+        valid = {"session_id": "ci_test", "brief_id": "brief_test", "readiness": "needs_practice",
+            "readiness_reason": "需要补充边界证据。", "dimensions": [dimension], "top_priority_fix": "复现一个失败用例。"}
+        requests = []
+        def handler(request):
+            payload = json.loads(request.content)
+            requests.append(payload)
+            self.assertEqual(payload["response_format"], {"type": "json_object"})
+            self.assertNotIn("tools", payload)
+            prompt = json.dumps(payload["messages"], ensure_ascii=False)
+            self.assertIn('dimension_id', prompt)
+            self.assertIn('pending_user_confirmation', prompt)
+            self.assertNotIn('调用一次 submit_ci_debrief', prompt)
+            value = {**valid, "dimensions": [{**dimension, "score": 6}]} if len(requests) == 1 else valid
+            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {
+                "content": json.dumps(value, ensure_ascii=False)}}]})
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(handler)).start()
+        try:
+            result = await adapter.decide("ci_debrief", {"session_id": "ci_test"})
+            self.assertEqual(result["dimensions"][0]["score"], 3)
+            self.assertTrue(result["not_an_offer"])
+            self.assertFalse(result["applied_to_resume"])
+            self.assertEqual(len(requests), 2)
+            self.assertIn("less_than_equal", requests[1]["messages"][-1]["content"])
+            self.assertEqual(requests[0]["max_tokens"], 8192)
+            self.assertEqual(requests[0]["reasoning_effort"], "low")
+        finally:
+            await adapter.close()
+
+    async def test_comprehensive_plan_generates_questions_and_restores_template(self):
+        sections = [{"section_id": "self_intro", "title": "开场", "weight_percent": 50},
+                    {"section_id": "candidate_qa", "title": "反问", "weight_percent": 50}]
+        blueprint = {"brief_id": "brief_test", "sections": sections, "main_questions": [
+            {"question_id": "q_intro", "section_id": "self_intro", "origin_type": "self_intro_hook", "focus": "介绍真实项目"},
+            {"question_id": "q_qa", "section_id": "candidate_qa", "origin_type": "candidate_qa", "focus": "候选人反问"}],
+            "overflow_questions": [{"question_id": "q_backup", "section_id": "self_intro", "origin_type": "overflow_backup", "focus": "失败边界", "is_overflow": True}]}
+        blueprint["main_questions"][0].update(claim_id="claim_original", knowledge_snapshot_id="snapshot_original", preferred_source_kind="source_text")
+        draft = {"questions": [{"question_id": q["question_id"], "focus": q["focus"]}
+            for q in blueprint["main_questions"] + blueprint["overflow_questions"]]}
+        requests = []
+        def handler(request):
+            payload = json.loads(request.content)
+            requests.append(payload)
+            self.assertEqual(payload["response_format"], {"type": "json_object"})
+            schema = next(m["content"] for m in payload["messages"] if m["content"].startswith("精确输出 Schema"))
+            self.assertIn('"questions"', schema)
+            self.assertNotIn('"brief_id"', schema)
+            self.assertNotIn('"sections"', schema)
+            value = {"questions": draft["questions"][:-1] + [draft["questions"][0]]} if len(requests) == 1 else draft
+            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {
+                "content": json.dumps(value, ensure_ascii=False)}}]})
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(handler)).start()
+        try:
+            result = await adapter.decide("ci_plan", {"blueprint": blueprint})
+            self.assertEqual(result["brief_id"], "brief_test")
+            self.assertEqual([s["weight_percent"] for s in result["sections"]], [50, 50])
+            self.assertEqual(result["main_questions"][0]["focus"], "介绍真实项目")
+            self.assertEqual(result["main_questions"][0]["claim_id"], "claim_original")
+            self.assertEqual(result["main_questions"][0]["knowledge_snapshot_id"], "snapshot_original")
+            self.assertEqual(result["main_questions"][0]["preferred_source_kind"], "source_text")
+            self.assertTrue(result["overflow_questions"][0]["is_overflow"])
+            self.assertEqual(len(requests), 2)
+            self.assertIn("blueprint_question_coverage", requests[1]["messages"][-1]["content"])
+        finally:
+            await adapter.close()
+
     async def test_workbench_json_mode_never_coerces_a_string_to_an_array(self):
         requests = []
         def handler(request):
@@ -305,6 +373,28 @@ class ModelAdapterTests(unittest.IsolatedAsyncioTestCase):
             try:
                 with self.assertRaises(ModelError):
                     await adapter.decide("intent", {})
+            finally:
+                await adapter.close()
+
+    async def test_plan_missing_claim_binding_is_repaired_or_rejected_without_inventing_a_binding(self):
+        question = {"question_id": "pi_q1", "claim_id": "source_claim", "text": "解释校验边界", "evidence_ids": ["e1"],
+                    "intent": "failure_boundary", "reason": "核对已确认的边界处理"}
+        for repaired in (True, False):
+            requests = []
+            def handler(request):
+                requests.append(json.loads(request.content))
+                value = question if repaired and len(requests) == 2 else {k: v for k, v in question.items() if k != "claim_id"}
+                return httpx.Response(200, json=completion("plan", {"questions": [value]}))
+            adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(handler)).start()
+            try:
+                if repaired:
+                    result = await adapter.decide("plan", {"material": {"claims": [{"claim_id": "source_claim", "evidence_ids": ["e1"]}]}})
+                    self.assertEqual(result["questions"][0]["claim_id"], "source_claim")
+                else:
+                    with self.assertRaises(ModelError):
+                        await adapter.decide("plan", {})
+                self.assertEqual(len(requests), 2)
+                self.assertIn("questions.0.claim_id", requests[1]["messages"][-1]["content"])
             finally:
                 await adapter.close()
 
