@@ -204,6 +204,32 @@ class SignalScriptTests(unittest.TestCase):
         self.assertEqual(_read(INDEX).count('id="activity-data"'), 1)
         self.assertIn("renderActivity(dom.activityData, snapshot.activity)", self.script)
 
+    def test_collect_count_explains_gap_to_job_pool(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不可用")
+        fn = _between(self.script, "function offerpilotJobsCountText(", "function renderOfferPilotJobs(")
+        harness = (
+            fn + """
+const jobs = [{id:'a'},{id:'b'},{id:'c'}];
+const pool = new Set(['a','c']);
+process.stdout.write(JSON.stringify({
+  trimmed: offerpilotJobsCountText(jobs, 126, pool),
+  full: offerpilotJobsCountText(jobs, 3, new Set()),
+  empty: offerpilotJobsCountText([], 0, pool),
+}));
+"""
+        )
+        done = subprocess.run([node, "-e", harness], text=True, capture_output=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr[:500])
+        out = json.loads(done.stdout)
+        self.assertEqual(out["trimmed"], "显示前 3 条 / 共 126 条；其中 2 条已在岗位池，其余需勾选后导入")
+        self.assertEqual(out["full"], "共 3 条；其中 0 条已在岗位池，其余需勾选后导入")
+        self.assertEqual(out["empty"], "共 0 条")
+        render = _between(self.script, "function renderOfferPilotJobs(", "function syncOfferPilotSelection(")
+        self.assertIn("offerpilotPoolIds()", render)
+        self.assertIn("'；已在岗位池'", render)
+
     def test_group_activity_rows_behaviour(self):
         node = shutil.which("node")
         if not node:

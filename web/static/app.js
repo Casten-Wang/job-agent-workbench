@@ -3705,9 +3705,26 @@ function syncOfferPilotStartState() {
   }
 }
 
+// 采集库里的岗位要经过「导入」才进岗位池：用岗位池里记录的 offerpilot_id 对出哪些已入库，
+// 让「采集 126 条、岗位池 31 条」这种差距有解释。
+function offerpilotPoolIds() {
+  const rows = state.snapshot && Array.isArray(state.snapshot.jobs) ? state.snapshot.jobs : [];
+  return new Set(rows.map((row) => String((row && row.offerpilot_id) || '')).filter(Boolean));
+}
+
+function offerpilotJobsCountText(jobs, total, pool) {
+  const head = total > jobs.length ? `显示前 ${jobs.length} 条 / 共 ${total} 条` : `共 ${total} 条`;
+  const imported = jobs.filter((job) => pool.has(String(job.id || ''))).length;
+  return jobs.length ? `${head}；其中 ${imported} 条已在岗位池，其余需勾选后导入` : head;
+}
+
 function renderOfferPilotJobs() {
   if (!dom.offerpilotJobsTable) return;
   const jobs = state.offerpilotJobs;
+  const pool = offerpilotPoolIds();
+  if (dom.offerpilotJobsCount && state.offerpilotJobsLoaded) {
+    dom.offerpilotJobsCount.textContent = offerpilotJobsCountText(jobs, state.offerpilotJobsTotal, pool);
+  }
   renderTable(dom.offerpilotJobsTable, {
     caption: '表：本机采集结果（只读快照）',
     columns: ['岗位', '公司', '城市', '薪资', '评分', '状态'],
@@ -3723,7 +3740,8 @@ function renderOfferPilotJobs() {
           ? '—'
           : `${Math.round(Number(job.score))}/100`
       }),
-      OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || '未知状态'
+      (OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || '未知状态')
+        + (pool.has(String(job.id || '')) ? '；已在岗位池' : '')
     ]),
     emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '采集组件还没准备好。'
   });
@@ -3761,11 +3779,6 @@ async function loadOfferPilotJobs(options = {}) {
     state.offerpilotSelection.forEach((id) => {
       if (!validIds.has(id)) state.offerpilotSelection.delete(id);
     });
-    if (dom.offerpilotJobsCount) {
-      dom.offerpilotJobsCount.textContent = total > jobs.length
-        ? `显示前 ${jobs.length} 条 / 共 ${total} 条`
-        : `共 ${total} 条`;
-    }
     renderOfferPilotJobs();
     if (options.announce) {
       const scope = total > jobs.length ? `显示前 ${jobs.length} 条（共 ${total} 条）` : `读到 ${jobs.length} 条`;
