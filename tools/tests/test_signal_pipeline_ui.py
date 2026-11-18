@@ -46,6 +46,25 @@ class SignalPipelineCssTests(unittest.TestCase):
         self.assertIn(".sg-bulk-bar", CSS)
         self.assertIn("bottom: 16px", CSS)
 
+    def test_jobs_actions_column_sticks_and_compact_columns(self):
+        self.assertIn("#view-jobs .jobs-table td:nth-child(13)", CSS)
+        self.assertIn("#view-jobs .jobs-table th:nth-child(13)", CSS)
+        self.assertIn("right: 0", CSS)
+        for column in (4, 5, 6):
+            self.assertIn(f":nth-child({column})", CSS)
+
+    def test_job_drawers_are_fixed_panels(self):
+        self.assertIn("#jobs-dossier", CSS)
+        self.assertIn("#queue-review", CSS)
+        self.assertIn("width: min(520px, 92vw)", CSS)
+        self.assertIn("box-shadow: 0 0 40px rgba(0, 0, 0, .18)", CSS)
+        self.assertIn("display: none !important", CSS)
+        self.assertIn("animation-fill-mode: none", CSS)
+
+    def test_collect_results_scroll_inside_the_table(self):
+        self.assertIn("#view-collect #offerpilot-jobs-table .table-wrap", CSS)
+        self.assertIn("max-height: 560px", CSS)
+
 
 class SignalPipelineMarkupTests(unittest.TestCase):
     def test_collect_page_has_two_column_layout_and_visible_start_reason(self):
@@ -78,6 +97,10 @@ class SignalPipelineMarkupTests(unittest.TestCase):
         for anchor in ('id="jobs-table"', 'id="jobs-bulk-enqueue"', 'id="jobs-bulk-delete"', 'id="jobs-selection-count"'):
             self.assertIn(anchor, HTML)
 
+    def test_confirmation_modals_show_the_target_platform(self):
+        self.assertIn('id="sg-queue-delivery-platform"', HTML)
+        self.assertIn('id="sg-hr-reply-platform"', HTML)
+
 
 class SignalPipelineScriptTests(unittest.TestCase):
     def test_render_table_supports_an_empty_state_node(self):
@@ -93,6 +116,27 @@ class SignalPipelineScriptTests(unittest.TestCase):
         self.assertIn("className: 'sg-ellipsis'", APP)
         self.assertIn("sg-platform-tag", APP)
         self.assertIn("sg-platform-mark", APP)
+
+    def test_scores_status_and_greeting_source_are_human_readable(self):
+        self.assertIn("function formatJobScoreValue", APP)
+        self.assertIn("/100", APP)
+        self.assertIn("'待评分'", APP)
+        self.assertIn("'未知状态'", APP)
+        self.assertIn("function greetingSourceLabel", APP)
+        self.assertIn("'自动生成'", APP)
+
+    def test_drawers_move_focus_and_confirm_irreversible_states(self):
+        self.assertIn("jobsDossierTrigger", APP)
+        self.assertIn("queueReviewTrigger", APP)
+        self.assertIn("event.key !== 'Escape'", APP)
+        self.assertIn("IRREVERSIBLE_JOB_STATES", APP)
+        self.assertIn("此状态不可恢复", APP)
+
+    def test_hr_messages_dedupe_truncate_and_report_cached_platforms(self):
+        self.assertIn("function dedupeHrMessages", APP)
+        self.assertIn("truncate(fullText, 120)", APP)
+        self.assertIn("已显示缓存，正在同步", APP)
+        self.assertIn("'未读取'", APP)
 
 
 if __name__ == "__main__":
