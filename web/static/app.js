@@ -1457,7 +1457,7 @@ function renderHomeSide(snapshot) {
     const jobs = snapshot && Array.isArray(snapshot.jobs) ? snapshot.jobs.length : 0;
     dom.sgPipeTotal.textContent = `岗位池 ${jobs} 个`;
   }
-  const rows = snapshot && Array.isArray(snapshot.activity) ? snapshot.activity.slice(0, 5) : [];
+  const rows = groupActivityRows(snapshot && Array.isArray(snapshot.activity) ? snapshot.activity : []).slice(0, 5);
   if (dom.sgActivityCount) dom.sgActivityCount.textContent = rows.length ? `最近 ${rows.length} 条` : '';
   if (!dom.sgHomeActivity) return;
   clear(dom.sgHomeActivity);
@@ -1468,12 +1468,12 @@ function renderHomeSide(snapshot) {
     }));
     return;
   }
-  rows.forEach((row) => {
+  rows.forEach((group) => {
     const item = el('li', { className: 'sg-activity-row' });
-    item.append(el('span', { className: 'sg-activity-time', text: homeShortTime(row && row.at) }));
+    item.append(el('span', { className: 'sg-activity-time', text: homeShortTime(group.row && group.row.at) }));
     item.append(el('span', {
       className: 'sg-activity-title',
-      text: String((row && (row.title || row.action)) || '操作')
+      text: group.count > 1 ? `${group.title} ×${group.count}` : group.title
     }));
     dom.sgHomeActivity.append(item);
   });
@@ -8087,6 +8087,23 @@ async function compareVariantWithMaster(variant, button) {
 
 /* Render: data and reports */
 
+// 相邻且标题、详情完全相同的记录合并成一组，用 ×N 表示次数（首页与设置页共用）；
+// 详情里的 auto_submit 参数只对调试有用，这里去掉。
+function groupActivityRows(rows) {
+  const groups = [];
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const title = String((row && (row.title || row.action)) || '操作');
+    const detail = String((row && row.detail) || '').replace(/；?\s*auto_submit=\w+/g, '').trim();
+    const last = groups[groups.length - 1];
+    if (last && last.title === title && last.detail === detail) {
+      last.count += 1;
+      return;
+    }
+    groups.push({ row: row || {}, title, detail, count: 1 });
+  });
+  return groups;
+}
+
 function renderActivity(container, activity) {
   if (!container) return;
   clear(container);
@@ -8095,19 +8112,7 @@ function renderActivity(container, activity) {
     container.append(el('p', { className: 'empty-state', text: '暂无操作记录。' }));
     return;
   }
-  // 相邻且标题、详情完全相同的记录合并成一行，用 ×N 表示次数；
-  // 详情里的 auto_submit 参数只对调试有用，渲染时去掉。
-  const groups = [];
-  rows.forEach((row) => {
-    const title = String(row.title || row.action || '操作');
-    const detail = String(row.detail || '').replace(/；?\s*auto_submit=\w+/g, '').trim();
-    const last = groups[groups.length - 1];
-    if (last && last.title === title && last.detail === detail) {
-      last.count += 1;
-      return;
-    }
-    groups.push({ row, title, detail, count: 1 });
-  });
+  const groups = groupActivityRows(rows);
   const list = el('ul', { className: 'activity-list' });
   groups.forEach((group) => {
     const item = el('li', { className: 'activity-item' });

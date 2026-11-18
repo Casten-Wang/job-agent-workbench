@@ -7,6 +7,9 @@ nothing is sent.
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -182,10 +185,45 @@ class SignalScriptTests(unittest.TestCase):
         self.assertNotIn("claude-sonnet-5-5", block)
 
     def test_activity_rows_merge_adjacent_duplicates(self):
-        block = _between(self.script, "function renderActivity(", "function renderDefinitionList(")
-        self.assertIn("/；?\\s*auto_submit=\\w+/g", block)
-        self.assertIn("last.count += 1", block)
-        self.assertIn("×${group.count}", block)
+        group_fn = _between(self.script, "function groupActivityRows(", "function renderActivity(")
+        self.assertIn("/；?\\s*auto_submit=\\w+/g", group_fn)
+        self.assertIn("last.count += 1", group_fn)
+        # 设置页与首页共用同一个分组函数，都用 ×N 表示次数。
+        settings = _between(self.script, "function renderActivity(", "function renderDefinitionList(")
+        self.assertIn("groupActivityRows(rows)", settings)
+        self.assertIn("×${group.count}", settings)
+        home = _between(self.script, "function renderHomeSide(", "\nfunction ")
+        self.assertIn("groupActivityRows(", home)
+        self.assertIn("×${group.count}", home)
+        self.assertIn(".slice(0, 5)", home)
+
+    def test_group_activity_rows_behaviour(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不可用")
+        fn = _between(self.script, "function groupActivityRows(", "function renderActivity(")
+        harness = (
+            fn
+            + "\nconst rows = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
+            "process.stdout.write(JSON.stringify(groupActivityRows(rows).map(g => [g.title, g.detail, g.count])));\n"
+        )
+        rows = [
+            {"title": "导入岗位", "detail": "新增 3；auto_submit=false", "at": "2026-11-18T10:00:00"},
+            {"title": "导入岗位", "detail": "新增 3", "at": "2026-11-18T09:59:00"},
+            {"title": "导入岗位", "detail": "新增 3；auto_submit=true", "at": "2026-11-18T09:58:00"},
+            {"action": "save-profile", "at": "2026-11-18T09:50:00"},
+            {"title": "导入岗位", "detail": "新增 3", "at": "2026-11-18T09:40:00"},
+            None,
+        ]
+        done = subprocess.run(
+            [node, "-e", harness], input=json.dumps(rows, ensure_ascii=False),
+            text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr[:500])
+        self.assertEqual(
+            json.loads(done.stdout),
+            [["导入岗位", "新增 3", 3], ["save-profile", "", 1], ["导入岗位", "新增 3", 1], ["操作", "", 1]],
+        )
 
     def test_home_replies_add_platform_unread_and_change_zero_buttons(self):
         block = _between(self.script, "function renderHomeToday(", "/* 六段契约")
@@ -202,7 +240,7 @@ class SignalScriptTests(unittest.TestCase):
 
     def test_home_renderer_fills_the_side_column(self):
         block = _between(self.script, "function renderHomeSide(", "function renderHomeToday(")
-        for marker in ("homePipelineStageCount(snapshot, key)", "snapshot.activity.slice(0, 5)", "sg-side-num"):
+        for marker in ("homePipelineStageCount(snapshot, key)", "groupActivityRows(snapshot && Array.isArray(snapshot.activity)", ").slice(0, 5)", "sg-side-num"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, block)
 
