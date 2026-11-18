@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import functools
 import hashlib
 import io
 import json
 import re
 import sys
+import threading
 import unittest
 import uuid
 from collections import Counter
@@ -233,6 +235,19 @@ class ApiError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
+
+
+# 审批队列、岗位池、投递记录都是「整读 → 改内存 → 整写」的 JSON 文件，而服务器每个请求一个线程。
+# 对这些写入口串行化（可重入，因为 run_offerpilot_pipeline 会调用 enqueue），避免并发请求互相覆盖。
+_STORE_WRITE_LOCK = threading.RLock()
+
+
+def _serialized_store_write(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with _STORE_WRITE_LOCK:
+            return func(*args, **kwargs)
+    return wrapper
 
 
 class Store:
@@ -1742,6 +1757,7 @@ def _delivery_item(job: dict[str, Any], job_id: str) -> dict[str, Any]:
     }
 
 
+@_serialized_store_write
 def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     """Send reviewed greetings for approved jobs through the runtime guards."""
     ids = payload.get("ids")
@@ -1839,6 +1855,7 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@_serialized_store_write
 def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str, Any]]:
     """Finalize finished batches and record one pipeline event per job."""
     deliveries = store.deliveries()
@@ -1869,6 +1886,12 @@ def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str,
         stop_reason = ""
         if task_id and str(last.get("id") or "") == task_id:
             stop_reason = str(last.get("stop_reason") or "")
+        elif task_id:
+            # last_task 只是「最近启动的任务」；本批任务之后又启动了别的任务时，按任务 id 回查。
+            try:
+                stop_reason = offerpilot_runtime.task_stop_reason(task_id)
+            except Exception:
+                stop_reason = ""
         if not task_id:
             stop_reason = stop_reason or "task_not_started"
         counts = {"sent": 0, "failed": 0, "deferred": 0, "blocked": 0}
@@ -1915,7 +1938,7 @@ def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str,
             "stop_reason": stop_reason or None,
             "finished_at": _now(),
         })
-        if counts["failed"] == 0 and counts["blocked"] == 0:
+        if counts["failed"] == 0 and counts["blocked"] == 0 and counts["deferred"] == 0:
             batch["status"] = "completed"
         elif counts["sent"] == 0:
             batch["status"] = "failed"
@@ -2120,6 +2143,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
 
 
 
+@_serialized_store_write
 def import_offerpilot_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     ids = payload.get("ids")
     if not isinstance(ids, list) or not ids:
@@ -2170,6 +2194,7 @@ def _pipeline_state(mode: str) -> dict[str, Any]:
     return snapshot
 
 
+@_serialized_store_write
 def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
     """Automate import → enqueue → greeting, then stop at the send gate.
 
@@ -2729,6 +2754,7 @@ def parse_jd(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "job": job_view, "message": "岗位已录入本地工作区"}
 
 
+@_serialized_store_write
 def import_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     text = _bounded_text(payload.get("text"), "导出 JSON")
@@ -2945,6 +2971,7 @@ def _append_manual_queue(store: Store, entries: list[dict[str, Any]], reason: st
     return added
 
 
+@_serialized_store_write
 def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     ids = payload.get("ids")
@@ -3122,6 +3149,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, **result, "message": message}
 
 
+@_serialized_store_write
 def confirm_queue(payload: dict[str, Any]) -> dict[str, Any]:
     """Mark pending rows approved after one explicit click.
 
@@ -3135,11 +3163,16 @@ def confirm_queue(payload: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("请先勾选至少一条待确认岗位")
     store = get_store(mode)
     jobs = {str(job.get("id")): job for job in store.jobs()}
+    pending_status = approval_queue.load_config()["approval"]["pending_status"]
+    pending_ids = {str(row.get("id")) for row in store.queue() if row.get("status") == pending_status}
+    not_pending = [item for item in ids if item not in pending_ids]
+    ids = [item for item in ids if item in pending_ids]
     ids, held = _split_recent_duplicates(store, jobs, ids, include_queue=False)
     result = approval_queue.confirm(ids, store.files["queue"]) if ids else {
         "confirmed": [], "not_found": [], "status": "ready_for_manual_submission_only", "auto_submit": False,
     }
     result["recent_duplicates"] = held
+    result["not_pending"] = not_pending
     store.log("人工通过待确认岗位", f"{len(result['confirmed'])} 条；30 天内重复拦截 {len(held)} 条；auto_submit=false")
     message = "已通过；发送前还会再让你复核一次"
     if held:
@@ -3159,6 +3192,7 @@ def _delivered_job_ids(store: Store) -> set[str]:
     return sent
 
 
+@_serialized_store_write
 def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     """Soft-delete jobs from the pool: mark ``deleted_at`` instead of removing.
 

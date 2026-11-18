@@ -203,6 +203,11 @@ def save_reviewed_greeting(job_id: str, text: str) -> dict[str, Any]:
     server = load_backend()
     if not isinstance(text, str) or not text.strip() or len(text) > 300:
         raise ValueError("招呼语需要为 1 至 300 字，请先修改草稿")
+    # 手动改写的文本与 AI 生成的走同一条规则：不得含电话、邮箱、微信、QQ 或链接。
+    from offerpilot.ai.greeter import _contains_contact  # type: ignore
+
+    if _contains_contact(text):
+        raise ValueError("招呼语里不能包含电话、邮箱、微信、QQ 或链接；请删除后再保存")
     with server.job_mutation_lock, server.greeting_activity.claim(job_id, "editing") as acquired:
         if not acquired:
             raise ValueError("岗位正在处理，请稍后再同步")
@@ -216,6 +221,18 @@ def save_reviewed_greeting(job_id: str, text: str) -> dict[str, Any]:
         finally:
             db.close()
     return {"ok": True, "message": "已同步你核对的招呼语，尚未发送。"}
+
+
+def task_stop_reason(task_id: Any) -> str:
+    """Stop reason of one task by id (``last_task`` only knows the newest task)."""
+    text = str(task_id or "").strip()
+    if not text:
+        return ""
+    server = load_backend()
+    for task in (server.task_runner.status() or {}).get("tasks") or []:
+        if isinstance(task, dict) and str(task.get("id") or "") == text:
+            return str(task.get("stop_reason") or "")
+    return ""
 
 
 def get_greetings(ids: Any) -> dict[str, Any]:
@@ -3704,9 +3721,15 @@ def start_conversations_sync(platform: Any = "all") -> dict[str, Any]:
     with _hr_store_lock:
         meta = _load_sync_meta()
     with _sync_state_lock:
+        # 冷却记录在磁盘上，重启后仍在；但发送回复需要本进程内存里的「最近列表」，
+        # 所以本进程还没读过这个平台时，即使磁盘记录很新也要读一次。
+        with _conversation_cache_lock:
+            listed_here = set(_conversation_listed_at_by_platform)
         skipped = [
             name for name in targets
-            if name not in _sync_queued and _recently_synced(meta.get(name) or {})
+            if name not in _sync_queued
+            and name in listed_here
+            and _recently_synced(meta.get(name) or {})
         ]
         added = [
             name for name in targets

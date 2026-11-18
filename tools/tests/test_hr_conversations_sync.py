@@ -96,6 +96,11 @@ class _StoreCase(unittest.TestCase):
                 finished_at=None, error=None, platforms=[],
             )
 
+    def _mark_listed_in_this_process(self, platform: str) -> None:
+        with runtime._conversation_cache_lock:
+            runtime._conversation_listed_at_by_platform[platform] = time.monotonic()
+        self.addCleanup(runtime._reset_conversation_cache)
+
     def _wait_idle(self, timeout: float = 3.0) -> None:
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -221,6 +226,7 @@ class SyncQueueTests(_StoreCase):
             runtime._save_sync_meta({
                 "boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None},
             })
+        self._mark_listed_in_this_process("boss")
         with patch.object(runtime, "_run_conversations_sync") as read:
             result = runtime.start_conversations_sync("boss")
         self.assertFalse(result["started"])
@@ -279,6 +285,7 @@ class SyncQueueTests(_StoreCase):
             runtime._save_sync_meta({
                 "boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None},
             })
+        self._mark_listed_in_this_process("boss")
         release = threading.Event()
         started = []
 
@@ -395,3 +402,77 @@ class HttpRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RestartIncrementalTests(_StoreCase):
+    """A restart clears memory only; the stored bodies and signatures decide what is read."""
+
+    def _listing(self, suffix: str, *, last_message: str, at: str, direction: str = "hr", unread: int = 0) -> dict:
+        row = _record("boss", suffix, unread=unread)
+        row.update(last_message=last_message, last_message_at=at, last_direction=direction, source="api")
+        for key in ("messages", "body_read", "signature", "fetched_at", "stale", "error"):
+            row.pop(key, None)
+        return row
+
+    def _store_current_bodies(self, rows: list[dict]) -> None:
+        with runtime._hr_store_lock:
+            store = {}
+            for row in rows:
+                signature = runtime._hr_signature(row)
+                record = _record("boss", row["id"][0], unread=0)
+                record.update(
+                    id=row["id"], last_message=row["last_message"], last_message_at=row["last_message_at"],
+                    signature=signature, body_signature=signature, body_read=True,
+                )
+                store[runtime._hr_store_key(row)] = record
+            runtime._save_hr_store(store)
+
+    def test_an_unchanged_listing_after_a_restart_reads_no_conversation(self):
+        rows = [self._listing("a", last_message="你好", at="11-16 10:20"),
+                self._listing("b", last_message="方便聊聊吗", at="11-16 11:00")]
+        self._store_current_bodies(rows)
+        self._reset_sync_state()  # the "restart": in-memory state is gone, files stay
+        with patch.object(runtime, "_background_read_possible", return_value=True), \
+                patch.object(runtime, "_fetch_thread_body") as fetch:
+            runtime._refresh_platform_store(rows, "boss", source="api")
+        fetch.assert_not_called()
+        kept = runtime._load_hr_store()
+        self.assertEqual(len(kept), 2)
+        for record in kept.values():
+            self.assertTrue(record["messages"])
+            self.assertFalse(record.get("stale"))
+
+    def test_only_the_conversation_with_a_new_hr_message_is_read_and_old_messages_survive(self):
+        rows = [self._listing("a", last_message="你好", at="11-16 10:20"),
+                self._listing("b", last_message="方便聊聊吗", at="11-16 11:00")]
+        self._store_current_bodies(rows)
+        self._reset_sync_state()
+        changed = [rows[0], self._listing("b", last_message="明天下午面试可以吗", at="11-17 09:00", unread=1)]
+        new_message = {"sender": "hr", "text": "明天下午面试可以吗", "time": "11-17 09:00", "mid": "102"}
+        with patch.object(runtime, "_background_read_possible", return_value=True), \
+                patch.object(runtime, "_fetch_thread_body", return_value={"ok": True, "messages": [
+                    {"sender": "hr", "text": "你好", "time": "11-16 10:20", "mid": "101"}, new_message,
+                ]}) as fetch:
+            runtime._refresh_platform_store(changed, "boss", source="api")
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(fetch.call_args.args[0]["id"], changed[1]["id"])
+        store = runtime._load_hr_store()
+        untouched = store[runtime._hr_store_key(rows[0])]
+        self.assertEqual([m["mid"] for m in untouched["messages"]], ["101"])
+        merged = store[runtime._hr_store_key(changed[1])]
+        self.assertEqual([m["mid"] for m in merged["messages"]], ["101", "102"])
+
+    def test_the_cooldown_survives_a_restart(self):
+        runtime._save_sync_meta({"boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None}})
+        self._reset_sync_state()  # the "restart"
+        self.assertTrue(runtime._recently_synced(runtime._load_sync_meta()["boss"]))
+
+    def test_after_a_restart_a_fresh_disk_record_still_reads_once_so_replies_can_be_sent(self):
+        # 磁盘上的冷却很新，但本进程内存里没有「最近列表」：发送回复要用它，所以必须读一次。
+        runtime._reset_conversation_cache()
+        runtime._save_sync_meta({"boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None}})
+        with patch.object(runtime, "_run_conversations_sync") as read:
+            result = runtime.start_conversations_sync("boss")
+            self._wait_idle()
+        self.assertTrue(result["started"])
+        read.assert_called_once_with("boss")

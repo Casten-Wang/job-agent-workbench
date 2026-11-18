@@ -4317,7 +4317,7 @@ function renderDeliveryResults(snapshot) {
     starting: '准备发送',
     sending: '发送中',
     completed: '发送完成',
-    partial: '部分完成',
+    partial: '部分发送（有未发出的岗位，见下）',
     failed: '发送未完成'
   };
   const sent = Number(batch.sent) || 0;

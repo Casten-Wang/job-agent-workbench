@@ -1423,7 +1423,8 @@ class DeliveryActionTests(unittest.TestCase):
         ):
             backend._sync_deliveries(store, boss_state)
         batch = store.deliveries()[0]
-        self.assertEqual(batch["status"], "completed")
+        # 有一条因日限延后：不能算「发送完成」。
+        self.assertEqual(batch["status"], "partial")
         self.assertEqual((batch["sent"], batch["deferred"]), (1, 1))
         self.assertEqual(batch["items"][0]["status"], "sent")
         self.assertEqual(batch["items"][1]["status"], "deferred")
@@ -1431,6 +1432,73 @@ class DeliveryActionTests(unittest.TestCase):
         self.assertEqual([event["status"] for event in store.events], ["succeeded", "skipped"])
         self.assertEqual({event["actor"] for event in store.events}, {"embedded_runtime"})
         self.assertEqual({event["stage"] for event in store.events}, {"send"})
+
+    def test_sync_reads_stop_reason_by_task_id_when_a_newer_task_started(self):
+        class _Store:
+            def __init__(self):
+                self._deliveries = [{
+                    "batch_id": "dlv-2", "task_id": "task-1", "status": "sending", "requested": 1,
+                    "items": [{"job_id": "job-1", "offerpilot_id": "v1", "company": "A", "title": "甲", "status": "sending"}],
+                }]
+                self.events = []
+
+            def deliveries(self):
+                return self._deliveries
+
+            def set_deliveries(self, rows):
+                self._deliveries = rows
+
+            def append_pipeline_event(self, event):
+                self.events.append(event)
+
+        store = _Store()
+        boss_state = {"task": None, "last_task": {"id": "task-2", "stop_reason": ""}}
+        with patch.object(backend.offerpilot_runtime, "get_greetings",
+                          return_value={"ok": True, "greetings": [{"id": "v1", "status": "approved"}]}), \
+                patch.object(backend.offerpilot_runtime, "task_stop_reason", return_value="daily_limit") as lookup:
+            backend._sync_deliveries(store, boss_state)
+        lookup.assert_called_once_with("task-1")
+        self.assertEqual(store.deliveries()[0]["items"][0]["error_code"], "daily_limit")
+
+    def test_hand_edited_greeting_with_contact_details_is_rejected(self):
+        runtime = backend.offerpilot_runtime
+        with patch.object(runtime, "load_backend", return_value=object()):
+            for text in ("你好，加我微信 abc12345 聊聊", "请联系 13800138000", "邮箱 a@b.com", "详见 https://example.invalid/x"):
+                with self.subTest(text=text):
+                    with self.assertRaises(ValueError):
+                        runtime.save_reviewed_greeting("job-1", text)
+
+    def test_confirm_only_touches_pending_rows(self):
+        store = backend.get_store("user")
+        rows = store.queue()
+        approved = next(row for row in rows if row.get("status") == "approved")
+        stamp = approved.get("approved_at")
+        result = backend.confirm_queue({"mode": "user", "ids": [str(approved["id"])]})
+        self.assertEqual(result["confirmed"], [])
+        self.assertEqual(result["not_pending"], [str(approved["id"])])
+        again = next(row for row in store.queue() if row["id"] == approved["id"])
+        self.assertEqual(again.get("approved_at"), stamp)
+
+    def test_concurrent_confirms_do_not_lose_queue_rows(self):
+        import threading as _threading
+        store = backend.get_store("user")
+        before = len(store.queue())
+        errors = []
+
+        def work():
+            try:
+                for _ in range(20):
+                    backend.confirm_queue({"mode": "user", "ids": ["no-such-id"]})
+            except Exception as exc:  # pragma: no cover - failure path
+                errors.append(exc)
+
+        threads = [_threading.Thread(target=work) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(len(store.queue()), before)
 
     def test_sync_marks_risk_stop_as_blocked(self):
         class _Store:
