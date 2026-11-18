@@ -24,6 +24,7 @@ if str(WEB_DIR) not in sys.path:
 sys.dont_write_bytecode = True
 
 import backend  # noqa: E402  (known local module in WEB_DIR)
+import deploy_mode  # noqa: E402
 import agent_capabilities  # noqa: E402
 import career_agent_runtime  # noqa: E402
 import career_user_runtime  # noqa: E402
@@ -72,9 +73,13 @@ class JobAgentHandler(BaseHTTPRequestHandler):
             sys.stderr.write("local-api %s - %s\n" % (self.address_string(), fmt % args))
 
     def _security_headers(self) -> None:
-        self.send_header("Content-Security-Policy", CSP)
+        if deploy_mode.enabled():
+            # 展示部署：只放行魔搭域名嵌入，其余来源仍禁止（见 deploy_mode.frame_ancestors）。
+            self.send_header("Content-Security-Policy", CSP.replace("frame-ancestors 'none'", deploy_mode.frame_ancestors()))
+        else:
+            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store, max-age=0")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
@@ -84,6 +89,8 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         raw_host = self.headers.get("Host", "").strip()
         if not raw_host:
             return False
+        if deploy_mode.enabled():
+            return deploy_mode.same_origin(raw_host, self.headers.get("Origin"))
         if raw_host.startswith("["):
             # Bracketed IPv6, optionally followed by :port.
             end = raw_host.find("]")
@@ -358,6 +365,15 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         try:
             payload = self._read_json_body()
+            if deploy_mode.enabled():
+                reason = deploy_mode.blocked_reason(path, payload)
+                if reason:
+                    self._error(reason, 403)
+                    return
+                if deploy_mode.uses_model(path, payload) and not deploy_mode.limiter.allow(
+                        deploy_mode.client_id(self.headers, self.client_address[0])):
+                    self._error("访问太频繁，请几分钟后再试", 429)
+                    return
             if path.startswith(("/api/resume-agent/", "/api/interview-agent/")):
                 query = {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
                 result, status = career_agent_runtime.dispatch("POST", path, query, payload)
@@ -465,14 +481,15 @@ class LocalHTTPServer(ThreadingHTTPServer):
 
 
 def make_server(host: str = "127.0.0.1", port: int = 8766) -> LocalHTTPServer:
-    if host not in LOOPBACK_HOSTS:
+    # 只有显式的展示部署模式（OFFERPILOT_DEPLOY=1）才允许非 loopback 监听。
+    if host not in LOOPBACK_HOSTS and not deploy_mode.enabled():
         raise ValueError("server must bind to loopback only")
     return LocalHTTPServer((host, port), JobAgentHandler)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Local-only Job Agent web workbench")
-    parser.add_argument("--host", default="127.0.0.1", choices=sorted(LOOPBACK_HOSTS))
+    parser.add_argument("--host", default="127.0.0.1", choices=sorted(LOOPBACK_HOSTS | ({"0.0.0.0"} if deploy_mode.enabled() else set())))
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args(argv)
     server = make_server(args.host, args.port)

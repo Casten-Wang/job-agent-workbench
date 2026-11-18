@@ -1,0 +1,7 @@
+.git
+.venv
+web/data
+workspace
+resume-source.md
+.env
+**/__pycache__

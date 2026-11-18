@@ -18,8 +18,13 @@ def main():
                         help="Directory containing interview_agent and interview_hub")
     parser.add_argument("--knowledge-only", action="store_true", help="Start workbench and offline knowledge without a model key")
     parser.add_argument("--langsmith", action="store_true", help="Enable opt-in LangSmith tracing; reads its key hidden when absent")
+    parser.add_argument("--deploy", action="store_true",
+                        help="Public showcase mode for a container host (see web/deploy_mode.py): listens on 0.0.0.0:$PORT (default 7860), "
+                             "no platform automation, model key only from OFFERPILOT_MODEL_* variables")
     parser.add_argument("--langsmith-project", default="offerpilot-local", help="LangSmith project name")
     args = parser.parse_args()
+    if args.deploy:
+        os.environ["OFFERPILOT_DEPLOY"] = "1"
     if not (args.engine_root / "interview_agent/api.py").is_file():
         parser.error("--engine-root must contain the existing Python interview service")
     if args.langsmith:
@@ -46,6 +51,11 @@ def main():
     from server import make_server
     from workbench_services import ModelSettings
     import workbench_runtime
+    if args.deploy:
+        import deploy_mode
+        print("Deploy mode: model key %s" % ("seeded from OFFERPILOT_MODEL_* variables" if deploy_mode.seed_model_from_env()
+                                              else "not set; model features stay unconfigured"), flush=True)
+        print("Deploy mode: fictional showcase data %s" % ("seeded" if deploy_mode.seed_showcase_data() else "already present"), flush=True)
     settings = ModelSettings(ROOT, offline=args.knowledge_only)
     workbench_runtime.controller = settings
     import offerpilot_runtime
@@ -63,7 +73,11 @@ def main():
     os.environ["OFFERPILOT_CAREER_USER_TOKEN"] = user_token
     user_directory = ROOT / "web/data/user/career-agent"
     user_directory.mkdir(parents=True, exist_ok=True)
-    workbench = make_server("127.0.0.1", 8766)
+    if args.deploy:
+        import deploy_mode
+        workbench = make_server("0.0.0.0", deploy_mode.listen_port())
+    else:
+        workbench = make_server("127.0.0.1", 8766)
     agent = uvicorn.Server(uvicorn.Config(create_app(directory / "interview.db", directory / "checkpoints.db", owner, token, agent=settings.model()),
                                         host="127.0.0.1", port=18747, access_log=False, log_level="error"))
     thread = threading.Thread(target=agent.run, daemon=True)
