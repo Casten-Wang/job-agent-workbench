@@ -3559,9 +3559,12 @@ function syncCollectModeUI() {
   if (dom.collectPlatform) {
     dom.collectPlatform.disabled = false;
     if (dom.collectPlatformHint) {
-      dom.collectPlatformHint.textContent = collectPlatform() === 'boss'
+      const platform = collectPlatform();
+      dom.collectPlatformHint.textContent = platform === 'boss'
         ? ''
-        : `${collectPlatformLabel(collectPlatform())} 可采集、打分、生成招呼语；发送请自己复制到平台。`;
+        : platform === 'zhilian'
+          ? '智联可采集、打分，并可在工作台投递（发出的是平台预置招呼语）。'
+          : `${collectPlatformLabel(platform)} 可采集、打分、生成招呼语；发送请自己复制到平台。`;
     }
   }
   renderCollectSummary();
