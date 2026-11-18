@@ -272,7 +272,6 @@ const dom = {
   weaknessTable: document.getElementById('weakness-table'),
   mailChart: document.getElementById('mail-chart'),
   mailTable: document.getElementById('mail-table'),
-  activityOverview: document.getElementById('activity-overview'),
   activityData: document.getElementById('activity-data'),
   jdForm: document.getElementById('jd-form'),
   jdText: document.getElementById('jd-text'),
@@ -8325,7 +8324,6 @@ function renderAll(snapshot) {
   renderMails(snapshot);
   renderInterview(snapshot);
   renderData(snapshot);
-  renderActivity(dom.activityOverview, snapshot.activity);
   renderActivity(dom.activityData, snapshot.activity);
 }
 

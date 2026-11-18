@@ -66,7 +66,8 @@ class SignalBaseStylesTests(unittest.TestCase):
 
     def test_settings_system_board_is_collapsed(self):
         self.assertIn("#view-data .sg-fold > summary", self.css)
-        self.assertIn("#view-data .sg-legacy-activity", self.css)
+        # 设置页只保留一份「最近操作」，旧的隐藏副本已移除。
+        self.assertNotIn("sg-legacy-activity", self.css)
         self.assertIn("#view-data .sg-system-body", self.css)
 
     def test_inputs_are_styled_without_a_form_field_wrapper(self):
@@ -196,6 +197,12 @@ class SignalScriptTests(unittest.TestCase):
         self.assertIn("groupActivityRows(", home)
         self.assertIn("×${group.count}", home)
         self.assertIn(".slice(0, 5)", home)
+
+    def test_settings_keeps_a_single_activity_list(self):
+        self.assertNotIn("activity-overview", _read(INDEX))
+        self.assertNotIn("activityOverview", self.script)
+        self.assertEqual(_read(INDEX).count('id="activity-data"'), 1)
+        self.assertIn("renderActivity(dom.activityData, snapshot.activity)", self.script)
 
     def test_group_activity_rows_behaviour(self):
         node = shutil.which("node")

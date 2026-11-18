@@ -2544,12 +2544,12 @@ class HttpServerTests(unittest.TestCase):
         system_start = html.index('id="system-title"')
         self.assertGreater(system_start, data_start)
         for marker in ('id="pipeline"', 'id="belt"', 'id="kpi-row"',
-                       'id="channel-chart"', 'id="activity-overview"'):
+                       'id="channel-chart"'):
             with self.subTest(marker=marker):
                 self.assertGreater(html.index(marker), system_start)
         home = html[html.index('id="view-workbench"'):html.index('id="view-collect"')]
         for marker in ('id="pipeline"', 'id="belt"', 'id="kpi-row"',
-                       'id="channel-chart"', 'id="activity-overview"'):
+                       'id="channel-chart"', 'id="activity-data"'):
             with self.subTest(absent_from_home=marker):
                 self.assertNotIn(marker, home)
 
