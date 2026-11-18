@@ -1306,6 +1306,10 @@ HR_STORED_MESSAGES_MAX = 200
 # Interface reads are cheap, so one refresh may bring up to 30 bodies up to
 # date.  Reads stay serial to respect each platform's own frequency limit.
 HR_THREAD_OPENS_PER_REFRESH = 30
+# A listing read from the DOM has no interface ids, so each body read opens a
+# conversation page.  Only a few unread conversations are prefetched that way;
+# the rest wait for the user to open them.
+HR_DOM_THREAD_OPENS_PER_REFRESH = 3
 
 # BOSS reads the chat list and history through the page's own same-origin XHR.
 # Only these two fixed relative paths are ever requested; ids come from the
@@ -1345,6 +1349,47 @@ def _hr_signature(row: dict[str, Any]) -> str:
 
 def _hr_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _stored_body_signature(record: dict[str, Any]) -> str | None:
+    """The listing signature the stored messages actually reach.
+
+    Older stores predate ``body_signature``; for them the record's own
+    ``signature`` was written together with the body, so it is the fallback.
+    """
+    if "body_signature" in record:
+        return str(record.get("body_signature") or "") or None
+    if record.get("messages") or record.get("body_read"):
+        return str(record.get("signature") or "") or None
+    return None
+
+
+def _refresh_wants_body(row: dict[str, Any]) -> bool:
+    """Only a changed conversation with something new from HR is read up front.
+
+    A listing change whose last message is ours (for example a reply sent on
+    the platform itself) needs no background read: the body is refreshed when
+    the user opens that conversation.  ``unknown`` direction keeps the old
+    behavior and is read, because a DOM listing cannot tell us who spoke last.
+    """
+    if _unread_count(row) > 0:
+        return True
+    return str(row.get("last_direction") or "unknown") != "me"
+
+
+def _background_read_possible(platform: str, row: dict[str, Any]) -> bool:
+    """Whether this platform's history interface has ids for the row.
+
+    The interface ids are in memory only, filled by the listing read that just
+    ran.  When they are missing a background read would fall back to opening
+    the conversation page, which is exactly the slow path this refresh avoids.
+    """
+    conversation_id = str(row.get("id") or "")
+    if platform == "boss":
+        return bool(_boss_history_params.get(conversation_id))
+    if platform == "zhilian":
+        return bool(_zhilian_history_params.get(conversation_id))
+    return True
 
 
 def _unread_count(row: dict[str, Any]) -> int:
@@ -1458,11 +1503,12 @@ def _hr_store_record(
     row: dict[str, Any],
     *,
     messages: list[Any],
-    signature: str,
+    signature: str | None,
     fetched_at: str | None,
     stale: bool = False,
     error: str | None = None,
     body_read: bool = False,
+    body_signature: str | None = None,
     source: str = "dom",
 ) -> dict[str, Any]:
     return {
@@ -1482,7 +1528,14 @@ def _hr_store_record(
         "source": "api" if source == "api" else "dom",
         "messages": messages,
         "body_read": bool(body_read),
+        # ``signature`` belongs to the listing this record was last written
+        # from; ``body_signature`` is the listing signature the stored messages
+        # actually reach.  They differ while a body is waiting to be refreshed,
+        # which is what lets ``get_thread`` open just that conversation.
         "signature": signature,
+        "body_signature": body_signature if body_signature is not None else (
+            signature if body_read else None
+        ),
         "fetched_at": fetched_at,
         "stale": bool(stale),
         "error": _redact_contacts(error)[:300] if error else None,
@@ -1585,6 +1638,7 @@ def _fetch_thread_body(
     *,
     boss_target: str | None = None,
     deadline: "_ChatReadDeadline | None" = None,
+    allow_dom: bool = True,
 ) -> dict[str, Any]:
     """Read one conversation once and return its thread result (redacted later)."""
     entry = {
@@ -1596,7 +1650,7 @@ def _fetch_thread_body(
         "hr_title": row.get("hr_title") or "",
     }
     return _read_thread_messages(
-        entry, platform, boss_target=boss_target, deadline=deadline,
+        entry, platform, boss_target=boss_target, deadline=deadline, allow_dom=allow_dom,
     )
 
 
@@ -2008,16 +2062,25 @@ def _zhilian_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             unread_count = 0
         last_at = _boss_ms_label(row.get("sendTime"))
+        # The talk list marks our own last sentence with a 「我：」 prefix; when
+        # it is absent we cannot tell who spoke last and keep ``unknown``.
+        last_sentence = str(row.get("lastSentence") or "").strip()
+        if last_sentence.startswith(("我：", "我:")):
+            last_direction = "me"
+        elif last_sentence:
+            last_direction = "hr"
+        else:
+            last_direction = "unknown"
         mapped.append({
             "hr_name": str(row.get("staffName") or "").strip(),
             "company": str(row.get("companyName") or "").strip(),
             "hr_title": str(row.get("jobTitle") or "").strip(),
-            "last_message": str(row.get("text") or row.get("lastSentence") or "").strip(),
+            "last_message": str(row.get("text") or last_sentence).strip(),
             "last_message_at": last_at,
             "has_unread": unread_count > 0,
             "unread_count": max(unread_count, 0),
-            "last_direction": "unknown",
-            "has_reply": False,
+            "last_direction": last_direction,
+            "has_reply": last_direction == "hr",
             "_zhilian_params": {
                 "peer_id": str(row.get("peerPartnerId") or "").strip(),
             },
@@ -2454,99 +2517,135 @@ def _refresh_platform_store(
 ) -> None:
     """Refresh one platform's stored conversations after a list read.
 
-    The listing already happened.  A conversation whose signature is unchanged
-    and that already has a stored body is not opened again; a changed (or
-    never-read) conversation is opened at most once, and its messages are
-    merged into the stored ones.  A failed read keeps the old messages and
-    flags the record stale.  A successful listing replaces only this
-    platform's records; other platforms' records stay.
+    The listing is written first, so the cached list and the summary update
+    without waiting for any conversation page.  Then only conversations that
+    (a) have a stored body reaching an older listing signature and (b) show
+    something new from HR (unread, or the last message is not ours) are read,
+    up to ``HR_THREAD_OPENS_PER_REFRESH``.  Everything else is filled when the
+    user opens that conversation.  A ``dom`` listing reads no bodies at all:
+    without interface ids every read would open a page.
     """
+    signature_by_key = {_hr_store_key(row): _hr_signature(row) for row in items}
+
+    # 1. Listing first: replace this platform's records with the fresh
+    #    metadata, preserving whatever body was already stored.
+    listing: dict[str, dict[str, Any]] = {}
     with _hr_store_lock:
         store = _load_hr_store()
-    signature_by_key = {_hr_store_key(row): _hr_signature(row) for row in items}
-    candidates = [
-        row for row in items
-        if not (
-            (store.get(_hr_store_key(row)) or {}).get("signature") == signature_by_key[_hr_store_key(row)]
-            and (
-                (store.get(_hr_store_key(row)) or {}).get("messages")
-                or (store.get(_hr_store_key(row)) or {}).get("body_read")
+        previous_platform = {
+            key: record for key, record in store.items()
+            if str(record.get("platform") or "") == platform
+        }
+        for row in items:
+            key = _hr_store_key(row)
+            previous = previous_platform.get(key) or {}
+            signature = signature_by_key[key]
+            body_signature = _stored_body_signature(previous)
+            has_body = bool(previous.get("messages") or previous.get("body_read"))
+            same_signature = has_body and body_signature == signature
+            listing[key] = _hr_store_record(
+                row,
+                messages=previous.get("messages") or [],
+                signature=signature,
+                body_signature=body_signature,
+                fetched_at=previous.get("fetched_at"),
+                stale=bool(previous.get("messages")) and not same_signature,
+                body_read=bool(previous.get("body_read")),
+                source=source,
             )
+        for key in previous_platform:
+            # A successful listing replaces this platform's records entirely.
+            store.pop(key, None)
+        store.update(listing)
+        try:
+            _save_hr_store(store)
+        except OSError:
+            pass
+
+    # 2. Bodies: only conversations that changed and need a refresh.
+    def _body_is_current(row: dict[str, Any]) -> bool:
+        record = listing[_hr_store_key(row)]
+        return bool(
+            record.get("body_read")
+            and _stored_body_signature(record) == signature_by_key[_hr_store_key(row)]
         )
-    ]
+
+    if source == "api":
+        # The interface has ids for these rows: read the changed ones whose
+        # last message is not ours, and never open a page from here.
+        candidates = [
+            row for row in items
+            if not _body_is_current(row)
+            and _refresh_wants_body(row)
+            and _background_read_possible(platform, row)
+        ][:HR_THREAD_OPENS_PER_REFRESH]
+        allow_dom = False
+    else:
+        # No interface ids: prefetch at most a few unread conversations; the
+        # rest are read when the user opens them.
+        unread = [row for row in items if _unread_count(row) > 0 and not _body_is_current(row)]
+        candidates = unread[:HR_DOM_THREAD_OPENS_PER_REFRESH]
+        allow_dom = True
     # Unread first; the sort is stable, so the platform's own list order holds otherwise.
     candidates.sort(key=lambda row: 0 if row.get("unread") else 1)
     fresh_by_key: dict[str, list[dict[str, Any]]] = {}
     errors_by_key: dict[str, str] = {}
-    for row in candidates[:HR_THREAD_OPENS_PER_REFRESH]:
+    for row in candidates:
         key = _hr_store_key(row)
         try:
             read = _fetch_thread_body(
                 row, platform, boss_target=boss_target, deadline=deadline,
+                allow_dom=allow_dom,
             )
         except Exception as exc:
             if isinstance(exc, ChatReadTimeout):
                 break  # the shared read budget is gone; do not keep hitting the page
+            if exc.__class__.__name__ == "MonitorRiskDetected":
+                raise  # captcha or login loss stops the whole platform read
             if str(exc) == "当前任务已请求停止，不能读取会话":
                 break
             errors_by_key[key] = _redact_contacts(f"{type(exc).__name__}: {exc}")[:300]
             continue
         if read.get("ok") is False or read.get("available") is False:
+            if read.get("error") == BACKGROUND_READ_SKIPPED:
+                continue  # expected: no interface ids, so the user open reads it later
             errors_by_key[key] = _redact_contacts(read.get("error") or read.get("reply_block_reason") or "会话读取失败")[:300]
             continue
         fresh_by_key[key] = [
             row_value for row_value in (read.get("messages") or [])
             if isinstance(row_value, dict)
         ]
+    if not fresh_by_key and not errors_by_key:
+        return
 
+    # 3. Merge the reads into the listing records written above.
     with _hr_store_lock:
         store = _load_hr_store()  # re-read: another platform may have written while we read
-        previous_platform = {
-            key: record for key, record in store.items()
-            if str(record.get("platform") or "") == platform
-        }
-        for key in previous_platform:
-            # A successful listing replaces this platform's records entirely.
-            store.pop(key, None)
-        for row in items:
-            key = _hr_store_key(row)
-            previous = previous_platform.get(key) or {}
-            signature = signature_by_key[key]
-            fresh = fresh_by_key.get(key)
-            same_signature = previous.get("signature") == signature
-            if fresh is not None:
-                store[key] = _hr_store_record(
-                    row,
-                    messages=_hr_merge_messages(previous.get("messages") or [], fresh),
-                    signature=signature,
-                    fetched_at=_hr_now(),
-                    body_read=True,
-                    source=source,
-                )
-            elif same_signature and (previous.get("messages") or previous.get("body_read")):
-                # Unchanged and already read: nothing to open, nothing to change.
-                store[key] = _hr_store_record(
-                    row,
-                    messages=previous.get("messages") or [],
-                    signature=signature,
-                    fetched_at=previous.get("fetched_at"),
-                    body_read=bool(previous.get("body_read")),
-                    source=source,
-                )
-            else:
-                # Failed read, or skipped by the refresh cap.  Keep the old signature so
-                # the next refresh treats this conversation as changed and tries again.
-                failed = key in errors_by_key
-                store[key] = _hr_store_record(
-                    row,
-                    messages=previous.get("messages") or [],
-                    signature=previous.get("signature"),
-                    fetched_at=previous.get("fetched_at"),
-                    stale=failed or (bool(previous.get("messages")) and not same_signature),
-                    error=errors_by_key.get(key),
-                    body_read=bool(previous.get("body_read")),
-                    source=source,
-                )
+        for key, fresh in fresh_by_key.items():
+            current = store.get(key)
+            if not isinstance(current, dict):
+                continue
+            store[key] = _hr_store_record(
+                current,
+                messages=_hr_merge_messages(current.get("messages") or [], fresh),
+                signature=signature_by_key[key],
+                body_signature=signature_by_key[key],
+                fetched_at=_hr_now(),
+                body_read=True,
+                source=source,
+            )
+        for key, error in errors_by_key.items():
+            current = store.get(key)
+            if not isinstance(current, dict):
+                continue
+            store[key] = {
+                **current,
+                # Only a stored body can be behind the listing; a conversation
+                # the user never opened has nothing stale to show.
+                "stale": bool(current.get("stale")) or bool(current.get("body_read")),
+                "error": error,
+                "source": source,
+            }
         try:
             _save_hr_store(store)
         except OSError:
@@ -2559,14 +2658,20 @@ def _read_thread_messages(
     *,
     boss_target: str | None = None,
     deadline: "_ChatReadDeadline | None" = None,
+    allow_dom: bool = True,
 ) -> dict[str, Any]:
-    """Read one conversation live (interface first, DOM as the fallback)."""
+    """Read one conversation live (interface first, DOM as the fallback).
+
+    ``allow_dom=False`` is used by the background refresh: without interface
+    ids a DOM read would open a conversation page, so the body is left for
+    the next user open instead.
+    """
     if platform == "boss":
-        return _get_boss_thread(entry, target_id=boss_target, deadline=deadline)
+        return _get_boss_thread(entry, target_id=boss_target, deadline=deadline, allow_dom=allow_dom)
     if platform == "zhilian":
-        return _get_zhilian_thread(entry, deadline=deadline)
+        return _get_zhilian_thread(entry, deadline=deadline, allow_dom=allow_dom)
     if platform == "liepin":
-        return _get_liepin_thread(entry, deadline=deadline)
+        return _get_liepin_thread(entry, deadline=deadline, allow_dom=allow_dom)
     return _get_platform_thread(entry, platform)
 
 
@@ -2672,6 +2777,12 @@ def _stored_body_for(entry: dict[str, Any], platform: str) -> dict[str, Any] | N
         return None
     if not (record.get("messages") or record.get("body_read")):
         return None
+    # The stored messages must reach the listing the caller just saw.  When
+    # they do not (a new message is waiting), open this one conversation once
+    # instead of showing an old body.
+    body_signature = _stored_body_signature(record)
+    if body_signature and body_signature != _hr_signature({**entry, "platform": platform}):
+        return None
     return record
 
 
@@ -2695,6 +2806,7 @@ def _merge_live_thread(
             row,
             messages=merged,
             signature=signature or str(record.get("signature") or ""),
+            body_signature=signature or _stored_body_signature(record),
             fetched_at=_hr_now(),
             body_read=True,
         )
@@ -3284,20 +3396,25 @@ def _list_boss_conversations_within(deadline: "_ChatReadDeadline") -> dict[str, 
 
 HR_SYNC_META_RELATIVE = Path("hr") / "sync.json"
 SYNC_PLATFORMS = ("boss", "zhilian", "liepin")
+# A refresh less than this long after the last successful one is answered
+# from the store instead of hitting the platform again.
+HR_SYNC_MIN_INTERVAL_SECONDS = 30.0
 
 _sync_state_lock = threading.Lock()
 _sync_state: dict[str, Any] = {
     "syncing": False,
     "platform": None,
+    "platforms": [],
     "started_at": None,
     "finished_at": None,
     "error": None,
 }
-# One worker drains a small queue: different platforms are serviced in turn
-# (serial browser use, one platform's frequency limit at a time), while a
-# platform already waiting is never queued twice.
-_sync_queue: list[str] = []
-_sync_queued: set[str] = set()
+# One worker per platform: different platforms read in parallel (each has its
+# own frequency limit), while the same platform is never read twice at once.
+_sync_queue: list[str] = []      # in-flight platforms, for diagnostics
+_sync_queued: set[str] = set()   # the same as a set, for O(1) dedupe
+_sync_threads: dict[str, threading.Thread] = {}
+# Kept for callers that looked the old single worker up; it is no longer used.
 _sync_worker: threading.Thread | None = None
 
 
@@ -3514,39 +3631,64 @@ def _run_conversations_sync(platform: str) -> dict[str, str]:
     except OSError:
         pass
     with _sync_state_lock:
-        _sync_state["finished_at"] = finished
         if errors:
-            _sync_state["error"] = errors
+            current = _sync_state.get("error")
+            merged = dict(current) if isinstance(current, dict) else {}
+            merged.update(errors)
+            _sync_state["error"] = merged
     return errors
 
 
-def _drain_sync_queue() -> None:
-    """Serial worker: one platform at a time, no duplicate queue entries."""
-    global _sync_worker
-    while True:
+def _recently_synced(entry: dict[str, Any]) -> bool:
+    """A successful sync this recent is reused instead of hitting the platform."""
+    if entry.get("error"):
+        return False
+    stamp = str(entry.get("last_synced_at") or "")
+    if not stamp:
+        return False
+    try:
+        moment = _dt.datetime.fromisoformat(stamp)
+    except ValueError:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=_dt.timezone.utc)
+    age = (_dt.datetime.now(_dt.timezone.utc) - moment).total_seconds()
+    return 0 <= age < HR_SYNC_MIN_INTERVAL_SECONDS
+
+
+def _run_sync_worker(platform: str) -> None:
+    """Read one platform; the worker owns that platform's in-flight slot."""
+    try:
+        _run_conversations_sync(platform)
+    except Exception as exc:
         with _sync_state_lock:
-            if not _sync_queue:
-                _sync_queued.clear()
-                _sync_worker = None
-                _sync_state.update(syncing=False, platform=None)
-                return
-            platform = _sync_queue.pop(0)
-            _sync_state["platform"] = platform
-        try:
-            _run_conversations_sync(platform)
-        except Exception as exc:
-            with _sync_state_lock:
-                _sync_state["error"] = {
-                    platform: _redact_contacts(f"{type(exc).__name__}: {exc}")[:300]
-                }
-        finally:
-            with _sync_state_lock:
-                _sync_queued.discard(platform)
+            current = _sync_state.get("error")
+            merged = dict(current) if isinstance(current, dict) else {}
+            merged[platform] = _redact_contacts(f"{type(exc).__name__}: {exc}")[:300]
+            _sync_state["error"] = merged
+    finally:
+        with _sync_state_lock:
+            _sync_queued.discard(platform)
+            try:
+                _sync_queue.remove(platform)
+            except ValueError:
+                pass
+            _sync_threads.pop(platform, None)
+            _sync_state["platforms"] = sorted(_sync_queued)
+            if _sync_queued:
+                _sync_state["platform"] = min(_sync_queued)
+            else:
+                _sync_state.update(syncing=False, platform=None, finished_at=_hr_now())
 
 
 def start_conversations_sync(platform: Any = "all") -> dict[str, Any]:
-    """Queue one platform (or all) for a background incremental refresh."""
-    global _sync_worker
+    """Start a background incremental refresh for one platform (or all).
+
+    Different platforms read in parallel; one platform is never read twice at
+    the same time.  A platform whose last successful sync is younger than
+    ``HR_SYNC_MIN_INTERVAL_SECONDS`` is skipped, so opening the page and
+    pressing refresh in quick succession does not re-read the platform.
+    """
     requested = str(platform or "all").strip().lower()
     if requested != "all":
         requested = _chat_platform(requested)
@@ -3559,30 +3701,46 @@ def start_conversations_sync(platform: Any = "all") -> dict[str, Any]:
                 "error": "前程无忧没有站内聊天，HR 沟通通过微信扫码完成",
             }
     targets = list(SYNC_PLATFORMS) if requested == "all" else [requested]
+    with _hr_store_lock:
+        meta = _load_sync_meta()
     with _sync_state_lock:
-        was_syncing = bool(_sync_state.get("syncing"))
-        added = [name for name in targets if name not in _sync_queued]
+        skipped = [
+            name for name in targets
+            if name not in _sync_queued and _recently_synced(meta.get(name) or {})
+        ]
+        added = [
+            name for name in targets
+            if name not in skipped and name not in _sync_queued
+        ]
         for name in added:
-            _sync_queue.append(name)
             _sync_queued.add(name)
+            _sync_queue.append(name)
+            thread = threading.Thread(
+                target=_run_sync_worker,
+                args=(name,),
+                name=f"hr-conversations-sync-{name}",
+                daemon=True,
+            )
+            _sync_threads[name] = thread
+            thread.start()
         if added:
-            _sync_state.update(syncing=True, error=None)
-            if not was_syncing:
+            if not _sync_state.get("syncing"):
                 _sync_state["started_at"] = _hr_now()
-            if _sync_worker is None or not _sync_worker.is_alive():
-                _sync_worker = threading.Thread(
-                    target=_drain_sync_queue,
-                    name="hr-conversations-sync",
-                    daemon=True,
-                )
-                _sync_worker.start()
-        return {
+            _sync_state["error"] = None
+        _sync_state["syncing"] = bool(_sync_queued)
+        _sync_state["platforms"] = sorted(_sync_queued)
+        _sync_state["platform"] = min(_sync_queued) if _sync_queued else None
+        result: dict[str, Any] = {
             "ok": True,
             "started": bool(added),
-            "syncing": True,
+            "syncing": bool(_sync_queued),
             "platform": requested,
-            "queued": list(_sync_queue),
+            "queued": added,
         }
+        if skipped:
+            result["skipped"] = skipped
+            result["reason"] = "刚刚同步过，请稍后再刷新"
+        return result
 
 
 def get_thread(conversation_id: Any, platform: Any = "boss") -> dict[str, Any]:
@@ -3670,9 +3828,11 @@ def _stale_or_error(
                 {**entry, "platform": platform},
                 messages=record.get("messages") or [],
                 signature=record.get("signature"),
+                body_signature=_stored_body_signature(record),
                 fetched_at=record.get("fetched_at"),
                 stale=True,
                 error=str(reason),
+                body_read=bool(record.get("body_read")),
             )
             try:
                 _save_hr_store(store)
@@ -3840,10 +4000,34 @@ def _platform_dom_thread(
     return thread
 
 
+BACKGROUND_READ_SKIPPED = "接口暂不可用，打开该会话时再读取"
+
+
+def _interface_only_unavailable(entry: dict[str, Any], platform: str) -> dict[str, Any]:
+    """Result for a background read that has no interface path.
+
+    The body is left for the user's own open (``get_thread``), which may use
+    the DOM fallback once, in the foreground request that asked for it.
+    """
+    return {
+        "ok": False,
+        "available": False,
+        "platform": platform,
+        "conversation_id": entry.get("id"),
+        "company": entry.get("company") or "",
+        "title": entry.get("title") or "",
+        "messages": [],
+        "reply_allowed": False,
+        "reply_block_reason": BACKGROUND_READ_SKIPPED,
+        "error": BACKGROUND_READ_SKIPPED,
+    }
+
+
 def _get_zhilian_thread(
     entry: dict[str, Any],
     *,
     deadline: "_ChatReadDeadline | None" = None,
+    allow_dom: bool = True,
 ) -> dict[str, Any]:
     """Read Zhilian history through the page's NIM SDK; DOM is the fallback."""
     server = load_backend()
@@ -3872,6 +4056,8 @@ def _get_zhilian_thread(
             if owned and tab:
                 monitor.close_tab(tab)
     if messages is None:
+        if not allow_dom:
+            return _interface_only_unavailable(entry, "zhilian")
         return _platform_dom_thread(entry, "zhilian", deadline)
     return _thread_response(
         entry, "zhilian", messages, stale=False, error=None, source="api",
@@ -3882,6 +4068,7 @@ def _get_liepin_thread(
     entry: dict[str, Any],
     *,
     deadline: "_ChatReadDeadline | None" = None,
+    allow_dom: bool = True,
 ) -> dict[str, Any]:
     """Read Liepin history through the drawer's chat store; DOM as fallback."""
     server = load_backend()
@@ -3913,6 +4100,8 @@ def _get_liepin_thread(
     except Exception:
         messages = None
     if messages is None:
+        if not allow_dom:
+            return _interface_only_unavailable(entry, "liepin")
         return _platform_dom_thread(entry, "liepin", deadline)
     return _thread_response(
         entry, "liepin", messages, stale=False, error=None, source="api",
@@ -3924,6 +4113,7 @@ def _get_boss_thread(
     *,
     target_id: str | None = None,
     deadline: "_ChatReadDeadline | None" = None,
+    allow_dom: bool = True,
 ) -> dict[str, Any]:
     server = load_backend()
     monitor = _monitor()
@@ -3955,6 +4145,8 @@ def _get_boss_thread(
             if owned and tab:
                 monitor.close_tab(tab)
     if messages is None:
+        if not allow_dom:
+            return _interface_only_unavailable(entry, "boss")
         source = "dom"
         messages = _read_boss_thread_dom(entry, config, deadline)
     allowed, reason = _reply_gate(server, config)

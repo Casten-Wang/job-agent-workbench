@@ -202,8 +202,9 @@
               <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
               <div class="form-actions">
                 <button class="button button-quiet" type="button" id="collect-preflight">检查环境</button>
-                <button class="button" type="submit" id="offerpilot-start" disabled>开始采集</button>
+                <button class="button" type="submit" id="offerpilot-start" disabled aria-describedby="offerpilot-start-reason">开始采集</button>
               </div>
+              <p class="hint offerpilot-start-reason" id="offerpilot-start-reason" aria-live="polite"></p>
             </form>
             <div class="action-result" id="offerpilot-result" hidden></div>
 
@@ -564,7 +565,7 @@
                   <button class="hr-filter" type="button" id="hr-filter-unread" data-hr-filter="unread" aria-pressed="false">未读</button>
                   <button class="hr-filter" type="button" id="hr-filter-replied" data-hr-filter="replied" aria-pressed="false">有 HR 回复</button>
                 </div>
-                <div class="hr-platform-status" id="hr-platform-status"></div>
+                <div class="hr-platform-status" id="hr-platform-status" role="group" aria-label="各平台同步状态"></div>
                 <div class="hr-platform-errors" id="hr-platform-errors" role="status" aria-live="polite" hidden></div>
                 <div class="hr-conversation-list" id="hr-conversation-list"></div>
               </aside>
@@ -688,7 +689,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="profile-form-title">资料编辑</h3>
-                <p class="panel-note">只保存在本机。带 * 的字段用于完整度判断。</p>
+                <p class="panel-note">只保存在本机。带 <strong>必填</strong> 的字段会影响后续流程：缺一项，「采集」「完整流程」都无法启动。</p>
               </div>
               <div class="profile-head-actions">
                 <button class="button button-quiet button-small" type="button" id="profile-import">从本地简历导入</button>
@@ -713,9 +714,9 @@
             <form id="profile-form">
               <h4 class="profile-section-title">基本信息</h4>
               <div class="form-grid">
-                <div class="form-field"><label for="profile-name">姓名 *</label><input id="profile-name" type="text" autocomplete="name"></div>
-                <div class="form-field"><label for="profile-city">所在城市 *</label><input id="profile-city" type="text" autocomplete="address-level2"></div>
-                <div class="form-field"><label for="profile-email">邮箱 *</label><input id="profile-email" type="email" autocomplete="email"></div>
+                <div class="form-field"><label for="profile-name">姓名 <span class="profile-required-mark">必填</span></label><input id="profile-name" type="text" autocomplete="name"></div>
+                <div class="form-field"><label for="profile-city">所在城市 <span class="profile-required-mark">必填</span></label><input id="profile-city" type="text" autocomplete="address-level2"></div>
+                <div class="form-field"><label for="profile-email">邮箱</label><input id="profile-email" type="email" autocomplete="email"></div>
                 <div class="form-field"><label for="profile-phone">电话</label><input id="profile-phone" type="tel" autocomplete="tel"></div>
                 <div class="form-field"><label for="profile-wechat">微信</label><input id="profile-wechat" type="text" autocomplete="off"></div>
                 <div class="form-field"><label for="profile-links">作品集 / GitHub / 链接</label><input id="profile-links" type="text" autocomplete="url" placeholder="多个链接用逗号分隔"></div>
@@ -723,8 +724,8 @@
 
               <h4 class="profile-section-title">求职偏好</h4>
               <div class="form-grid">
-                <div class="form-field"><label for="profile-titles">目标岗位 *（逗号分隔）</label><input id="profile-titles" type="text" placeholder="产品经理, 产品助理"></div>
-                <div class="form-field"><label for="profile-target-cities">目标城市 *（逗号分隔）</label><input id="profile-target-cities" type="text" placeholder="上海, 杭州"></div>
+                <div class="form-field"><label for="profile-titles">目标岗位 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-titles" type="text" placeholder="产品经理, 产品助理"></div>
+                <div class="form-field"><label for="profile-target-cities">目标城市 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-target-cities" type="text" placeholder="上海, 杭州"></div>
                 <div class="form-field"><label for="profile-salary-min">期望月薪下限</label><input id="profile-salary-min" type="number" min="0" step="1000" inputmode="numeric" placeholder="15000"></div>
                 <div class="form-field"><label for="profile-salary-max">期望月薪上限</label><input id="profile-salary-max" type="number" min="0" step="1000" inputmode="numeric" placeholder="25000"></div>
                 <div class="form-field">
@@ -739,31 +740,31 @@
                 <div class="form-field"><label for="profile-availability">到岗时间</label><input id="profile-availability" type="text" placeholder="一个月内 / 随时"></div>
               </div>
 
-              <h4 class="profile-section-title">教育经历</h4>
+              <h4 class="profile-section-title">教育经历 <span class="profile-required-mark">必填：至少一段</span></h4>
               <div class="profile-list" id="profile-education"></div>
               <button class="button button-quiet button-small profile-add" type="button" data-profile-add="education">添加教育经历</button>
 
-              <h4 class="profile-section-title">工作 / 实习经历</h4>
+              <h4 class="profile-section-title">工作 / 实习经历 <span class="profile-required-mark">必填：与下方项目经历至少填一处</span></h4>
               <div class="profile-list" id="profile-experiences"></div>
               <button class="button button-quiet button-small profile-add" type="button" data-profile-add="experiences">添加工作经历</button>
 
-              <h4 class="profile-section-title">项目经历</h4>
+              <h4 class="profile-section-title">项目经历 <span class="profile-required-mark">必填：与上方工作经历至少填一处</span></h4>
               <div class="profile-list" id="profile-projects"></div>
               <button class="button button-quiet button-small profile-add" type="button" data-profile-add="projects">添加项目经历</button>
 
               <h4 class="profile-section-title">技能与简介</h4>
               <div class="form-grid">
-                <div class="form-field full"><label for="profile-tools">工具 / 技能 *（逗号分隔，至少 3 个）</label><input id="profile-tools" type="text" placeholder="Axure, Visio, Excel"></div>
+                <div class="form-field full"><label for="profile-tools">工具 / 技能 <span class="profile-required-mark">必填：至少 3 个</span>（逗号分隔）</label><input id="profile-tools" type="text" placeholder="Axure, Visio, Excel"></div>
                 <div class="form-field full"><label for="profile-strengths">优势标签（逗号分隔）</label><input id="profile-strengths" type="text" placeholder="需求分析, 用户调研, 数据分析"></div>
-                <div class="form-field full"><label for="profile-summary">个人简介 *（至少 20 字）</label><textarea id="profile-summary" rows="5" placeholder="用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
+                <div class="form-field full"><label for="profile-summary">个人简介 <span class="profile-required-mark">必填：至少 20 字</span></label><textarea id="profile-summary" rows="5" placeholder="用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
                 <div class="form-field full"><label for="profile-excluded">排除词（逗号分隔）</label><input id="profile-excluded" type="text" placeholder="外包, 驻场"></div>
               </div>
 
-              <label class="checkbox-label profile-truth"><input type="checkbox" id="profile-truth"> 我确认以上信息真实，可由本工作台用于生成招呼语、题单与简历草稿；联系方式不会写入草稿。</label>
+              <label class="checkbox-label profile-truth"><input type="checkbox" id="profile-truth"> <span class="profile-required-mark">必填</span>　我确认以上信息真实，可由本工作台用于生成招呼语、题单与简历草稿；联系方式不会写入草稿。</label>
 
               <div class="form-actions profile-submit-row">
                 <button class="button" type="submit" id="profile-save">保存个人资料</button>
-                <p class="hint">只写本机；不联网、不投递、不生成数字或未填写的经历。</p>
+                <p class="hint">只写本机；不联网、不投递、不生成数字或未填写的经历。必填项缺失时，「岗位流水线 › 采集」和「完整流程」都无法启动。</p>
               </div>
             </form>
           </section>

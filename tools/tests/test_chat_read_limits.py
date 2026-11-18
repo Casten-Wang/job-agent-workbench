@@ -48,6 +48,7 @@ LIEPIN_ROWS = [{
     "last_message": "您好，方便发一份简历吗",
     "last_message_at": "11-16 10:20",
     "has_unread": True,
+    "unReadCnt": 1,  # the props reader counts unread through the contact object
 }]
 
 
@@ -357,9 +358,10 @@ class BrowserGateTests(_ChatReadCase):
                 follow_up = runtime._list_platform_conversations("liepin")
         self.assertTrue(follow_up["available"])
         self.assertEqual(follow_up["count"], 1)
-        # Two list tabs (the timed-out read and the follow-up), plus the one
-        # conversation page the follow-up listing refreshes from its body.
-        self.assertEqual(self.monitor.closed.count("tab-gate"), 3)
+        # Two list tabs (the timed-out read and the follow-up).  The follow-up's
+        # body read is interface-only: a background refresh never opens a
+        # conversation page, so no third tab is created.
+        self.assertEqual(self.monitor.closed.count("tab-gate"), 2)
 
 
 if __name__ == "__main__":

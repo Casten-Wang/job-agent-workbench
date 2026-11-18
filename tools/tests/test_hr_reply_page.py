@@ -414,6 +414,64 @@ class HrFrontendSyncAndStatesTests(unittest.TestCase):
         self.assertIn("正在同步", self.hr)
         self.assertIn("刷新会话", self.html)
 
+    def test_refresh_keeps_the_displayed_conversations_and_messages(self):
+        """刷新只更新数据：已显示的会话行与气泡不走加载态、不被清空。"""
+        refresh = _between(self.script, "function hrRefreshAll(", "function hrEnterPage(")
+        self.assertIn("ensureHrConversationsLoaded(true)", refresh)
+        self.assertIn("if (state.hrSyncSupported !== false) hrTriggerSync({ manual });", refresh)
+        # 已经有会话在屏幕上时，重新读取走静默模式，不显示“正在读取”占位。
+        ensure = _between(
+            self.script,
+            "async function ensureHrConversationsLoaded(",
+            "async function loadHrConversations(",
+        )
+        self.assertIn(
+            "await loadHrConversations({ quiet: force && Boolean(state.hrConversations.length) });",
+            ensure,
+        )
+        # 列表内容没变就保留已渲染的行，滚动位置与焦点不丢。
+        self.assertIn("signature === state.hrConversationListSignature", self.hr)
+        self.assertIn("state.hrConversationListCount === conversations.length", self.hr)
+        self.assertIn("dom.hrConversationList.querySelector('.hr-conversation')", self.hr)
+        # 对话气泡只追加新到的消息，已有气泡不清空重建。
+        self.assertIn("const canAppend = Boolean(messages.length)", self.hr)
+        self.assertIn(
+            "appendHrMessages(messages.slice(previousMessages.length), messages, previousMessages.length, conversation);",
+            self.hr,
+        )
+        # 同步过程与重新选中会话都是静默读取。
+        self.assertIn("loadHrConversations({ quiet: true })", self.hr)
+        self.assertIn("loadHrThread(state.hrSelectedId, { quiet: true })", self.hr)
+        self.assertIn("loadHrThread(key, { quiet: Boolean(state.hrThread) });", self.script)
+
+    def test_sync_ends_at_once_every_platform_is_in_cooldown(self):
+        """平台冷却时 POST 已给出结论，前端不再空等 last_synced_at 变化。"""
+        sync = _between(self.script, "async function hrTriggerSync(", "function hrRefreshAll(")
+        # POST 响应逐平台解析 started / skipped。
+        self.assertIn("started: Boolean(body.started),", sync)
+        self.assertIn("const skipped = Array.isArray(body.skipped) ? body.skipped.map(String) : [];", sync)
+        self.assertIn("skipped: skipped.includes(platform) || skipped.includes('all')", sync)
+        self.assertIn("const startedAny = results.some((row) => row.started);", sync)
+        self.assertIn("const skippedAll = results.length > 0 && results.every((row) => row.skipped);", sync)
+        # 没有平台启动且摘要不在同步 → 立即结束，不进入轮询循环。
+        self.assertIn("if (!startedAny) {", sync)
+        self.assertIn("if (!(summary && summary.syncing === true)) {", sync)
+        # 有平台启动时以 summary.syncing 变 false 为完成信号；摘要缺该字段才用时间戳兜底，超时保留。
+        self.assertIn("if (summary && typeof summary.syncing === 'boolean') {", sync)
+        self.assertIn("if (summary.syncing === false) {", sync)
+        self.assertIn("} else if (state.hrLastSyncedAt && state.hrLastSyncedAt !== state.hrSyncBaseline) {", sync)
+        self.assertIn("while (Date.now() - startedAt < HR_SYNC_TIMEOUT) {", sync)
+        self.assertIn("return state.hrSummary;", self.hr)
+        # 手动刷新命中冷却时给一句轻提示，并自动收起。
+        hint = _between(self.script, "function hrShowCooldownHint(", "async function hrTriggerSync(")
+        self.assertIn("showHrStatus('刚同步过，已是最新', true);", hint)
+        self.assertIn("state.hrNoticeTimer", hint)
+        self.assertIn("window.clearTimeout(state.hrNoticeTimer);", hint)
+        self.assertIn("if (manual && skippedAll) hrShowCooldownHint();", sync)
+        refresh = _between(self.script, "function hrRefreshAll(", "function hrEnterPage(")
+        self.assertIn("function hrRefreshAll(manual = true) {", refresh)
+        self.assertIn("hrTriggerSync({ manual })", refresh)
+
     def test_background_sync_polls_only_while_the_page_is_visible_and_on_hr(self):
         self.assertIn("const HR_POLL_INTERVAL = 60000;", self.hr)
         tick = _between(self.script, "async function hrPollTick(", "function hrStartPolling(")

@@ -449,6 +449,74 @@ class SeededDatasetTests(SeededStoreTestCase):
             "pace": "cautious",
         })
 
+    def test_profile_completeness_lists_required_fields_additively(self):
+        full = backend.profile_completeness(backend.get_store("user").profile())
+        self.assertTrue(full["required_ok"])
+        self.assertEqual(full["required_missing"], [])
+        self.assertEqual(
+            [item["key"] for item in full["required"]],
+            [key for key, _label, _rule in backend.PROFILE_REQUIRED_RULES],
+        )
+        empty = backend.profile_completeness(backend.default_profile())
+        self.assertFalse(empty["required_ok"])
+        self.assertEqual(len(empty["required_missing"]), len(backend.PROFILE_REQUIRED_RULES))
+        # 旧键保持不变。
+        for key in ("percent", "level", "ready", "sections", "missing"):
+            self.assertIn(key, empty)
+
+    def test_profile_required_accepts_project_without_experience_but_not_email_gap(self):
+        profile = backend.get_store("user").profile()
+        profile["experiences"] = []
+        profile["basic"]["email"] = ""
+        self.assertEqual(backend.profile_completeness(profile)["required_missing"], [])
+        profile["projects"] = []
+        self.assertEqual(
+            backend.profile_completeness(profile)["required_missing"],
+            ["工作/实习经历或项目经历（至少一项）"],
+        )
+
+    def test_offerpilot_collect_start_and_preflight_are_blocked_by_missing_profile(self):
+        store = backend.get_store("user")
+        profile = store.profile()
+        profile["job_intent"]["titles"] = []
+        profile["truth_confirmed"] = False
+        store.set_profile(profile)
+        base = {"data_mode": "user", "options": {"platform": "boss", "keywords": ["产品经理"], "cities": ["上海"], "max_pages": 1}}
+        with patch.object(backend.offerpilot_runtime, "preflight") as preflight, \
+                patch.object(backend.offerpilot_runtime, "start_task") as start:
+            result = backend.preflight_offerpilot_task({**base, "mode": "collect"})
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["checks"][0]["id"], "profile_required")
+            self.assertIn("目标岗位", result["messages"][0])
+            self.assertIn("真实性确认", result["messages"][0])
+            for mode in ("collect", "full"):
+                with self.assertRaises(backend.ApiError) as ctx:
+                    backend.start_offerpilot_task({**base, "mode": mode, "confirm": True, "risk_acknowledged": True})
+                self.assertIn("个人资料缺少必填项", ctx.exception.message)
+            preflight.assert_not_called()
+            start.assert_not_called()
+
+    def test_offerpilot_monitor_is_not_blocked_by_missing_profile(self):
+        store = backend.get_store("user")
+        store.set_profile(backend.default_profile())
+        with patch.object(
+            backend.offerpilot_runtime,
+            "start_task",
+            return_value={"task": {"id": "task-1", "mode": "monitor", "status": "running"}, "checks": [], "policy": {}},
+        ) as start:
+            started = backend.start_offerpilot_task({
+                "mode": "monitor", "data_mode": "user", "confirm": True, "risk_acknowledged": True,
+            })
+        self.assertTrue(started["ok"])
+        start.assert_called_once_with("monitor")
+
+    def test_profile_page_marks_required_fields_and_collect_gate_reads_them(self):
+        html = (WEB_DIR / "static" / "index.html").read_text(encoding="utf-8")
+        script = (WEB_DIR / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertGreaterEqual(html.count('class="profile-required-mark"'), 9)
+        for marker in ("collectProfileRequiredMissing", "required_missing", "个人资料缺少必填项"):
+            self.assertIn(marker, script)
+
     def test_offerpilot_preflight_reports_a_running_task_as_browser_busy(self):
         runtime = backend.offerpilot_runtime
         busy = runtime._busy_preflight(
@@ -2214,6 +2282,7 @@ class HttpServerTests(unittest.TestCase):
             'id="offerpilot-risk"',
             'id="offerpilot-confirm"',
             'id="offerpilot-start"',
+            'id="offerpilot-start-reason"',
             'id="offerpilot-jobs-table"',
             'id="offerpilot-import"',
             'id="view-profile"',
@@ -2237,6 +2306,7 @@ class HttpServerTests(unittest.TestCase):
             "risk_acknowledged: true",
             "confirm: true",
             "syncOfferPilotStartState",
+            "offerpilot-start-reason",
             "renderOfferPilot",
             "buildOfferPilotOptions",
             "runOfferPilotPreflight",

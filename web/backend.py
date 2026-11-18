@@ -194,6 +194,37 @@ PROFILE_SECTIONS = (
     ("truth_confirmed", "事实确认", 5, "确认资料真实、可用于生成草稿"),
 )
 
+# 影响后续流程（采集搜索条件、评分、生成招呼语）的字段：缺任意一项都会让采集/生成失去依据，
+# 因此单独标记为「必填」，与 PROFILE_SECTIONS 的完整度打分分开判断。
+# - basic_name / basic_city：写入招呼语与简历草稿的身份事实。
+# - job_intent：采集的搜索关键词（目标岗位）与城市过滤（目标城市）直接读取这两个字段。
+# - education：教育经历是可核实事实里最基础的一项，招呼语生成会用到。
+# - experience_or_project：评分与招呼语需要至少一段工作/实习或项目经历作为事实来源；
+#   两者满足其一即可，不要求同时填写。
+# - skills：匹配打分读取技能/工具列表。
+# - summary：个人简介被拼进生成招呼语的事实文本。
+# - truth_confirmed：用户对真实性的确认，是生成任何草稿前的前提。
+PROFILE_REQUIRED_RULES = (
+    ("basic_name", "姓名", lambda p: bool((p.get("basic") or {}).get("name"))),
+    ("basic_city", "所在城市", lambda p: bool((p.get("basic") or {}).get("city"))),
+    ("job_intent_titles", "目标岗位", lambda p: bool((p.get("job_intent") or {}).get("titles"))),
+    ("job_intent_cities", "目标城市", lambda p: bool((p.get("job_intent") or {}).get("cities"))),
+    ("education", "教育经历", lambda p: any(row.get("school") for row in p.get("education") or [])),
+    (
+        "experience_or_project",
+        "工作/实习经历或项目经历（至少一项）",
+        lambda p: any(row.get("company") or row.get("title") for row in p.get("experiences") or [])
+        or any(row.get("name") for row in p.get("projects") or []),
+    ),
+    (
+        "skills",
+        "技能标签（至少三个）",
+        lambda p: len((p.get("skills") or {}).get("tools") or []) + len((p.get("skills") or {}).get("strengths") or []) >= 3,
+    ),
+    ("summary", "个人简介（至少 20 字）", lambda p: len(str(p.get("summary") or "")) >= 20),
+    ("truth_confirmed", "真实性确认", lambda p: p.get("truth_confirmed") is True),
+)
+
 
 class ApiError(Exception):
     """Expected, user-facing API failure."""
@@ -606,12 +637,18 @@ def profile_completeness(profile: dict[str, Any]) -> dict[str, Any]:
         level = "ready"
     else:
         level = "partial"
+    required = [{"key": key, "label": label, "done": bool(rule(profile))} for key, label, rule in PROFILE_REQUIRED_RULES]
+    required_missing = [item["label"] for item in required if not item["done"]]
     return {
         "percent": percent,
         "level": level,
         "ready": level == "ready",
         "sections": sections,
         "missing": missing,
+        # 新增键：必填项清单与未满足项。采集与招呼语生成必须等这里为空才能继续。
+        "required": required,
+        "required_missing": required_missing,
+        "required_ok": not required_missing,
     }
 
 
@@ -1602,6 +1639,9 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     options = _offerpilot_options(payload)
     if task_mode == "monitor" and options is not None:
         raise ApiError("监控任务不接受搜索条件；请选择 collect 或 full")
+    profile_blocker = _profile_required_blocker(data_mode, task_mode)
+    if profile_blocker:
+        raise ApiError(profile_blocker, 400)
     try:
         response = (
             offerpilot_runtime.start_task(task_mode)
@@ -1896,6 +1936,19 @@ def _delivery_summary(deliveries: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _profile_required_blocker(mode: str, task_mode: str) -> str | None:
+    """Collect/full tasks need the profile fields that feed search, scoring and
+    greeting drafts (see PROFILE_REQUIRED_RULES). Monitor does not depend on
+    profile content, so it is never blocked here."""
+    if task_mode not in {"collect", "full"}:
+        return None
+    completeness = profile_completeness(get_store(mode).profile())
+    missing = completeness.get("required_missing") or []
+    if not missing:
+        return None
+    return "个人资料缺少必填项：" + "、".join(missing) + "；请先在「个人资料」页补全并保存。"
+
+
 def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     """Check the same start conditions without launching a task."""
     task_mode = str(payload.get("mode") or "collect")
@@ -1909,6 +1962,21 @@ def preflight_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     options = _offerpilot_options(payload)
     if task_mode == "monitor" and options is not None:
         raise ApiError("监控任务不接受搜索条件；请选择 collect 或 full")
+    profile_blocker = _profile_required_blocker(data_mode, task_mode)
+    if profile_blocker:
+        return {
+            "ok": False,
+            "checks": [{
+                "id": "profile_required",
+                "title": "个人资料",
+                "status": "error",
+                "message": profile_blocker,
+                "detail": "在「个人资料」页补全必填项并保存后，再检查环境。",
+                "action": "profile",
+            }],
+            "messages": [profile_blocker],
+            "summary": {},
+        }
     try:
         result = offerpilot_runtime.preflight(task_mode, options)
     except offerpilot_runtime.OfferPilotUnavailable as exc:

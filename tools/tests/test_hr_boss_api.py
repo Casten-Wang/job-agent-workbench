@@ -258,6 +258,12 @@ class _Case(unittest.TestCase):
     def _list(self) -> dict:
         return runtime.list_conversations("boss")
 
+    def _record_for(self, hr_name: str) -> dict:
+        return next(
+            record for record in self._store().values()
+            if record.get("hr_name") == hr_name
+        )
+
 
 class ListMappingTests(_Case):
     def test_list_maps_the_interface_and_reports_its_source(self):
@@ -317,9 +323,11 @@ class HistoryMappingTests(_Case):
 
     def test_changed_signature_prompts_only_that_conversation(self):
         self._list()
-        self.assertEqual(self.page.history_calls, 2)
+        # Cold start reads only the conversation with something new from HR;
+        # the one whose last message is ours is left for the user to open.
+        self.assertEqual(self.page.history_calls, 1)
         self._list()  # unchanged signatures: nothing is requested again
-        self.assertEqual(self.page.history_calls, 2)
+        self.assertEqual(self.page.history_calls, 1)
 
         self.page.api_rows[0] = dict(
             self.page.api_rows[0],
@@ -333,22 +341,80 @@ class HistoryMappingTests(_Case):
             ),
         )
         self._list()
-        self.assertEqual(self.page.history_calls, 3, "only the changed conversation is read")
+        self.assertEqual(self.page.history_calls, 2, "only the changed conversation is read")
 
     def test_an_empty_conversation_is_marked_read_and_not_requested_again(self):
         self.page.history_rows = []
         self._list()
-        self.assertEqual(self.page.history_calls, 2)
-        record = next(iter(self._store().values()))
+        self.assertEqual(self.page.history_calls, 1)
+        record = self._record_for("示例招聘官甲")
         self.assertTrue(record["body_read"])
         self.assertEqual(record["messages"], [])
+        lazy = self._record_for("示例招聘官乙")
+        self.assertFalse(lazy["body_read"], "last message ours: lazy until opened")
 
         self._list()
-        self.assertEqual(self.page.history_calls, 2, "an empty read is still a read")
+        self.assertEqual(self.page.history_calls, 1, "an empty read is still a read")
 
-        result = runtime.get_thread(next(iter(self._store().values()))["id"], "boss")
+        result = runtime.get_thread(record["id"], "boss")
         self.assertEqual(result["messages"], [])
+        self.assertEqual(self.page.history_calls, 1)
+
+    def test_a_conversation_whose_last_message_is_ours_is_read_only_when_opened(self):
+        self._list()
+        lazy = self._record_for("示例招聘官乙")
+        self.assertFalse(lazy["body_read"])
+        self.assertEqual(self.page.history_calls, 1)
+
+        thread = runtime.get_thread(lazy["id"], "boss")
+        self.assertEqual(self.page.history_calls, 2, "opening reads that one conversation")
+        self.assertTrue(thread["messages"])
+        self.assertTrue(self._record_for("示例招聘官乙")["body_read"])
+
+    def test_a_reply_sent_on_the_platform_marks_stale_without_a_background_read(self):
+        self._list()
+        lazy = self._record_for("示例招聘官乙")
+        runtime.get_thread(lazy["id"], "boss")  # the user opens it once: a body is stored
         self.assertEqual(self.page.history_calls, 2)
+
+        self.page.api_rows[1] = dict(
+            self.page.api_rows[1],
+            lastMsg="好的，明天见",
+            lastTS=1763002000000,
+            lastMessageInfo=dict(
+                self.page.api_rows[1]["lastMessageInfo"],
+                showText="好的，明天见",
+                fromId=MY_UID,
+                msgTime=1763002000000,
+            ),
+        )
+        self._list()
+        self.assertEqual(self.page.history_calls, 2, "our own latest message is not read in the background")
+        record = self._record_for("示例招聘官乙")
+        self.assertTrue(record["stale"], "the stored body is behind the listing")
+
+        runtime.get_thread(record["id"], "boss")
+        self.assertEqual(self.page.history_calls, 3, "opening refreshes that conversation once")
+        self.assertFalse(self._record_for("示例招聘官乙")["stale"])
+
+    def test_the_listing_is_written_before_the_body_is_read(self):
+        seen: dict = {}
+        real = runtime._fetch_thread_body
+
+        def spy(row, platform, **kwargs):
+            path = self.store_root / "hr" / "conversations.json"
+            store = json.loads(path.read_text(encoding="utf-8"))["conversations"]
+            seen["record"] = next(
+                value for value in store.values()
+                if value.get("hr_name") == row.get("hr_name")
+            )
+            return real(row, platform, **kwargs)
+
+        with patch.object(runtime, "_fetch_thread_body", side_effect=spy):
+            self._list()
+        self.assertEqual(seen["record"]["last_message"], "你好，方便沟通吗")
+        self.assertFalse(seen["record"]["body_read"], "the listing is saved before any body")
+        self.assertEqual(seen["record"]["messages"], [])
 
     def test_stored_messages_merge_by_max_mid_without_repeating(self):
         self._list()

@@ -183,11 +183,15 @@ const state = {
   hrSyncSupported: null,
   hrSyncing: false,
   hrSyncBaseline: '',
+  hrNoticeTimer: 0,
   hrSyncTriggeredAt: 0,
   hrPollTimer: null,
   hrPollBusy: false,
   hrMobilePane: 'list',
   hrThreadRenderedKey: '',
+  hrThreadRenderedMessages: null,
+  hrConversationListSignature: '',
+  hrConversationListCount: -1,
   interviewChat: {
     session: null,
     internal: null,
@@ -2579,6 +2583,13 @@ function renderProfileMeter(completeness) {
     });
     dom.profileMeter.append(chips);
   }
+  const requiredMissing = Array.isArray(data.required_missing) ? data.required_missing : [];
+  if (!state.profileDirty && requiredMissing.length) {
+    dom.profileMeter.append(el('p', {
+      className: 'profile-meter-text profile-meter-required',
+      text: `还缺少必填项，暂时无法启动「采集」/「完整流程」：${requiredMissing.join('、')}`
+    }));
+  }
 }
 
 /* 首次导入：user 模式下尚未保存过资料、但本机有可读简历时，自动预填一次草稿（只预填，不保存）。 */
@@ -3281,20 +3292,44 @@ function collectResumeMissing() {
   return needsResume && !(state.offerpilotResume && state.offerpilotResume.available);
 }
 
+// 采集/完整流程依赖个人资料里的必填项（姓名、所在城市、目标岗位、目标城市、教育经历、
+// 至少一段工作或项目经历、技能、个人简介、真实性确认）；监控任务不读取资料，不受影响。
+function collectProfileRequiredMissing() {
+  const mode = collectMode();
+  if (mode !== 'collect' && mode !== 'full') return [];
+  const profile = state.snapshot && state.snapshot.profile;
+  const completeness = profile && profile.completeness;
+  if (!completeness || !Array.isArray(completeness.required_missing)) return [];
+  return completeness.required_missing;
+}
+
 function syncOfferPilotStartState() {
   if (!dom.offerpilotStart) return;
   const preflightReady = Boolean(state.offerpilotPreflight && state.offerpilotPreflight.ok === true);
   const resumeMissing = collectResumeMissing();
+  const profileMissing = collectProfileRequiredMissing();
   dom.offerpilotStart.disabled = resumeMissing
+    || profileMissing.length > 0
     || !state.offerpilotCanStart
     || state.offerpilotTaskActive
     || !dom.offerpilotRisk.checked
     || !dom.offerpilotConfirm.checked
     || !preflightReady;
-  dom.offerpilotStart.title = state.offerpilotTaskActive
-    ? '已有任务正在运行；请先停止或等待结束'
-    : resumeMissing ? '请先上传评分简历'
-    : preflightReady ? '' : '先点「检查环境」并处理问题';
+  // 禁用原因直接写在按钮旁，不再只放在悬停提示里；按「最先要做的一步」给出。
+  let reason = '';
+  if (state.offerpilotTaskActive) reason = '已有任务正在运行；请先停止或等待结束。';
+  else if (!state.offerpilotCanStart) reason = '采集组件还没准备好；请点「重新检测」。';
+  else if (profileMissing.length) reason = `个人资料缺少必填项：${profileMissing.join('、')}；请先在「个人资料」页补全并保存。`;
+  else if (resumeMissing) reason = '请先上传评分简历。';
+  else if (!preflightReady) reason = '请先点「检查环境」，并处理提示的问题。';
+  else if (!dom.offerpilotRisk.checked) reason = '请先勾选「我知道自动化操作可能导致账号被平台限制」。';
+  else if (!dom.offerpilotConfirm.checked) reason = '勾选「确认启动」后才能开始。';
+  dom.offerpilotStart.title = reason;
+  const reasonNode = document.getElementById('offerpilot-start-reason');
+  if (reasonNode) {
+    reasonNode.textContent = reason;
+    reasonNode.hidden = !reason;
+  }
 }
 
 function renderOfferPilotJobs() {
@@ -4597,6 +4632,16 @@ function hrRenderSyncStatus() {
   dom.hrSyncStatus.dataset.state = status;
   dom.hrSyncStatus.setAttribute('aria-label', text);
   if (dom.hrSyncText) dom.hrSyncText.textContent = text;
+  hrUpdateRefreshButton();
+}
+
+// 同步结束后必须把刷新按钮恢复可用：只靠 renderHrConversations 会漏掉这一步。
+function hrUpdateRefreshButton() {
+  if (!dom.hrRefresh) return;
+  const busy = Boolean(state.hrConversationsLoading || state.hrSyncing);
+  dom.hrRefresh.disabled = busy;
+  dom.hrRefresh.setAttribute('aria-busy', busy ? 'true' : 'false');
+  dom.hrRefresh.textContent = state.hrSyncing ? '正在同步…' : '刷新会话';
 }
 
 function hrSetMobilePane(pane) {
@@ -4647,7 +4692,16 @@ function hrPlatformStatusRows() {
   });
 }
 
-// 每个平台一行：成功显示同步时间与来源，失败只标这一行，不影响其他平台。
+// 每个平台一个紧凑 chip：平时只显示会话数；同步时间、来源和错误原因放进 title 与读屏文案。
+// 失败只标这一个平台，不影响其他平台。
+// 平台状态条只占一行，用平台惯用的短名；全名保留在 title / aria-label 中。
+const HR_PLATFORM_SHORT_LABELS = { boss: 'BOSS', zhilian: '智联', liepin: '猎聘' };
+
+function hrPlatformShortLabel(platform) {
+  const key = String(platform || '');
+  return HR_PLATFORM_SHORT_LABELS[key] || channelLabel(key);
+}
+
 function renderHrPlatformStatus(unavailable) {
   if (!dom.hrPlatformStatus) return;
   clear(dom.hrPlatformStatus);
@@ -4657,10 +4711,6 @@ function renderHrPlatformStatus(unavailable) {
   dom.hrPlatformStatus.hidden = !rows.length;
   rows.forEach((row) => {
     const node = el('div', { className: `hr-platform-row${row.error ? ' is-error' : ''}` });
-    node.append(el('span', { className: 'hr-platform-row-name' }, [
-      el('span', { className: 'hr-platform-dot', attrs: { 'aria-hidden': 'true' } }),
-      el('span', { text: channelLabel(row.platform) })
-    ]));
     const sourceLabel = row.source === 'api' ? '接口同步' : row.source === 'dom' ? '网页同步' : '';
     const detailText = row.error
       ? row.error
@@ -4670,15 +4720,22 @@ function renderHrPlatformStatus(unavailable) {
         row.clock ? `已同步 ${row.clock}` : '',
         sourceLabel
       ].filter(Boolean).join('，');
-    const detail = el('span', { className: 'hr-platform-row-detail', text: detailText });
-    if (row.error) detail.setAttribute('title', row.error);
-    node.append(detail);
+    node.setAttribute('title', detailText);
+    node.setAttribute('aria-label', `${channelLabel(row.platform)}：${detailText}`);
+    node.append(el('span', { className: 'hr-platform-row-name' }, [
+      el('span', { className: 'hr-platform-dot', attrs: { 'aria-hidden': 'true' } }),
+      el('span', { className: 'hr-platform-row-label', text: hrPlatformShortLabel(row.platform) })
+    ]));
+    node.append(el('span', {
+      className: 'hr-platform-row-detail',
+      text: row.error ? '未读取' : String(row.count)
+    }));
     dom.hrPlatformStatus.append(node);
   });
 }
 
 async function hrLoadSummary() {
-  if (state.hrSummaryLoading) return;
+  if (state.hrSummaryLoading) return null;
   state.hrSummaryLoading = true;
   const mode = state.mode;
   try {
@@ -4687,7 +4744,7 @@ async function hrLoadSummary() {
       headers: { Accept: 'application/json' },
       cache: 'no-store'
     });
-    if (state.mode !== mode) return;
+    if (state.mode !== mode) return null;
     state.hrSyncSupported = true;
     state.hrSummary = data && typeof data === 'object' ? data : {};
     state.hrPlatformSummary = state.hrSummary.by_platform && typeof state.hrSummary.by_platform === 'object'
@@ -4699,14 +4756,17 @@ async function hrLoadSummary() {
     hrSetNavUnread(toInt(state.hrSummary.unread_total));
     hrRenderSyncStatus();
     renderHrPlatformStatus(state.hrAvailable === false);
+    // 调用方靠返回值判断后台 worker 是否全部结束；读取失败时返回 null。
+    return state.hrSummary;
   } catch (error) {
-    if (state.mode !== mode) return;
+    if (state.mode !== mode) return null;
     if (error && error.missing) {
       state.hrSyncSupported = false;
       state.hrPlatformSummary = {};
       hrSetNavUnread(hrUnreadFromConversations());
       renderHrPlatformStatus(state.hrAvailable === false);
     }
+    return null;
   } finally {
     state.hrSummaryLoading = false;
   }
@@ -4716,22 +4776,47 @@ function hrSleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-// 同步是后台任务：POST 只负责启动，随后轮询摘要里的 last_synced_at 判断完成。
-async function hrTriggerSync() {
+// 平台命中同步冷却时的轻提示：只收起自己这条，不覆盖别的状态。
+function hrShowCooldownHint() {
+  showHrStatus('刚同步过，已是最新', true);
+  window.clearTimeout(state.hrNoticeTimer);
+  state.hrNoticeTimer = window.setTimeout(() => {
+    state.hrNoticeTimer = 0;
+    if (dom.hrStatus && dom.hrStatus.textContent === '刚同步过，已是最新') hideHrStatus();
+  }, 4000);
+}
+
+// 同步是后台任务：POST 只负责启动。平台命中冷却（started:false + skipped）时
+// 立刻结束，不空等到超时；有平台启动后，以摘要里的 syncing 变 false 为完成信号，
+// last_synced_at 变化仍作兜底。
+async function hrTriggerSync(options = {}) {
   if (state.hrSyncing || state.hrSyncSupported === false) return;
+  const manual = Boolean(options.manual);
   state.hrSyncing = true;
   state.hrSyncBaseline = state.hrLastSyncedAt;
   hrRenderSyncStatus();
   const results = await Promise.all(HR_VISIBLE_PLATFORMS.map(async (platform) => {
     try {
-      await hrRequestJson(HR_SYNC_URL, {
+      const data = await hrRequestJson(HR_SYNC_URL, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform })
       });
-      return { platform, missing: false };
+      const body = data && typeof data === 'object' ? data : {};
+      const skipped = Array.isArray(body.skipped) ? body.skipped.map(String) : [];
+      return {
+        platform,
+        missing: false,
+        started: Boolean(body.started),
+        skipped: skipped.includes(platform) || skipped.includes('all')
+      };
     } catch (error) {
-      return { platform, missing: Boolean(error && error.missing) };
+      return {
+        platform,
+        missing: Boolean(error && error.missing),
+        started: false,
+        skipped: false
+      };
     }
   }));
   if (results.some((row) => row.missing)) {
@@ -4741,13 +4826,33 @@ async function hrTriggerSync() {
     renderHrPlatformStatus(state.hrAvailable === false);
     return;
   }
+  const startedAny = results.some((row) => row.started);
+  const skippedAll = results.length > 0 && results.every((row) => row.skipped);
+  if (!startedAny) {
+    // 没有平台启动 worker：摘要里也没有后台任务时，立即结束，不再轮询。
+    const summary = await hrLoadSummary();
+    if (!(summary && summary.syncing === true)) {
+      state.hrSyncing = false;
+      hrRenderSyncStatus();
+      renderHrPlatformStatus(state.hrAvailable === false);
+      if (manual && skippedAll) hrShowCooldownHint();
+      return;
+    }
+  }
   const startedAt = Date.now();
   let finished = false;
   while (Date.now() - startedAt < HR_SYNC_TIMEOUT) {
     await hrSleep(HR_SYNC_POLL_INTERVAL);
-    await hrLoadSummary();
+    const summary = await hrLoadSummary();
     if (state.hrSyncSupported === false) break;
-    if (state.hrLastSyncedAt && state.hrLastSyncedAt !== state.hrSyncBaseline) {
+    if (summary && typeof summary.syncing === 'boolean') {
+      // 以 syncing 为准：单个平台先完成时 last_synced_at 会提前变化，不能据此收尾。
+      if (summary.syncing === false) {
+        finished = true;
+        break;
+      }
+    } else if (state.hrLastSyncedAt && state.hrLastSyncedAt !== state.hrSyncBaseline) {
+      // 摘要没有 syncing 字段时才退回时间戳判断。
       finished = true;
       break;
     }
@@ -4758,6 +4863,14 @@ async function hrTriggerSync() {
   state.hrSyncing = false;
   hrRenderSyncStatus();
   renderHrPlatformStatus(state.hrAvailable === false);
+}
+
+// 「刷新会话」与空状态入口共用：本地列表留在屏幕上，平台同步在后台跑。
+function hrRefreshAll(manual = true) {
+  hrLoadSummary();
+  return Promise.resolve(ensureHrConversationsLoaded(true)).then(() => {
+    if (state.hrSyncSupported !== false) hrTriggerSync({ manual });
+  });
 }
 
 // 进入 HR 页：先显示本地已有会话，再静默触发一次增量同步。
@@ -4886,7 +4999,7 @@ function renderHrConversations() {
   if (state.hrSyncSupported === false) {
     hrSetNavUnread(unavailable ? 0 : hrUnreadFromConversations());
   }
-  if (dom.hrRefresh) dom.hrRefresh.disabled = state.hrConversationsLoading || state.hrSyncing;
+  hrUpdateRefreshButton();
   if (dom.hrPlatformSelect && dom.hrPlatformSelect.value !== state.hrPlatform) {
     dom.hrPlatformSelect.value = state.hrPlatform;
   }
@@ -4904,22 +5017,56 @@ function renderHrConversations() {
   if (dom.hrConversationCount) {
     dom.hrConversationCount.textContent = unavailable ? '0 个会话' : `${conversations.length} 个会话`;
   }
-  clear(dom.hrConversationList);
+  // 列表签名只包含会影响行内容与选中的字段；签名不变时保留已渲染的行，
+  // 后台同步不再整段清空重建，滚动位置和键盘焦点也不会丢。
+  const signature = JSON.stringify({
+    selected: state.hrSelectedId,
+    filter: state.hrFilter,
+    platform: state.hrPlatform,
+    search: state.hrSearch,
+    unavailable,
+    rows: conversations.map((conversation) => [
+      String(conversation.id || ''),
+      conversation.hr_name, conversation.hr_title, conversation.company, conversation.title,
+      conversation.platform, Boolean(conversation.unread),
+      conversation.last_message, conversation.last_message_at
+    ])
+  });
   if (!conversations.length) {
-    let emptyText = '暂无 HR 会话。';
-    if (unavailable) emptyText = '会话不可用。';
-    else if (state.hrConversations.length) emptyText = '没有匹配的会话。';
+    state.hrConversationListSignature = '';
+    state.hrConversationListCount = -1;
+    clear(dom.hrConversationList);
+    let emptyText = '还没有 HR 会话。';
+    if (unavailable) emptyText = '读不到 HR 会话。';
+    else if (state.hrConversations.length) emptyText = '没有符合条件的会话。';
     else if (state.hrConversationsLoading) emptyText = '正在读取本机会话…';
     const empty = el('div', { className: 'hr-empty-block' });
     empty.append(el('p', { className: 'hr-empty', text: emptyText }));
-    if (!unavailable && !state.hrConversations.length && !state.hrConversationsLoading) {
+    if (unavailable) {
+      empty.append(el('p', { className: 'hr-empty-hint', text: '请先在本机 Chrome 登录各招聘平台，再重新读取。' }));
+      empty.append(hrEmptyAction('重新读取会话'));
+    } else if (state.hrConversationsLoading && !state.hrConversations.length) {
+      empty.append(el('p', { className: 'hr-empty-hint', text: '读完后会自动显示，不用留在这个页面等。' }));
+    } else if (!state.hrConversations.length) {
       empty.append(el('p', {
         className: 'hr-empty-hint',
-        text: '进入这一页会自动在后台同步一次；也可以点「刷新会话」立即读取。'
+        text: '进入这一页会自动在后台同步一次；也可以现在刷新。'
       }));
+      empty.append(hrEmptyAction('刷新会话'));
+    } else {
+      empty.append(el('p', { className: 'hr-empty-hint', text: '换一个平台或筛选条件试试。' }));
     }
     dom.hrConversationList.append(empty);
+  } else if (
+    signature === state.hrConversationListSignature
+    && state.hrConversationListCount === conversations.length
+    && dom.hrConversationList.querySelector('.hr-conversation')
+  ) {
+    // 列表没有变化：保持原样，只更新上方状态条与计数。
   } else {
+    state.hrConversationListSignature = signature;
+    state.hrConversationListCount = conversations.length;
+    clear(dom.hrConversationList);
     conversations.forEach((conversation) => {
       const id = String(conversation.id || '');
       const active = id === state.hrSelectedId;
@@ -4934,8 +5081,9 @@ function renderHrConversations() {
           text: channelLabel(conversation.platform)
         }));
       }
-      if (unread) tags.append(badge('未读', 'good', '•'));
       if (tags.childNodes.length) top.append(tags);
+      const timeLabel = hrConversationTimeLabel(conversation.last_message_at);
+      if (timeLabel) top.append(el('span', { className: 'hr-conversation-time', text: timeLabel }));
       const platformLabel = channelLabel(conversation.platform);
       const item = el('button', {
         className: `hr-conversation${active ? ' is-active' : ''}${unread ? ' is-unread' : ''}`,
@@ -4948,16 +5096,14 @@ function renderHrConversations() {
         top,
         el('span', {
           className: 'hr-conversation-sub',
-          text: [conversation.hr_title, conversation.company, conversation.title].filter(Boolean).join('，') || '—'
+          text: [conversation.company, conversation.title].filter(Boolean).join('，')
+            || conversation.hr_title
+            || '—'
         }),
         el('span', { className: 'hr-conversation-bottom' }, [
           el('span', {
             className: 'hr-conversation-last',
             text: String(conversation.last_message || '暂无消息')
-          }),
-          el('span', {
-            className: 'hr-conversation-time',
-            text: hrConversationTimeLabel(conversation.last_message_at)
           })
         ])
       ]);
@@ -4966,6 +5112,17 @@ function renderHrConversations() {
     });
   }
   renderHrThread();
+}
+
+// 空状态里的刷新入口和顶部按钮走同一条路径：先显示本地缓存，再后台同步。
+function hrEmptyAction(label) {
+  const button = el('button', {
+    className: 'button button-quiet button-small hr-empty-action',
+    attrs: { type: 'button' },
+    text: label
+  });
+  button.addEventListener('click', () => hrRefreshAll());
+  return button;
 }
 
 function hrConversationScore(conversation) {
@@ -4990,7 +5147,7 @@ function renderHrJobCard(conversation) {
   if (!dom.hrDetailJob) return;
   clear(dom.hrDetailJob);
   if (!conversation || !conversation.job_id) {
-    dom.hrDetailJob.append(el('span', { className: 'hr-muted', text: '未关联岗位' }));
+    dom.hrDetailJob.append(el('span', { className: 'hr-job-empty', text: '未关联岗位' }));
     return;
   }
   const score = hrConversationScore(conversation);
@@ -5013,6 +5170,35 @@ function renderHrJobCard(conversation) {
   dom.hrDetailJob.append(el('div', { className: 'hr-job-card' }, [body, jobButton]));
 }
 
+// 一条消息一个气泡；后台刷新时只追加新消息，已在屏幕上的气泡不动。
+function hrMessageNode(message, conversation, startOfGroup) {
+  const sender = String((message && message.sender) || 'system');
+  const kind = sender === 'hr' ? 'hr' : sender === 'me' ? 'me' : 'system';
+  const bubble = el('article', {
+    className: `hr-message hr-message-${kind}${startOfGroup ? ' hr-message-start' : ''}`,
+    attrs: { 'data-sender': kind }
+  });
+  const who = kind === 'hr' ? (conversation.hr_name || 'HR') : kind === 'me' ? '我' : '系统';
+  const stamp = hrMessageStamp(message && message.time);
+  // HR 的气泡需要标出是谁；自己的消息只留时间，省掉“我，”这种多余前缀。
+  bubble.append(el('p', {
+    className: 'hr-message-meta',
+    text: kind === 'hr' ? (stamp ? `${who}，${stamp}` : who) : (stamp || who)
+  }));
+  bubble.append(el('p', { className: 'hr-message-text', text: String((message && message.text) || '') }));
+  return bubble;
+}
+
+function appendHrMessages(rows, allMessages, offset, conversation) {
+  rows.forEach((message, index) => {
+    const absolute = offset + index;
+    const previous = absolute > 0 && allMessages ? allMessages[absolute - 1] : null;
+    const sender = String((message && message.sender) || 'system');
+    const previousSender = String((previous && previous.sender) || 'system');
+    dom.hrMessages.append(hrMessageNode(message, conversation, absolute > 0 && sender !== previousSender));
+  });
+}
+
 function renderHrThread() {
   if (!dom.hrMessages) return;
   const conversation = state.hrThread && state.hrThread.conversation
@@ -5022,10 +5208,11 @@ function renderHrThread() {
   const viewport = dom.hrMessages;
   const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 32;
   const previousTop = viewport.scrollTop;
-  clear(dom.hrMessages);
   clear(dom.hrDetailJob);
   if (!conversation) {
+    clear(dom.hrMessages);
     state.hrThreadRenderedKey = '';
+    state.hrThreadRenderedMessages = null;
     dom.hrDetailTitle.textContent = '选择一个 HR 会话';
     dom.hrDetailMeta.textContent = '';
     if (dom.hrReplyInput) dom.hrReplyInput.value = '';
@@ -5036,7 +5223,7 @@ function renderHrThread() {
       dom.hrReplyBlockReason.hidden = true;
       dom.hrReplyBlockReason.textContent = '';
     }
-    dom.hrDetailJob.append(el('span', { className: 'hr-muted', text: '未关联岗位' }));
+    dom.hrDetailJob.append(el('span', { className: 'hr-job-empty', text: '未关联岗位' }));
     dom.hrMessages.append(el('div', { className: 'hr-empty-block' }, [
       el('p', { className: 'hr-empty', text: '从左侧选择一位 HR，查看完整对话。' })
     ]));
@@ -5055,7 +5242,24 @@ function renderHrThread() {
     ? state.hrThread
     : null;
   const messages = thread && Array.isArray(thread.messages) ? thread.messages : [];
+  const signatures = messages.map((message) => JSON.stringify([
+    String((message && message.sender) || 'system'),
+    String((message && message.time) || ''),
+    String((message && message.text) || '')
+  ]));
+  const previousMessages = state.hrThreadRenderedKey === key
+    && Array.isArray(state.hrThreadRenderedMessages)
+    ? state.hrThreadRenderedMessages
+    : [];
+  const renderedNodes = dom.hrMessages.querySelectorAll('.hr-message').length;
+  const canAppend = Boolean(messages.length)
+    && previousMessages.length > 0
+    && previousMessages.length <= messages.length
+    && renderedNodes === previousMessages.length
+    && previousMessages.every((signature, index) => signature === signatures[index]);
   if (!messages.length) {
+    clear(dom.hrMessages);
+    state.hrThreadRenderedMessages = [];
     const empty = el('div', { className: 'hr-empty-block' });
     empty.append(el('p', {
       className: 'hr-empty',
@@ -5075,23 +5279,14 @@ function renderHrThread() {
       empty.append(refresh);
     }
     dom.hrMessages.append(empty);
+  } else if (canAppend) {
+    // 已有气泡保留，只追加这次新到的消息。
+    appendHrMessages(messages.slice(previousMessages.length), messages, previousMessages.length, conversation);
+    state.hrThreadRenderedMessages = signatures;
   } else {
-    messages.forEach((message) => {
-      const sender = String((message && message.sender) || 'system');
-      const kind = sender === 'hr' ? 'hr' : sender === 'me' ? 'me' : 'system';
-      const bubble = el('article', {
-        className: `hr-message hr-message-${kind}`,
-        attrs: { 'data-sender': kind }
-      });
-      const who = kind === 'hr' ? (conversation.hr_name || 'HR') : kind === 'me' ? '我' : '系统';
-      const stamp = hrMessageStamp(message && message.time);
-      bubble.append(el('p', {
-        className: 'hr-message-meta',
-        text: kind === 'system' ? (stamp || who) : (stamp ? `${who}，${stamp}` : who)
-      }));
-      bubble.append(el('p', { className: 'hr-message-text', text: String((message && message.text) || '') }));
-      dom.hrMessages.append(bubble);
-    });
+    clear(dom.hrMessages);
+    appendHrMessages(messages, messages, 0, conversation);
+    state.hrThreadRenderedMessages = signatures;
   }
   if (viewport) {
     const switching = state.hrThreadRenderedKey !== key;
@@ -5108,7 +5303,17 @@ function renderHrThread() {
       ? ''
       : (blockReason || (state.hrThreadLoading ? '正在读取对话…' : '当前会话暂时不能回复。'));
   }
-  if (dom.hrReplyInput) dom.hrReplyInput.disabled = !allowed;
+  const replyInput = dom.hrReplyInput;
+  if (replyInput) {
+    replyInput.disabled = !allowed;
+    replyInput.placeholder = allowed
+      ? '回复 HR；发送前会再确认一次。'
+      : state.hrThreadLoading
+        ? '正在读取对话…'
+        : thread
+          ? '这个会话暂时不能回复。'
+          : '先选择一个 HR 会话。';
+  }
   const draft = state.hrDrafts[key] || '';
   if (dom.hrReplyInput && document.activeElement !== dom.hrReplyInput) {
     dom.hrReplyInput.value = draft;
@@ -5149,10 +5354,14 @@ async function ensureHrConversationsLoaded(force = false) {
     state.hrSyncSupported = null;
     state.hrSyncing = false;
     state.hrThreadRenderedKey = '';
+    state.hrThreadRenderedMessages = null;
+    state.hrConversationListSignature = '';
+    state.hrConversationListCount = -1;
   }
   if (!force && state.hrConversationsLoaded && state.hrMode === state.mode) return;
   if (state.hrConversationsLoading) return;
-  await loadHrConversations();
+  // 已经有会话在屏幕上时，刷新只静默重读本地缓存，不进入加载态、不清空列表。
+  await loadHrConversations({ quiet: force && Boolean(state.hrConversations.length) });
 }
 
 async function loadHrConversations(options = {}) {
@@ -8056,12 +8265,7 @@ function bindEvents() {
   });
 
   if (dom.hrRefresh) {
-    dom.hrRefresh.addEventListener('click', () => {
-      hrLoadSummary();
-      Promise.resolve(ensureHrConversationsLoaded(true)).then(() => {
-        if (state.hrSyncSupported !== false) hrTriggerSync();
-      });
-    });
+    dom.hrRefresh.addEventListener('click', () => hrRefreshAll());
   }
   if (dom.hrMobileBack) {
     dom.hrMobileBack.addEventListener('click', () => hrSetMobilePane('list'));

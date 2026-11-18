@@ -9,14 +9,17 @@ Contracts locked here:
 
 - ``cached_conversations`` serves the stored rows and never reads a platform;
 - ``conversations_summary`` counts unread messages from local storage only;
-- one worker runs the queued platforms serially; the same platform is not
-  queued twice while it waits or runs;
+- one worker per platform runs in parallel across platforms while the same
+  platform is never queued twice;
+- a platform synced moments ago is skipped instead of read again, and a
+  platform whose last sync failed is retried;
 - a failed platform keeps its error and fresh timestamp in the summary;
 - the HTTP routes exist and pass the platform through.
 """
 
 from __future__ import annotations
 
+import datetime
 import http.client
 import json
 import socket
@@ -87,9 +90,10 @@ class _StoreCase(unittest.TestCase):
         with runtime._sync_state_lock:
             runtime._sync_queue.clear()
             runtime._sync_queued.clear()
+            runtime._sync_threads.clear()
             runtime._sync_state.update(
                 syncing=False, platform=None, started_at=None,
-                finished_at=None, error=None,
+                finished_at=None, error=None, platforms=[],
             )
 
     def _wait_idle(self, timeout: float = 3.0) -> None:
@@ -194,7 +198,102 @@ class SyncQueueTests(_StoreCase):
             self.assertEqual(len(result["queued"]), 3)
             release.set()
             self._wait_idle()
-        self.assertEqual(started, ["boss", "zhilian", "liepin"])
+        self.assertEqual(sorted(started), ["boss", "liepin", "zhilian"])
+
+    def test_platforms_are_read_in_parallel(self):
+        barrier = threading.Barrier(3, timeout=4)
+        failures = []
+
+        def read(platform):
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                failures.append(platform)
+            return {}
+
+        with patch.object(runtime, "_run_conversations_sync", side_effect=read):
+            runtime.start_conversations_sync("all")
+            self._wait_idle(timeout=8)
+        self.assertEqual(failures, [], "each platform waits for the other two, not for a serial queue")
+
+    def test_a_platform_synced_moments_ago_is_skipped(self):
+        with runtime._hr_store_lock:
+            runtime._save_sync_meta({
+                "boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None},
+            })
+        with patch.object(runtime, "_run_conversations_sync") as read:
+            result = runtime.start_conversations_sync("boss")
+        self.assertFalse(result["started"])
+        self.assertFalse(result["syncing"])
+        self.assertEqual(result["skipped"], ["boss"])
+        self.assertIn("刚刚同步过", result["reason"])
+        read.assert_not_called()
+
+    def test_a_platform_whose_sync_failed_is_retried(self):
+        with runtime._hr_store_lock:
+            runtime._save_sync_meta({
+                "boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": "上次读取失败"},
+            })
+        release = threading.Event()
+        started = []
+
+        def slow(platform):
+            started.append(platform)
+            release.wait(2)
+            return {}
+
+        with patch.object(runtime, "_run_conversations_sync", side_effect=slow):
+            result = runtime.start_conversations_sync("boss")
+            self.assertTrue(result["started"])
+            self.assertNotIn("skipped", result)
+            release.set()
+            self._wait_idle()
+        self.assertEqual(started, ["boss"])
+
+    def test_an_old_sync_is_read_again(self):
+        stale = (
+            datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(seconds=runtime.HR_SYNC_MIN_INTERVAL_SECONDS + 1)
+        ).isoformat()
+        with runtime._hr_store_lock:
+            runtime._save_sync_meta({
+                "boss": {"last_synced_at": stale, "source": "api", "error": None},
+            })
+        release = threading.Event()
+        started = []
+
+        def slow(platform):
+            started.append(platform)
+            release.wait(2)
+            return {}
+
+        with patch.object(runtime, "_run_conversations_sync", side_effect=slow):
+            result = runtime.start_conversations_sync("boss")
+            self.assertTrue(result["started"])
+            release.set()
+            self._wait_idle()
+        self.assertEqual(started, ["boss"])
+
+    def test_all_skips_only_the_platforms_synced_moments_ago(self):
+        with runtime._hr_store_lock:
+            runtime._save_sync_meta({
+                "boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None},
+            })
+        release = threading.Event()
+        started = []
+
+        def slow(platform):
+            started.append(platform)
+            release.wait(2)
+            return {}
+
+        with patch.object(runtime, "_run_conversations_sync", side_effect=slow):
+            result = runtime.start_conversations_sync("all")
+            self.assertEqual(result["skipped"], ["boss"])
+            self.assertEqual(sorted(result["queued"]), ["liepin", "zhilian"])
+            release.set()
+            self._wait_idle()
+        self.assertEqual(sorted(started), ["liepin", "zhilian"])
 
 
 class SyncWorkerTests(_StoreCase):
@@ -223,7 +322,7 @@ class SyncWorkerTests(_StoreCase):
         with patch.object(runtime, "list_conversations", side_effect=read):
             runtime.start_conversations_sync("all")
             self._wait_idle()
-        self.assertEqual(calls, ["boss", "zhilian", "liepin"])
+        self.assertEqual(sorted(calls), ["boss", "liepin", "zhilian"])
         summary = runtime.conversations_summary()
         self.assertIn("接口不可用", summary["by_platform"]["boss"]["error"])
         self.assertIsNone(summary["by_platform"]["boss"]["last_synced_at"])

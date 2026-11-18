@@ -225,10 +225,16 @@ class ConversationRuntimeTests(unittest.TestCase):
         self.assertEqual(len(thread["messages"][2]["text"]), 500)
         self.assertTrue(thread["reply_allowed"])
         self.assertIsNone(thread["reply_block_reason"])
-        # The listing refresh already read both conversations once; serving from
-        # the store must not open either of them a second time.
-        self.assertEqual([item["job"]["company"] for item in self.fake.opened], ["上海邦中", "闪魂"])
+        # The listing refresh read only the unread conversation; the one whose
+        # last message is ours is lazy, and serving the cached body must not
+        # open either of them a second time.
+        self.assertEqual([item["job"]["company"] for item in self.fake.opened], ["上海邦中"])
         self.assertTrue(all(item["background"] is True for item in self.fake.opened))
+
+        offerpilot_runtime.get_thread(result["conversations"][1]["id"])
+        self.assertEqual(
+            [item["job"]["company"] for item in self.fake.opened], ["上海邦中", "闪魂"]
+        )
 
     def test_send_reply_sends_exactly_one_message(self):
         result = self._prime()
