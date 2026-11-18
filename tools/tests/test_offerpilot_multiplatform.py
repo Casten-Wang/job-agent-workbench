@@ -232,7 +232,7 @@ class PlatformChatTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             offerpilot_runtime.get_thread(listing["conversations"][0]["id"], "liepin")
 
-    def test_reply_is_refused_for_non_boss_platforms(self):
+    def test_reply_is_refused_without_interface_ids_for_non_boss_platforms(self):
         listing = self._list("zhilian")
         with patch.object(
             offerpilot_runtime, "_stop_requested", return_value=False
@@ -244,7 +244,8 @@ class PlatformChatTests(unittest.TestCase):
                     confirm=offerpilot_runtime.REPLY_CONFIRM_PHRASE,
                     risk_acknowledged=True,
                 )
-        self.assertIn("BOSS", str(ctx.exception))
+        # A DOM listing carries no peer id, so the reply cannot be located.
+        self.assertIn("刷新会话列表", str(ctx.exception))
         # The listing opens the list tab but reads no conversation body, so
         # refusing the reply leaves the page count unchanged.
         self.assertEqual(self.fake.opened, 1)

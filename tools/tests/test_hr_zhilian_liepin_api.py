@@ -16,6 +16,8 @@ Contracts locked here:
 - a failed or empty contact list falls back to the drawer DOM in the same tab;
 - Liepin history comes from the drawer store; ``direction "0"`` is us;
 - both platforms reuse the user's own tab and never close it;
+- 智联 / 猎聘 replies go through the user's own page after every send guard
+  (see ``ReplySendTests``); nothing is sent without the confirmation phrase;
 - every tab the reader opens itself is a background tab.
 """
 
@@ -347,7 +349,7 @@ class _Case(unittest.TestCase):
         self.assertEqual(thread["messages"][0]["text"], "你好，方便沟通吗")
         self.assertEqual(thread["messages"][2]["text"], "[名片] 示例职位")
         self.assertEqual([m["mid"] for m in thread["messages"]], ["9001", "9002", "9003"])
-        self.assertFalse(thread["reply_allowed"])
+        self.assertTrue(thread["reply_allowed"], "the peer id is known, so a confirmed reply may be sent")
         self.assertEqual(self.page.new_tabs, [])
 
     def _seed_cache(self, platform: str, conversation_id: str) -> None:
@@ -388,6 +390,145 @@ class _Case(unittest.TestCase):
         self.assertEqual(thread["source"], "dom")
         self.assertTrue(self.page.new_tabs)
         self.assertTrue(all(tab["background"] for tab in self.page.new_tabs))
+
+
+class _SendPage(_FakePage):
+    """Fake page that also answers the send expressions."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent: list[str] = []
+        self.typed: list[str] = []
+        self.send_result: dict = {"ok": True, "accepted": True}
+        self.open_result: dict = {"ok": True}
+        self.type_result: dict = {"ok": True, "cleared": True}
+
+    def evaluate(self, target_id, script, timeout=None):
+        if "instance.sendText" in script:
+            self.sent.append(script)
+            return json.dumps(self.send_result)
+        if "hits[0].click()" in script:
+            return json.dumps(self.open_result)
+        if "readEditor" in script:
+            self.typed.append(script)
+            return json.dumps(self.type_result)
+        return super().evaluate(target_id, script, timeout=timeout)
+
+
+class ReplySendTests(unittest.TestCase):
+    def setUp(self) -> None:
+        runtime._reset_conversation_cache()
+        runtime._zhilian_history_params.clear()
+        runtime._liepin_history_params.clear()
+        self.addCleanup(runtime._reset_conversation_cache)
+        self.addCleanup(runtime._zhilian_history_params.clear)
+        self.addCleanup(runtime._liepin_history_params.clear)
+        self.temp = tempfile.TemporaryDirectory(prefix="zl-send-test-")
+        self.addCleanup(self.temp.cleanup)
+        self.page = _SendPage()
+        self.server = MagicMock()
+        self.server.CONFIG_PATH = Path("config.yaml")
+        self.server.DATA_DIR = Path("data")
+        for patcher in (
+            patch.object(runtime, "_hr_store_root", Path(self.temp.name)),
+            patch.object(runtime, "load_backend", return_value=self.server),
+            patch.object(runtime, "_monitor", return_value=self.page),
+            patch.object(runtime, "_runtime_config", return_value={"monitor": {}}),
+            patch.object(runtime, "_store_jobs", return_value=JOBS),
+            patch.object(runtime, "_stop_requested", return_value=False),
+            patch.object(runtime, "_risk_lock_reason", return_value=None),
+            patch.object(runtime, "_background_task_running", return_value=False),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _send(self, platform: str, text: str = "您好，方便沟通。"):
+        conversation_id = runtime.list_conversations(platform)["conversations"][0]["id"]
+        return runtime.send_reply(
+            conversation_id, text,
+            confirm=runtime.REPLY_CONFIRM_PHRASE, risk_acknowledged=True,
+        )
+
+    def test_zhilian_reply_goes_through_the_users_own_tab(self):
+        result = self._send("zhilian")
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(self.page.sent), 1)
+        self.assertIn("peer-0001", self.page.sent[0])
+        self.assertIn("您好，方便沟通。", self.page.sent[0])
+        self.assertEqual(self.page.new_tabs, [], "the user's tab is reused")
+        self.assertNotIn("z-tab", self.page.closed, "the user's own tab is never closed")
+
+    def test_zhilian_reply_without_platform_confirmation_is_an_error(self):
+        self.page.send_result = {"error": "平台 12 秒内没有确认"}
+        with self.assertRaises(ValueError) as ctx:
+            self._send("zhilian")
+        self.assertIn("智联", str(ctx.exception))
+
+    def test_zhilian_reply_needs_the_peer_id_from_the_interface_listing(self):
+        self.page.zhilian_mode = "error"  # listing falls back to the DOM: no peer id
+        with self.assertRaises(ValueError):
+            self._send("zhilian")
+        self.assertEqual(self.page.sent, [])
+
+    def test_confirmation_phrase_is_still_required(self):
+        conversation_id = runtime.list_conversations("zhilian")["conversations"][0]["id"]
+        with self.assertRaises(ValueError):
+            runtime.send_reply(conversation_id, "您好", confirm="确认", risk_acknowledged=True)
+        with self.assertRaises(ValueError):
+            runtime.send_reply(
+                conversation_id, "您好", confirm=runtime.REPLY_CONFIRM_PHRASE, risk_acknowledged=False,
+            )
+        self.assertEqual(self.page.sent, [])
+
+    def test_zhilian_thread_allows_reply_only_when_the_peer_id_is_known(self):
+        conversation_id = runtime.list_conversations("zhilian")["conversations"][0]["id"]
+        self.assertTrue(runtime.get_thread(conversation_id, "zhilian")["reply_allowed"])
+        runtime._zhilian_history_params.clear()
+        thread = runtime.get_thread(conversation_id, "zhilian")
+        self.assertFalse(thread["reply_allowed"])
+        self.assertIn("刷新会话列表", thread["reply_block_reason"])
+
+    def test_liepin_reply_clicks_the_contact_then_types_and_sends(self):
+        result = self._send("liepin")
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(self.page.typed), 1)
+        self.assertIn("您好，方便沟通。", self.page.typed[0])
+        self.assertEqual(self.page.new_tabs, [], "the user's drawer tab is reused")
+        self.assertNotIn("l-tab", self.page.closed)
+
+    def test_liepin_reply_accepts_a_page_history_echo_when_the_editor_kept_the_text(self):
+        self.page.type_result = {"ok": True, "cleared": False}
+        # LIEPIN_HISTORY already holds our sentence 「您好，可以」.
+        self.assertTrue(self._send("liepin", "您好，可以")["ok"])
+
+    def test_liepin_reply_is_unconfirmed_without_echo_or_cleared_editor(self):
+        self.page.type_result = {"ok": True, "cleared": False}
+        with self.assertRaises(ValueError) as ctx:
+            self._send("liepin", "全新的一句话")
+        self.assertIn("猎聘", str(ctx.exception))
+
+    def test_liepin_reply_refuses_when_the_contact_is_not_unique(self):
+        self.page.open_result = {"ok": False, "reason": "ambiguous"}
+        with self.assertRaises(ValueError):
+            self._send("liepin")
+        self.assertEqual(self.page.typed, [])
+
+    def test_captcha_pages_are_never_used_as_a_chat_tab(self):
+        self.page.tabs.insert(0, {
+            "targetId": "captcha-tab",
+            "url": "https://safe.liepin.com/page/liepin/captchaPage_PC?euuid=fixture",
+        })
+        self.assertEqual(runtime._find_chat_tab(self.page, "liepin"), "l-tab")
+
+    def test_51job_has_no_reply_path(self):
+        entry = {"id": "e" * 32, "platform": "51job", "hr_name": "示例", "company": "虚构"}
+        runtime._remember_conversations([{
+            **entry, "title": "", "hr_title": "", "last_message": "", "last_message_at": "", "unread": False,
+        }], "51job")
+        with self.assertRaises(ValueError):
+            runtime.send_reply(
+                "e" * 32, "您好", confirm=runtime.REPLY_CONFIRM_PHRASE, risk_acknowledged=True,
+            )
 
 
 if __name__ == "__main__":

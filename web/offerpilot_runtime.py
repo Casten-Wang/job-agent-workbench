@@ -2682,6 +2682,8 @@ def _find_chat_tab(monitor: Any, platform: str) -> str | None:
     fragments = _CHAT_TAB_URL_FRAGMENTS.get(platform, ())
     for target in _boss_page_targets(monitor):
         url = str(target.get("url") or "")
+        if "captcha" in url.lower():
+            continue  # a verification page is never a chat page
         if any(fragment in url for fragment in fragments):
             target_id = str(target.get("targetId") or "").strip()
             if target_id:
@@ -2889,6 +2891,15 @@ def _thread_response(
             allowed, reason = _reply_gate(server, config)
         except Exception:
             allowed, reason = False, "回复前检查失败，请稍后重试"
+    elif platform in REPLY_PLATFORMS:
+        try:
+            server = load_backend()
+            config = _runtime_config(server)
+            allowed, reason = _reply_gate(server, config)
+        except Exception:
+            allowed, reason = False, "回复前检查失败，请稍后重试"
+        if allowed and not _reply_target_known(entry, platform):
+            allowed, reason = False, "请先刷新会话列表，再回复该会话"
     else:
         allowed, reason = False, "只读模式：当前平台不发送回复"
     if stale:
@@ -4496,6 +4507,205 @@ def _record_local_reply(entry: dict[str, Any], text: str) -> dict[str, Any]:
     return dict(message)
 
 
+# Platforms where the workbench can send a confirmed reply through the user's
+# own logged-in page.  51job has no in-site chat and stays read-only.
+REPLY_PLATFORMS = ("boss", "zhilian", "liepin")
+
+
+def _reply_target_known(entry: dict[str, Any], platform: str) -> bool:
+    """Whether the in-memory listing still holds what is needed to find the chat."""
+    if not str(entry.get("hr_name") or "").strip() or entry.get("ambiguous"):
+        return False
+    key = str(entry.get("id") or "")
+    if platform == "zhilian":
+        params = _zhilian_history_params.get(key) or {}
+        return bool(params.get("peer_id"))
+    return True
+
+
+def _zhilian_send_expression(peer_id: str, text: str) -> str:
+    """Fixed expression: the page's own NIM SDK sends one text message."""
+    return f"""
+(async () => {{
+    try {{
+        const engine = window.imEngine;
+        const instance = engine && (engine.instance || (engine.sendText ? engine : null));
+        if (!instance || !instance.sendText) {{
+            return JSON.stringify({{ok: false, reason: 'NIM 未就绪'}});
+        }}
+        const result = await new Promise((resolve) => {{
+            const timer = setTimeout(() => resolve({{error: '平台 12 秒内没有确认'}}), 12000);
+            try {{
+                instance.sendText({{
+                    scene: 'p2p', to: {_boss_js_string(peer_id)}, text: {_boss_js_string(text)},
+                    done: (err, msg) => {{
+                        clearTimeout(timer);
+                        if (err) {{ resolve({{error: String((err && err.message) || err)}}); return; }}
+                        resolve({{ok: true, accepted: !!(msg && (msg.idServer || msg.status === 'success'))}});
+                    }},
+                }});
+            }} catch (err) {{
+                clearTimeout(timer);
+                resolve({{error: String((err && err.message) || err)}});
+            }}
+        }});
+        return JSON.stringify(result);
+    }} catch (err) {{
+        return JSON.stringify({{error: String((err && err.message) || err)}});
+    }}
+}})()
+"""
+
+
+def _send_zhilian_reply(entry: dict[str, Any], text: str, config: dict[str, Any]) -> bool:
+    monitor = _monitor()
+    params = _zhilian_history_params.get(str(entry.get("id") or "")) or {}
+    peer_id = str(params.get("peer_id") or "")
+    if not peer_id:
+        raise ValueError("请先刷新会话列表，再回复该会话")
+    deadline = _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    tab, owned = _acquire_chat_tab(monitor, config, deadline, "zhilian")
+    if not tab:
+        raise OfferPilotUnavailable("无法打开智联招聘聊天页面，请检查登录状态")
+    try:
+        monitor._inspect_monitor_page(tab, config)
+        deadline.check()
+        raw = _chat_evaluate(monitor, tab, _zhilian_send_expression(peer_id, text), deadline)
+    finally:
+        if owned:
+            monitor.close_tab(tab)
+    payload = _json_object(raw)
+    return bool(isinstance(payload, dict) and payload.get("ok") and not payload.get("error"))
+
+
+_LIEPIN_CONTACT_PICK = r"""
+    const hrName = __HR_NAME__;
+    const company = __COMPANY__;
+    const wanted = __OPPOSITE_ID__;
+    const items = Array.from(document.querySelectorAll('.im-ui-contact-list-item'));
+    const hits = [];
+    for (const el of items) {
+        const candidate = contactOf(el);
+        if (!candidate) continue;
+        if (wanted && String(candidate.oppositeImId || '') === wanted) { hits.push(el); continue; }
+        const name = String(candidate.name || '').trim();
+        const org = String(candidate.company || '').trim();
+        if (!wanted && name === hrName && (!company || org === company)) hits.push(el);
+    }
+"""
+
+
+def _liepin_fill(script: str, entry: dict[str, Any], params: dict[str, Any] | None, text: str = "") -> str:
+    script = script.replace("__HR_NAME__", json.dumps(entry.get("hr_name") or "", ensure_ascii=False))
+    script = script.replace("__COMPANY__", json.dumps(entry.get("company") or "", ensure_ascii=False))
+    script = script.replace(
+        "__OPPOSITE_ID__",
+        json.dumps(str((params or {}).get("opposite_im_id") or ""), ensure_ascii=False),
+    )
+    return script.replace("__TEXT__", json.dumps(text, ensure_ascii=False))
+
+
+def _liepin_open_expression(entry: dict[str, Any], params: dict[str, Any] | None) -> str:
+    """Fixed expression: click exactly one matching contact row."""
+    script = (
+        "(() => {\n"
+        + _LIEPIN_PAGE_HELPERS
+        + _LIEPIN_CONTACT_PICK
+        + r"""
+    if (hits.length !== 1) return JSON.stringify({ok: false, reason: hits.length ? 'ambiguous' : 'not_found'});
+    hits[0].click();
+    return JSON.stringify({ok: true});
+})()
+"""
+    )
+    return _liepin_fill(script, entry, params)
+
+
+_LIEPIN_EDITOR_PICK = r"""
+    const visible = (el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const scope = document.querySelector('#im-basic-contact') || document.body;
+    const editors = Array.from(scope.querySelectorAll('textarea, [contenteditable="true"]')).filter(visible);
+    const editor = editors[editors.length - 1] || null;
+    const readEditor = () => editor ? String(editor.value !== undefined ? editor.value : editor.innerText || '') : '';
+"""
+
+
+def _liepin_type_expression(text: str) -> str:
+    """Fixed expression: put the text in the open chat's editor and click send."""
+    script = (
+        "(async () => {\n"
+        + _LIEPIN_EDITOR_PICK
+        + r"""
+    if (!editor) return JSON.stringify({ok: false, reason: 'no_editor'});
+    editor.focus();
+    if (editor.tagName === 'TEXTAREA') {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(editor, __TEXT__);
+        editor.dispatchEvent(new Event('input', {bubbles: true}));
+    } else {
+        document.execCommand('selectAll', false, null);
+        if (!document.execCommand('insertText', false, __TEXT__)) {
+            editor.textContent = __TEXT__;
+            editor.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (readEditor().trim() !== __TEXT__.trim()) return JSON.stringify({ok: false, reason: 'text_not_set'});
+    const buttons = Array.from(scope.querySelectorAll('button, [class*="send"], [class*="Send"]')).filter(visible);
+    const button = buttons.find((el) => /^\s*发送\s*$/.test(el.innerText || el.textContent || ''))
+        || buttons.find((el) => /send/i.test(String(el.className)));
+    if (!button) return JSON.stringify({ok: false, reason: 'no_send_button'});
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    return JSON.stringify({ok: true, cleared: readEditor().trim() === ''});
+})()
+"""
+    )
+    return script.replace("__TEXT__", json.dumps(text, ensure_ascii=False))
+
+
+def _send_liepin_reply(entry: dict[str, Any], text: str, config: dict[str, Any]) -> bool:
+    monitor = _monitor()
+    params = _liepin_history_params.get(str(entry.get("id") or ""))
+    deadline = _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    tab, owned = _acquire_chat_tab(monitor, config, deadline, "liepin")
+    if not tab:
+        raise OfferPilotUnavailable("无法打开猎聘聊天页面，请检查登录状态")
+    try:
+        monitor._inspect_monitor_page(tab, config)
+        opened = _json_object(_chat_evaluate(monitor, tab, JS_LIEPIN_ENSURE_DRAWER_WWW, deadline))
+        if not opened or not opened.get("available"):
+            raise OfferPilotUnavailable("无法打开猎聘聊天面板，请检查登录状态")
+        if opened.get("opened") and monitor._wait_or_stop(config, 3):
+            return False
+        clicked = _json_object(
+            _chat_evaluate(monitor, tab, _liepin_open_expression(entry, params), deadline)
+        )
+        if not clicked or not clicked.get("ok"):
+            raise ValueError("无法在猎聘聊天列表里唯一定位该会话，请到平台发送")
+        if monitor._wait_or_stop(config, 2):
+            return False
+        sent = _json_object(_chat_evaluate(monitor, tab, _liepin_type_expression(text), deadline))
+        if not sent or not sent.get("ok"):
+            return False
+        if sent.get("cleared"):
+            return True
+        # The editor kept the text: accept only if the page's own history shows it.
+        raw = _chat_evaluate(monitor, tab, _liepin_history_expression(entry, params), deadline)
+        for message in _liepin_history_messages(raw) or []:
+            if message.get("sender") == "me" and str(message.get("text") or "").strip() == text.strip():
+                return True
+        return False
+    finally:
+        if owned:
+            monitor.close_tab(tab)
+
+
+
 def send_reply(
     conversation_id: Any,
     text: Any,
@@ -4531,28 +4741,35 @@ def send_reply(
     if _background_task_running(server):
         raise ValueError("后台任务运行中，结束后再发送回复")
     entry = _cached_conversation(conversation_id)
-    if str(entry.get("platform") or "boss") != "boss":
-        raise ValueError("当前只支持在 BOSS 直聘发送回复；其他平台为只读")
+    platform = str(entry.get("platform") or "boss")
+    if platform not in REPLY_PLATFORMS:
+        raise ValueError("该平台没有站内聊天，工作台不支持发送回复")
     if not str(entry.get("hr_name") or "").strip():
         raise ValueError("该会话缺少 HR 姓名，无法安全定位，请到平台发送")
     if entry.get("ambiguous"):
         raise ValueError("同一公司有同名 HR，无法安全定位，请到平台发送")
 
     monitor = _monitor()
-    target_id = monitor._open_conversation_from_chat_list(
-        {"hr_name": entry.get("hr_name") or "", "company": entry.get("company") or ""},
-        config,
-        background=True,
-        allow_company_only=False,
-    )
-    if not target_id:
-        raise OfferPilotUnavailable("无法打开该会话，请重新读取会话列表")
-    try:
-        sent = monitor._send_message_in_chat(target_id, cleaned, config)
-    finally:
-        monitor.close_tab(target_id)
+    label = PLATFORM_CHAT_LABELS.get(platform, platform)
+    if platform == "zhilian":
+        sent = _send_zhilian_reply(entry, cleaned, config)
+    elif platform == "liepin":
+        sent = _send_liepin_reply(entry, cleaned, config)
+    else:
+        target_id = monitor._open_conversation_from_chat_list(
+            {"hr_name": entry.get("hr_name") or "", "company": entry.get("company") or ""},
+            config,
+            background=True,
+            allow_company_only=False,
+        )
+        if not target_id:
+            raise OfferPilotUnavailable("无法打开该会话，请重新读取会话列表")
+        try:
+            sent = monitor._send_message_in_chat(target_id, cleaned, config)
+        finally:
+            monitor.close_tab(target_id)
     if not sent:
-        raise ValueError("发送未被平台确认，请到 BOSS 页面核实后再试")
+        raise ValueError(f"发送未被平台确认，请到{label}页面核实后再试")
     message = _record_local_reply(entry, cleaned)
     return {
         "ok": True,

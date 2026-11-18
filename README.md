@@ -116,7 +116,7 @@ google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.offerpilot-ch
 | 猎聘 | 支持 | 支持 | 暂未开放 | 暂未开放 |
 
 - 采集页的「平台」四个都可选，「采集 + 打分 + 筛选」与「只采集」都不再锁定 Boss直聘；完整流程只做到采集、打分、按合格线（默认 60 分，可改，记在浏览器里）自动通过、生成招呼语，停在发送确认前。发送目前只有 Boss直聘 开放，其他平台请把招呼语复制到平台里自己发（工作台会拦下非 Boss 岗位的发送）。
-- 「岗位流水线 › 4 回复」页的 HR 会话读取覆盖 BOSS、智联、猎聘，读过的会话存本机、只有新消息才重读；只有 Boss直聘 能在工作台里回复（每次需确认），智联、猎聘是只读，页面提供「去平台回复」直达按钮。
+- 「岗位流水线 › 4 回复」页的 HR 会话读取覆盖 BOSS、智联、猎聘，读过的会话存本机、只有新消息才重读；Boss直聘、智联、猎聘都能在工作台里回复（每次需输入确认短语并勾选风险提示，用你已登录的 Chrome 页面发送一条）；智联走页面自带的 NIM 发送、猎聘走聊天抽屉的输入框，二者的真实发送还需你自己试发一条确认（见下）；前程无忧没有站内聊天，只读。读不到回复入口时页面给「去平台回复」直达按钮。
 - 能力以内嵌组件 `vendor/offerpilot/src/offerpilot/collection/capabilities.py` 为准；上表没写「支持」的项目前不会执行。
 
 ### 测试
@@ -187,7 +187,7 @@ sh run_web.sh
 
 **Agent 后端**（本次接入，仅后端与路由，未改 `web/static/`）：文字模拟面试新增 `interview-start`、`interview-material-upload`、`interview-reply`、`interview-end`、`interview-drill` 五个动作与 `POST /api/interview/stream` SSE 出题；出题、追问、复盘和重练只在配置了模型后调用，失败不生成占位题目，复盘也不写入简历。项目核验桥接新增 `GET /api/resume-agent/materials`、`GET|POST /api/interview-agent/sessions...`，只转发到本机 `127.0.0.1:18747` 的外部引擎，需要 `OFFERPILOT_CAREER_AGENT_TOKEN`；另有 `GET /api/agent/capabilities` 返回无凭据的能力地图。项目核验的引擎源码不在本仓库。接口见 [web/INTERVIEW-TEXT-API.md](web/INTERVIEW-TEXT-API.md) 与 [web/CAREER-AGENT-API.md](web/CAREER-AGENT-API.md)。
 
-采集窗口可选 BOSS 直聘、智联招聘、前程无忧与猎聘（`platform` 显式传给本次任务，不改 `config.yaml` 的 `enabled`）；`full` 投递全流程仍只接受 BOSS。HR 会话通过内嵌运行时只读读取：`GET /api/offerpilot/conversations?platform=...` 解析对应平台的聊天列表，`GET /api/offerpilot/conversation?platform=...` 读取单条会话的消息；`platform=all` 聚合四个平台，一个平台读取失败时其余平台照常返回并在 `platforms` / `errors` 里说明原因。BOSS、智联已在真实浏览器中验证可读；猎聘「我的沟通」抽屉的选择器尚未在真实页面验证。前程无忧没有站内聊天，HR 沟通通过微信扫码完成，工作台不读取其消息，接口对 51job 返回不可用，之后不再验证。51job 的岗位采集不受此影响。回复走 `offerpilot-reply` 动作且只支持 BOSS，必须带确认短语、风险勾选，并满足停止状态、风险锁与「最近 10 分钟会话列表」检查后只发送一条（不设发送时间段）。会话正文脱敏后写入本机 `web/data/`（电话、邮箱、微信替换为占位），该目录不提交；列表每次刷新，未变会话不重开，读取失败保留旧正文并在会话上标 `stale`，落盘缓存不作为发送依据。活动日志只记动作与公司名。审批通过后的受控投递只有设计提案，尚未实现：[web/AUTO-DELIVERY-DESIGN.md](web/AUTO-DELIVERY-DESIGN.md)。
+采集窗口可选 BOSS 直聘、智联招聘、前程无忧与猎聘（`platform` 显式传给本次任务，不改 `config.yaml` 的 `enabled`）；`full` 投递全流程仍只接受 BOSS。HR 会话通过内嵌运行时只读读取：`GET /api/offerpilot/conversations?platform=...` 解析对应平台的聊天列表，`GET /api/offerpilot/conversation?platform=...` 读取单条会话的消息；`platform=all` 聚合四个平台，一个平台读取失败时其余平台照常返回并在 `platforms` / `errors` 里说明原因。BOSS、智联已在真实浏览器中验证可读；猎聘「我的沟通」抽屉的选择器尚未在真实页面验证。前程无忧没有站内聊天，HR 沟通通过微信扫码完成，工作台不读取其消息，接口对 51job 返回不可用，之后不再验证。51job 的岗位采集不受此影响。回复走 `offerpilot-reply` 动作，支持 BOSS、智联、猎聘（智联、猎聘需要本次列表读取带到接口 id，否则提示先刷新会话列表；真实发送行为尚未在真实账号上验证），必须带确认短语、风险勾选，并满足停止状态、风险锁与「最近 10 分钟会话列表」检查后只发送一条（不设发送时间段）。会话正文脱敏后写入本机 `web/data/`（电话、邮箱、微信替换为占位），该目录不提交；列表每次刷新，未变会话不重开，读取失败保留旧正文并在会话上标 `stale`，落盘缓存不作为发送依据。活动日志只记动作与公司名。审批通过后的受控投递只有设计提案，尚未实现：[web/AUTO-DELIVERY-DESIGN.md](web/AUTO-DELIVERY-DESIGN.md)。
 
 界面视觉语言参考项目 [offer_coming](https://github.com/lwt20000321-cmd/offer_coming)。
 

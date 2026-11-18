@@ -5941,7 +5941,7 @@ function renderHrThread() {
   syncHrOpenPlatform(conversation, allowed);
 }
 
-// 不能在工作台里发送的平台（智联、猎聘）：给一个直达该平台官网的按钮，回复在平台里发。
+// 当前会话不能在工作台里发送时（前程无忧、读取失败、风控锁等）：给一个直达该平台官网的按钮，回复在平台里发。
 const HR_PLATFORM_HOMES = {
   boss: 'https://www.zhipin.com/web/geek/chat',
   zhilian: 'https://i.zhaopin.com/',
