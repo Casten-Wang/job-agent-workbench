@@ -188,23 +188,26 @@ class ApprovalMinResidueTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertNotIn(marker, source)
 
-    def test_manual_enqueue_is_only_for_unscored_jobs(self) -> None:
+    def test_manual_enqueue_matches_backend_rules(self) -> None:
         source = self._source()
         self.assertIn("function jobNeedsManualEnqueue(job)", source)
         self.assertIn("enqueueJob(job, enqueueButton, needsManual)", source)
-        self.assertIn("selected.some((job) => jobNeedsManualEnqueue(job))", source)
+        self.assertIn("selected.filter((job) => jobNeedsManualEnqueue(job))", source)
+        self.assertIn("function jobHasDocumentScore(job)", source)
+        self.assertIn("job.mandatory_status === 'unsatisfied'", source)
+        self.assertIn("job.hiring_status === 'closed'", source)
 
     def test_queue_empty_text_mentions_no_threshold(self) -> None:
         source = self._source()
         self.assertIn("待确认队列为空。到「岗位池」把想联系的岗位加入队列。", source)
         self.assertNotIn("达到入队线", source)
 
-    def test_helper_treats_only_missing_scores_as_manual(self) -> None:
+    def test_helper_requires_document_score_and_open_conditions(self) -> None:
         if shutil.which("node") is None:
             self.skipTest("node is not installed")
         source = self._source()
-        start = source.index("function jobNeedsManualEnqueue(job)")
-        end = source.index("\n}\n", start) + 3
+        start = source.index("const DOC_SCORE_SCALE")
+        end = source.index("function formatJobScore(job)")
         script = source[start:end] + (
             "\nconsole.log(JSON.stringify(["
             "jobNeedsManualEnqueue(null),"
@@ -212,13 +215,23 @@ class ApprovalMinResidueTests(unittest.TestCase):
             "jobNeedsManualEnqueue({score:null}),"
             "jobNeedsManualEnqueue({score:'88'}),"
             "jobNeedsManualEnqueue({score:0}),"
-            "jobNeedsManualEnqueue({score:88})"
+            "jobNeedsManualEnqueue({score:88}),"
+            "jobNeedsManualEnqueue({score:88,score_coverage:0.9}),"
+            "jobNeedsManualEnqueue({score:88,score_coverage:0.9,score_scale:DOC_SCORE_SCALE}),"
+            "jobNeedsManualEnqueue({score:88,score_coverage:0,score_scale:DOC_SCORE_SCALE}),"
+            "jobNeedsManualEnqueue({score:88,score_scale:DOC_SCORE_SCALE}),"
+            "jobNeedsManualEnqueue({score:0,score_coverage:0.9,score_scale:DOC_SCORE_SCALE}),"
+            "jobNeedsManualEnqueue({score:88,score_coverage:0.9,score_scale:DOC_SCORE_SCALE,mandatory_status:'unsatisfied'}),"
+            "jobNeedsManualEnqueue({score:88,score_coverage:0.9,score_scale:DOC_SCORE_SCALE,hiring_status:'closed'})"
             "]));\n"
         )
         result = subprocess.run(
             ["node", "-e", script], capture_output=True, text=True, timeout=20, check=True
         )
-        self.assertEqual(json.loads(result.stdout), [True, True, True, True, False, False])
+        self.assertEqual(
+            json.loads(result.stdout),
+            [True, True, True, True, True, True, False, False, True, True, False, True, True],
+        )
 
 
 class LegacyScoreConfigTests(unittest.TestCase):

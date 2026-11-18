@@ -130,6 +130,7 @@ const state = {
   offerpilotConnected: false,
   offerpilotCanStart: false,
   offerpilotJobs: [],
+  offerpilotJobsTotal: 0,
   offerpilotSelection: new Set(),
   offerpilotPreflight: null,
   offerpilotPreflightKey: '',
@@ -141,6 +142,7 @@ const state = {
   offerpilotAutoScoreTouched: false,
   offerpilotPipeline: null,
   jobsSelection: new Set(),
+  jobsEnqueueNotes: {},
   jobsDossierId: null,
   queueReviewId: null,
   queueApprovedSelection: new Set(),
@@ -244,7 +246,6 @@ const dom = {
   jdForm: document.getElementById('jd-form'),
   jdText: document.getElementById('jd-text'),
   jdChannel: document.getElementById('jd-channel'),
-  jdScore: document.getElementById('jd-score'),
   jdSubmit: document.getElementById('jd-submit'),
   jdResult: document.getElementById('jd-result'),
   importForm: document.getElementById('import-form'),
@@ -252,6 +253,7 @@ const dom = {
   importResult: document.getElementById('import-result'),
   jobsCount: document.getElementById('jobs-count'),
   jobsEmptyHint: document.getElementById('jobs-empty-hint'),
+  jobsFilterEmptyHint: document.getElementById('jobs-filter-empty-hint'),
   jobsTable: document.getElementById('jobs-table'),
   jobsDossier: document.getElementById('jobs-dossier'),
   jobsDossierBody: document.getElementById('jobs-dossier-body'),
@@ -1709,6 +1711,21 @@ function riskBadgeNode(risk) {
   return node;
 }
 
+// 后端返回的硬筛原因/警告是 {code, message, ...} 对象，旧数据可能是字符串。
+// 统一取出可读文本，避免把对象直接 join 成「[object Object]」。
+function reasonText(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') {
+        return String(item.message || item.reason || item.code || '').trim();
+      }
+      return String(item || '').trim();
+    })
+    .filter(Boolean)
+    .join('；');
+}
+
 function hardFilterNode(job) {
   const raw = job.hard_filter;
   const status = raw && typeof raw === 'object' ? String(raw.status || 'unknown') : String(raw || 'unknown');
@@ -1717,7 +1734,8 @@ function hardFilterNode(job) {
   else if (status === 'reject') node = badge('拒绝', 'bad', '×');
   else node = badge('未知', 'neutral', '?');
   const reasons = raw && typeof raw === 'object' && Array.isArray(raw.reasons) ? raw.reasons : [];
-  if (reasons.length) node.setAttribute('title', `原因：${reasons.join('；')}`);
+  const text = reasonText(reasons);
+  if (text) node.setAttribute('title', `原因：${text}`);
   return node;
 }
 
@@ -1918,22 +1936,53 @@ function materialsOf(job) {
 }
 /* jobs-dossier:end */
 
-// 入队不再比较数字阈值（岗位评分为 0–100 的文档评分）：
-// 只有缺少评分的岗位需要你确认后手动加入，评过分的岗位交给后端按文档规则判定。
+// 岗位评分的两个尺度：旧的手动 0–5 分不参与自动入队，只有岗位文档的
+// 0–100 匹配分（且信息覆盖率 > 0）才算文档评分。后端 enqueue 的判定是
+// 「没有文档评分，或必备条件明确不满足，或岗位已关闭」都需要手动加入。
+const DOC_SCORE_SCALE = '0-100（文档匹配分）';
+
+function jobHasDocumentScore(job) {
+  if (!job || typeof job.score !== 'number' || !Number.isFinite(job.score)) return false;
+  // 快照里 score_scale 为 "100"（文档评分）或 "5"（旧手动分）；岗位原始记录里是完整标签。
+  if (job.score_scale === DOC_SCORE_SCALE || job.score_scale === '100') {
+    return typeof job.score_coverage === 'number' && job.score_coverage > 0;
+  }
+  // 兼容旧快照：没有 score_scale 时，只有带正覆盖率才按文档评分处理。
+  return job.score_scale == null
+    && typeof job.score_coverage === 'number'
+    && job.score_coverage > 0;
+}
+
 function jobNeedsManualEnqueue(job) {
-  return !job || typeof job.score !== 'number' || !Number.isFinite(job.score);
+  if (!job) return true;
+  if (job.mandatory_status === 'unsatisfied' || job.hiring_status === 'closed') return true;
+  return !jobHasDocumentScore(job);
+}
+
+function formatJobScore(job) {
+  if (!job || job.score === null || job.score === undefined || job.score === '') return '未评分';
+  const number = Number(job.score);
+  if (!Number.isFinite(number)) return '未评分';
+  if (jobHasDocumentScore(job) || number > 5) {
+    return `${Math.round(number)}/100`;
+  }
+  return `${number}/5`;
 }
 
 function renderJobs(snapshot) {
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
   const transitions = snapshot.transitions || {};
   dom.jobsCount.textContent = `显示 ${jobs.length} 条`;
-  if (dom.jobsEmptyHint) dom.jobsEmptyHint.hidden = jobs.length > 0;
+  // 空表有两种原因：岗位池确实为空，或当前筛选没有命中。分开提示，
+  // 否则用户会被引导去重新采集，而其实池子里已经有岗位。
+  const allJobs = snapshot.scope && Number.isFinite(Number(snapshot.scope.all_jobs))
+    ? Number(snapshot.scope.all_jobs)
+    : null;
+  const filteredEmpty = jobs.length === 0 && allJobs !== null && allJobs > 0;
+  if (dom.jobsEmptyHint) dom.jobsEmptyHint.hidden = jobs.length > 0 || filteredEmpty;
+  if (dom.jobsFilterEmptyHint) dom.jobsFilterEmptyHint.hidden = !filteredEmpty;
 
-  const visibleIds = new Set(jobs.map((job) => String(job.id)));
-  state.jobsSelection.forEach((id) => {
-    if (!visibleIds.has(id)) state.jobsSelection.delete(id);
-  });
+  // 选择按岗位 id 保留：切换筛选只隐藏行，不清掉已选中的岗位。
 
   const rows = jobs.map((job) => {
     const jobId = String(job.id);
@@ -1953,7 +2002,7 @@ function renderJobs(snapshot) {
     const warningCell = warnings.length
       ? badge(String(warnings.length), 'warn', '!')
       : el('span', { className: 'muted', text: '0' });
-    if (warnings.length) warningCell.setAttribute('title', warnings.join('；'));
+    if (warnings.length) warningCell.setAttribute('title', reasonText(warnings));
     const riskNode = riskBadgeNode(job.risk);
 
     const actions = el('div', { className: 'row-actions jobs-actions' });
@@ -1969,8 +2018,8 @@ function renderJobs(snapshot) {
       enqueueButton.title = '该岗位已在审批队列中';
       enqueueButton.setAttribute('aria-label', '已在审批队列（不可重复加入）');
     } else if (needsManual) {
-      enqueueButton.title = '未按岗位文档评分；点击后手动加入待确认队列';
-      enqueueButton.setAttribute('aria-label', '手动加入审批队列（该岗位尚未评分，需你自行判断）');
+      enqueueButton.title = '该岗位不会自动通过（没有文档评分、必备条件不满足或已关闭）；点击后手动加入待确认队列';
+      enqueueButton.setAttribute('aria-label', '手动加入审批队列（该岗位需要你自行判断，并选择手动加入原因）');
     } else {
       enqueueButton.title = '只加入待确认队列，不投递';
       enqueueButton.setAttribute('aria-label', '加入审批队列（只加入待确认队列，不投递）');
@@ -2020,10 +2069,21 @@ function renderJobs(snapshot) {
     dossierButton.addEventListener('click', () => openJobDossier(job));
     actions.append(dossierButton);
 
+    // 入队失败（未评分、必备条件不满足、已关闭、城市不符等）的岗位保留勾选，
+    // 并在行内写明原因，避免用户只看到一条汇总文案。
+    const enqueueNote = state.jobsEnqueueNotes[jobId];
+    if (enqueueNote) {
+      actions.append(el('span', {
+        className: 'terminal-note jobs-enqueue-note',
+        text: enqueueNote,
+        attrs: { title: enqueueNote }
+      }));
+    }
+
     const companyText = String(job.company || '未填写公司');
     const titleText = String(job.title || '未填写岗位');
     const platformText = channelLabel(job.source_channel);
-    const scoreText = formatScore(job.score);
+    const scoreText = formatJobScore(job);
     const scoreNode = el('span', {
       className: scoreText === '未评分' ? 'jobs-score jobs-score-empty' : 'jobs-score',
       text: scoreText
@@ -2396,7 +2456,14 @@ function closeQueueReview() {
 function syncJobsSelection(jobs) {
   const total = jobs.length;
   const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id))).length;
-  if (dom.jobsSelectionCount) dom.jobsSelectionCount.textContent = `已选 ${selected} 条`;
+  // 切换筛选后，已选但当前不可见的岗位仍保留在选择里；把数量显式告诉用户。
+  const visibleIds = new Set(jobs.map((job) => String(job.id)));
+  const hidden = Array.from(state.jobsSelection).filter((id) => !visibleIds.has(id)).length;
+  if (dom.jobsSelectionCount) {
+    dom.jobsSelectionCount.textContent = hidden
+      ? `已选 ${selected} 条（另有 ${hidden} 条已选未显示）`
+      : `已选 ${selected} 条`;
+  }
   if (dom.jobsSelectAll) {
     dom.jobsSelectAll.checked = total > 0 && selected === total;
     dom.jobsSelectAll.indeterminate = selected > 0 && selected < total;
@@ -3343,7 +3410,10 @@ function renderOfferPilotJobs() {
       String(job.company || '—'),
       String(job.city || '—'),
       String(job.salary || '—'),
-      job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score),
+      // 采集结果的评分都是 0–100 的文档匹配分；0 分也是有效评分，不能显示成「—」。
+      job.score === undefined || job.score === null || !Number.isFinite(Number(job.score))
+        ? '—'
+        : `${Math.round(Number(job.score))}/100`,
       OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
     ]),
     emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '采集组件还没准备好。'
@@ -3371,20 +3441,31 @@ async function loadOfferPilotJobs(options = {}) {
     const data = await parseResponse(response);
     if (state.mode !== requestedMode) return;
     const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    const reportedTotal = Number(data.total);
+    const total = Number.isFinite(reportedTotal) && reportedTotal >= jobs.length
+      ? reportedTotal
+      : jobs.length;
     state.offerpilotJobs = jobs;
+    state.offerpilotJobsTotal = total;
     state.offerpilotJobsLoaded = true;
     const validIds = new Set(jobs.map((job) => String(job.id || '')).filter(Boolean));
     state.offerpilotSelection.forEach((id) => {
       if (!validIds.has(id)) state.offerpilotSelection.delete(id);
     });
     if (dom.offerpilotJobsCount) {
-      dom.offerpilotJobsCount.textContent = `共 ${jobs.length} 条`;
+      dom.offerpilotJobsCount.textContent = total > jobs.length
+        ? `显示前 ${jobs.length} 条 / 共 ${total} 条`
+        : `共 ${total} 条`;
     }
     renderOfferPilotJobs();
-    if (options.announce) setStatus(`读到 ${jobs.length} 条采集结果；导入前不会写入岗位池。`, 'ok');
+    if (options.announce) {
+      const scope = total > jobs.length ? `显示前 ${jobs.length} 条（共 ${total} 条）` : `读到 ${jobs.length} 条`;
+      setStatus(`${scope}采集结果；导入前不会写入岗位池。`, 'ok');
+    }
   } catch (error) {
     state.offerpilotJobsLoaded = false;
     state.offerpilotJobs = [];
+    state.offerpilotJobsTotal = 0;
     state.offerpilotSelection.clear();
     if (dom.offerpilotJobsCount) dom.offerpilotJobsCount.textContent = '读取失败';
     if (dom.offerpilotJobsTable) {
@@ -3545,6 +3626,16 @@ function markTaskImported(taskId, imported) {
   }
 }
 
+const IMPORT_CHUNK_SIZE = 100;
+
+function chunkList(values, size = IMPORT_CHUNK_SIZE) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
 async function maybeAutoImportCollected(task) {
   if (!task || !state.offerpilotCanStart) return;
   if (state.offerpilotTaskActive || state.offerpilotAutoImporting) return;
@@ -3556,38 +3647,62 @@ async function maybeAutoImportCollected(task) {
   const full = String(task.mode || '') === 'full';
   state.offerpilotAutoImporting = true;
   markTaskImported(task.id, true);
+  const summary = { added: 0, duplicates: 0, failed: 0, processed: 0 };
+  let lastData = null;
+  let firstError = '';
   try {
-    const payload = full
-      ? { ids, data_mode: state.mode, task_id: String(task.id || '') }
-      : { ids, data_mode: state.mode };
-    const data = await postAction(full ? 'offerpilot-automate' : 'offerpilot-import', payload);
-    if (data && data.ok) {
-      const message = full
-        ? String(data.message || '流程已停在发送确认前')
-        : `采集完成，${data.message || '已自动导入岗位池'}`;
-      if (full) state.offerpilotPipeline = data;
-      renderPipelineStatus();
-      const collectView = document.getElementById('view-collect');
-      const onCollect = collectView && !collectView.hidden;
-      showInline(dom.offerpilotResult, message, 'ok');
-      await loadState();
-      renderOfferPilotJobs();
-      if (full) {
-        // 采集 → 评分 → 入队 → 招呼语 都是自动的，完成后直接落到审批队列。
-        showView('queue');
-        setStatus(`${message} 请在「已通过，可以联系」里核对后发送。`, 'ok');
-      } else if (onCollect) {
-        // 采集 → 自动导入 → 挑选岗位 是同一条主线，完成后直接落到岗位表。
-        showView('jobs');
-        setStatus(`${message} 已跳到岗位池，挑好后加入审批队列。`, 'ok');
-      } else {
-        setStatus(message, 'ok');
+    // 后端单次最多接收 100 条；超过时按 100 条分块顺序处理，
+    // 一块失败不影响其他块，也不把整个任务标回未导入。
+    for (const chunk of chunkList(ids)) {
+      try {
+        const payload = full
+          ? { ids: chunk, data_mode: state.mode, task_id: String(task.id || '') }
+          : { ids: chunk, data_mode: state.mode };
+        const data = await postAction(full ? 'offerpilot-automate' : 'offerpilot-import', payload);
+        if (!data || data.ok === false) {
+          summary.failed += chunk.length;
+          firstError = firstError || String((data && data.message) || '');
+          continue;
+        }
+        lastData = data;
+        summary.processed += chunk.length;
+        summary.added += Array.isArray(data.added) ? data.added.length : 0;
+        summary.duplicates += Number(data.duplicates) || 0;
+      } catch (error) {
+        summary.failed += chunk.length;
+        firstError = firstError || friendlyError(error);
       }
     }
-  } catch (error) {
-    // Let the next refresh retry if the import failed.
-    markTaskImported(task.id, false);
-    showInline(dom.offerpilotResult, `自动导入失败：${friendlyError(error)}。可在下方点击「导入全部到岗位池」重试。`, 'error');
+    if (!summary.processed) {
+      // 所有分块都失败：保留可重试状态，下次刷新会再试。
+      markTaskImported(task.id, false);
+      const reason = firstError || '服务没有返回结果';
+      showInline(dom.offerpilotResult, `自动导入没有成功：${reason}。稍后刷新会重试，也可点「导入全部到岗位池」。`, 'error');
+      return;
+    }
+    let message = full
+      ? String((lastData && lastData.message) || '流程已停在发送确认前')
+      : `采集完成，已自动导入 ${summary.added} 条岗位`;
+    if (summary.duplicates) message += `；跳过 ${summary.duplicates} 条重复记录`;
+    if (summary.failed) message += `；另有 ${summary.failed} 条分块导入失败，可在采集结果里重新导入`;
+    if (full && lastData) state.offerpilotPipeline = lastData;
+    renderPipelineStatus();
+    const collectView = document.getElementById('view-collect');
+    const onCollect = collectView && !collectView.hidden;
+    showInline(dom.offerpilotResult, message, summary.failed ? 'warn' : 'ok');
+    await loadState();
+    renderOfferPilotJobs();
+    if (full) {
+      // 采集 → 评分 → 入队 → 招呼语 都是自动的，完成后直接落到审批队列。
+      showView('queue');
+      setStatus(`${message} 请在「已通过，可以联系」里核对后发送。`, summary.failed ? 'warn' : 'ok');
+    } else if (onCollect) {
+      // 采集 → 自动导入 → 挑选岗位 是同一条主线，完成后直接落到岗位表。
+      showView('jobs');
+      setStatus(`${message} 已跳到岗位池，挑好后加入审批队列。`, summary.failed ? 'warn' : 'ok');
+    } else {
+      setStatus(message, summary.failed ? 'warn' : 'ok');
+    }
   } finally {
     state.offerpilotAutoImporting = false;
   }
@@ -3656,6 +3771,32 @@ async function stopOfferPilotTask(taskId, button) {
   await refreshOfferPilot();
 }
 
+// 入队结果里有多个「没进去」的列表；按岗位 id 收集一条可读原因，
+// 渲染在对应行里。行内提示比只给一条汇总文案更容易核对。
+function enqueueNotesFromResult(data) {
+  const notes = {};
+  const put = (id, text) => {
+    const key = String(id || '');
+    if (key && !notes[key]) notes[key] = text;
+  };
+  const each = (rows, fallback) => {
+    (Array.isArray(rows) ? rows : []).forEach((item) => {
+      if (typeof item === 'string') put(item, fallback);
+      else if (item && typeof item === 'object') {
+        put(item.id, String(item.reason || item.message || fallback));
+      }
+    });
+  };
+  each(data.risk_blocked, '疑似高风险岗位，未入队');
+  each(data.city_blocked, '城市不在目标城市，未入队');
+  each(data.mandatory_blocked, '必备条件明确不满足，未自动入队');
+  each(data.closed_blocked, '岗位已关闭或失效，未自动入队');
+  each(data.unscored, '未评分，未自动入队');
+  each(data.dropped, '不是岗位文档评分，未自动入队');
+  each(data.recent_duplicates, '30 天内已加入或联系过，已跳过');
+  return notes;
+}
+
 async function enqueueJob(job, button, manual = false) {
   return enqueueJobs([job], button, manual);
 }
@@ -3670,7 +3811,16 @@ async function enqueueJobs(jobs, button, manual = false) {
   }
   const data = await runAction(button, () => postAction('enqueue', payload));
   if (!data) return;
-  ids.forEach((id) => state.jobsSelection.delete(id));
+  // 只清掉真正入队（含已在队列）的岗位；被丢弃的岗位保留勾选，方便修改后重试。
+  const cleared = new Set();
+  ['accepted', 'manual', 'duplicate'].forEach((key) => {
+    (Array.isArray(data[key]) ? data[key] : []).forEach((item) => {
+      const id = typeof item === 'string' ? item : item && item.id;
+      if (id) cleared.add(String(id));
+    });
+  });
+  ids.forEach((id) => { if (cleared.has(id)) state.jobsSelection.delete(id); });
+  state.jobsEnqueueNotes = enqueueNotesFromResult(data);
   let message = data.message || '已加入待确认队列。';
   if (Array.isArray(data.dropped) && data.dropped.length) {
     message += ` 有 ${data.dropped.length} 条没有加入（没有按岗位文档评分，或不符合加入条件）。`;
@@ -3699,7 +3849,11 @@ async function jobsDeleteSelected(jobs, button) {
       .filter((item) => item && item.reason !== 'not_found')
       .map((item) => String(item.id))
   );
-  ids.forEach((id) => { if (!kept.has(id)) state.jobsSelection.delete(id); });
+  ids.forEach((id) => {
+    if (kept.has(id)) return;
+    state.jobsSelection.delete(id);
+    delete state.jobsEnqueueNotes[id];
+  });
   const message = data.message || `已删除 ${data.deleted || 0} 条。`;
   showInline(dom.jobsActionResult, message, data.deleted ? 'ok' : 'warn');
   await loadState();
@@ -8130,8 +8284,17 @@ function bindEvents() {
       const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
       const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
       if (!selected.length) return;
-      // 不再按分数判定；只有未评分的岗位需要手动加入。
-      const needsManual = selected.some((job) => jobNeedsManualEnqueue(job));
+      // 与后端一致：没有文档评分、必备条件不满足或已关闭的岗位需要手动加入。
+      const manualJobs = selected.filter((job) => jobNeedsManualEnqueue(job));
+      const needsManual = manualJobs.length > 0;
+      if (needsManual) {
+        const reason = dom.jobsOverrideReason ? dom.jobsOverrideReason.value : '所选原因';
+        const ok = window.confirm(
+          `所选 ${selected.length} 条岗位中，其中 ${manualJobs.length} 条将按手动加入处理，原因：${reason}。`
+          + '其余岗位按岗位文档评分自动判断。继续吗？'
+        );
+        if (!ok) return;
+      }
       enqueueJobs(selected, dom.jobsBulkEnqueue, needsManual);
     });
   }
@@ -8162,14 +8325,6 @@ function bindEvents() {
       text,
       source_channel: dom.jdChannel.value.trim() || 'manual_paste'
     };
-    if (dom.jdScore.value.trim() !== '') {
-      const score = Number(dom.jdScore.value);
-      if (!Number.isFinite(score) || score < 0 || score > 5) {
-        setStatus('评分必须是 0–5 之间的数字。', 'error');
-        return;
-      }
-      payload.score = score;
-    }
     const data = await runAction(dom.jdSubmit, () => postAction('parse-jd', payload));
     if (!data) return;
     const parsedJob = data.job && typeof data.job === 'object' ? data.job : {};
@@ -8180,8 +8335,10 @@ function bindEvents() {
     let message = data.message || (data.ok === false
       ? (data.duplicate ? '相同岗位已存在。' : '岗位未录入。')
       : '岗位已录入本地工作区。');
-    if (warnings.length) message += ` 提醒：${warnings.join('；')}`;
-    if (reasons.length) message += ` 被拦下的原因：${reasons.join('；')}`;
+    const warningText = reasonText(warnings);
+    const reasonSummary = reasonText(reasons);
+    if (warningText) message += ` 提醒：${warningText}`;
+    if (reasonSummary) message += ` 被拦下的原因：${reasonSummary}`;
     if (data.ok === false) {
       setStatus(message, data.duplicate ? 'warn' : 'error');
       showInline(dom.jdResult, message, data.duplicate ? 'warn' : 'error');
@@ -8191,7 +8348,6 @@ function bindEvents() {
     setStatus(message, kind);
     showInline(dom.jdResult, message, kind);
     dom.jdText.value = '';
-    dom.jdScore.value = '';
     await loadState();
   });
 

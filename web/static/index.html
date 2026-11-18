@@ -333,7 +333,7 @@
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="jobs-title">岗位池</h2>
-            <p class="view-lede">采集到的岗位会自动进入这里，并按岗位要求和你的简历评分。符合条件的岗位会自动通过，进入「3 通过」；没有评分或必备条件不满足的岗位，可以点「手动加入」，由你自己判断。高风险岗位（如收费、培训贷、保就业承诺）会被拦下，不能加入。这些操作只写本机文件，不访问平台。</p>
+            <p class="view-lede">采集到的岗位会自动进入这里，并按岗位要求和你的简历评分。符合条件的岗位会自动通过，进入「3 通过」；没有文档评分、必备条件不满足或已关闭的岗位，可以点「手动加入」，由你自己判断。高风险岗位（如收费、培训贷、保就业承诺）会被拦下，不能加入。这些操作只写本机文件，不访问平台。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
               <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
@@ -342,6 +342,7 @@
             </nav>
           </header>
           <p class="notice notice-accent" id="jobs-empty-hint">还没有岗位？先到 <button class="ui-link-button" type="button" data-view-link="collect">采集岗位</button> 按关键词采集，或在下方手动录入 JD。</p>
+          <p class="notice notice-accent" id="jobs-filter-empty-hint" hidden>当前筛选下没有岗位；可以调整上方的周期、渠道或状态筛选，或在下方粘贴 JD / 导入岗位 JSON。</p>
 
           <section class="panel" aria-labelledby="jobs-table-title">
             <div class="panel-head">
@@ -402,10 +403,6 @@
                 <div class="form-field">
                   <label for="jd-channel">渠道</label>
                   <input id="jd-channel" type="text" value="manual_paste" autocomplete="off" spellcheck="false">
-                </div>
-                <div class="form-field">
-                  <label for="jd-score">评分（可选，0–5）</label>
-                  <input id="jd-score" type="number" min="0" max="5" step="0.1" inputmode="decimal" placeholder="4.2">
                 </div>
                 <div class="form-field full form-actions">
                   <button class="button" type="submit" id="jd-submit">解析并录入</button>

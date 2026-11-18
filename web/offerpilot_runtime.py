@@ -531,17 +531,17 @@ def get_jobs(limit: int = 100) -> dict[str, Any]:
     try:
         server = load_backend()
     except OfferPilotUnavailable as exc:
-        return {"ok": False, "embedded": True, "error": str(exc), "jobs": [], "count": 0, "limit": limit}
+        return {"ok": False, "embedded": True, "error": str(exc), "jobs": [], "count": 0, "total": 0, "limit": limit}
     try:
         from offerpilot.db import query_jobs, serialize_job  # type: ignore
 
         db = server.get_db(server.DATA_DIR / "offerpilot.db")
         try:
-            rows, _total = query_jobs(db, deleted="active", limit=min(max(int(limit), 1), 500), offset=0)
+            rows, total = query_jobs(db, deleted="active", limit=min(max(int(limit), 1), 500), offset=0)
         finally:
             db.close()
     except Exception as exc:
-        return {"ok": False, "embedded": True, "error": f"岗位自动化 岗位读取失败：{type(exc).__name__}", "jobs": [], "count": 0, "limit": limit}
+        return {"ok": False, "embedded": True, "error": f"岗位自动化 岗位读取失败：{type(exc).__name__}", "jobs": [], "count": 0, "total": 0, "limit": limit}
     allowed = (
         "id", "title", "company", "salary", "city", "experience", "education",
         "recruitment_type", "status", "score", "score_coverage",
@@ -562,7 +562,17 @@ def get_jobs(limit: int = 100) -> dict[str, Any]:
             conditions = []
         job["mandatory_conditions"] = conditions if isinstance(conditions, list) else []
         jobs.append(job)
-    return {"ok": True, "embedded": True, "source": "offerpilot", "read_only": True, "jobs": jobs, "count": len(jobs), "limit": limit}
+    return {
+        "ok": True,
+        "embedded": True,
+        "source": "offerpilot",
+        "read_only": True,
+        "jobs": jobs,
+        "count": len(jobs),
+        # total 是未截断的岗位总数，前端据此提示「显示前 N 条 / 共 M 条」。
+        "total": total,
+        "limit": limit,
+    }
 
 
 def _task_options(mode: str, config: dict[str, Any], raw_options: dict[str, Any] | None) -> dict[str, Any] | None:

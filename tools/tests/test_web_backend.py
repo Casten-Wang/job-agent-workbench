@@ -930,7 +930,7 @@ class JobsDeleteTests(SeededStoreTestCase):
         self.assertNotIn("del-pending-job", queue_ids)
         self.assertIn("demo-job-001", queue_ids)
 
-    def test_deleted_job_is_not_revived_by_reimport(self):
+    def test_soft_deleted_job_is_restored_by_reimport(self):
         store = backend.get_store("user")
         record = {
             "id": "op-del-1", "title": "AI 产品经理", "company": "虚构复活测试公司",
@@ -943,13 +943,16 @@ class JobsDeleteTests(SeededStoreTestCase):
         self.assertEqual(deleted["deleted"], 1)
         self.assertNotIn(job_id, {job["id"] for job in store.jobs()})
 
+        # Importing the same job again restores the soft-deleted record: same id,
+        # one row, no second copy and no "duplicate" report.
         again = backend._import_offerpilot_records(store, [record], ["op-del-1"])
         self.assertEqual(again["added"], [])
-        self.assertEqual(again["duplicates"], 1)
-        self.assertNotIn(job_id, {job["id"] for job in store.jobs()})
+        self.assertEqual(again["duplicates"], 0)
+        self.assertEqual(again["restored"], [job_id])
+        self.assertIn(job_id, {job["id"] for job in store.jobs()})
         self.assertEqual(len([job for job in store.all_jobs() if job.get("offerpilot_id") == "op-del-1"]), 1)
 
-        # Other writers keep soft-deleted records and treat them as duplicates.
+        # Manual JD entry follows the same rule instead of reporting a duplicate.
         text = (
             "测试数据：复活测试\n公司：虚构手动复活公司\n岗位：产品经理\n城市：上海\n"
             "来源渠道：manual_paste\n发布时间：2026-11-14\n记录类型：JD\n职位描述：测试数据。\n"
@@ -958,9 +961,10 @@ class JobsDeleteTests(SeededStoreTestCase):
         self.assertTrue(parsed["ok"])
         backend.delete_jobs({"mode": "user", "ids": [parsed["job"]["id"]]})
         second = backend.parse_jd({"mode": "user", "text": text, "id": "del-manual-jd"})
-        self.assertFalse(second["ok"])
-        self.assertTrue(second["duplicate"])
-        self.assertIn(parsed["job"]["id"], {job["id"] for job in store.all_jobs()})
+        self.assertTrue(second["ok"])
+        self.assertFalse(second.get("duplicate", False))
+        self.assertEqual(second["restored"], [parsed["job"]["id"]])
+        self.assertIn(parsed["job"]["id"], {job["id"] for job in store.jobs()})
 
     def test_delete_validates_ids(self):
         for ids in (None, [], "demo-job-001", [1], [""], ["  "], [f"job-{i}" for i in range(101)]):
@@ -3550,6 +3554,496 @@ class OfferPilotScorerTests(unittest.TestCase):
                 self.assertIn("示例必备条件", row["mandatory_conditions"])
             finally:
                 db.close()
+
+
+class EmptyIdentityDedupTests(SeededStoreTestCase):
+    """Jobs without a company/title must not bypass the 30-day duplicate window."""
+
+    def _add_job(self, job_id: str, **overrides) -> dict:
+        store = backend.get_store("user")
+        rows = store.jobs()
+        job = {
+            "id": job_id,
+            "company": "",
+            "title": "产品助理",
+            "city": "",
+            "salary_text": "",
+            "score": 70,
+            "score_raw": 70,
+            "score_scale": backend.MATCH_SCORE_SCALE_LABEL,
+            "scoring_model": backend.MATCH_SCORE_MODEL,
+            "score_coverage": 0.8,
+            "source_channel": "manual_paste",
+            "source_platform": "boss",
+            "offerpilot_id": f"vendor-{job_id}",
+            "raw_text": "",
+        }
+        job.update(overrides)
+        rows.append(job)
+        store.set_jobs(rows)
+        return job
+
+    def _pending_row(self, job_id: str) -> None:
+        store = backend.get_store("user")
+        rows = store.queue()
+        rows.append({
+            "id": job_id,
+            "score": 70,
+            "company": "",
+            "title": "产品助理",
+            "status": "pending",
+            "Source_Channel": "manual_paste",
+            "created_at": dt.datetime.now(dt.timezone.utc).astimezone().isoformat(),
+            "high_confidence": False,
+        })
+        store.set_queue(rows)
+
+    def test_blank_company_job_is_held_on_second_enqueue(self):
+        self._add_job("blank-job-1")
+        first = backend.enqueue({"mode": "user", "ids": ["blank-job-1"]})
+        self.assertEqual(first["accepted"], ["blank-job-1"])
+        self.assertEqual(first["recent_duplicates"], [])
+        second = backend.enqueue({"mode": "user", "ids": ["blank-job-1"]})
+        self.assertEqual(second["accepted"], [])
+        self.assertEqual([item["id"] for item in second["recent_duplicates"]], ["blank-job-1"])
+
+    def test_blank_identity_jobs_from_different_sources_do_not_block_each_other(self):
+        self._add_job("blank-source-a", offerpilot_id="vendor-a", source_platform="boss")
+        self._add_job("blank-source-b", offerpilot_id="vendor-b", source_platform="zhilian")
+        first = backend.enqueue({"mode": "user", "ids": ["blank-source-a"]})
+        second = backend.enqueue({"mode": "user", "ids": ["blank-source-b"]})
+        self.assertEqual(first["accepted"], ["blank-source-a"])
+        self.assertEqual(second["accepted"], ["blank-source-b"])
+        self.assertEqual(second["recent_duplicates"], [])
+
+    def test_blank_company_job_sent_recently_is_held_at_confirm(self):
+        store = backend.get_store("user")
+        self._add_job("blank-sent-1")
+        self._pending_row("blank-sent-1")
+        stamp = dt.datetime.now(dt.timezone.utc).astimezone().isoformat()
+        store.set_deliveries([{
+            "batch_id": "dlv-blank-1",
+            "status": "completed",
+            "created_at": stamp,
+            "items": [{"job_id": "blank-sent-1", "status": "sent", "finished_at": stamp}],
+        }])
+        result = backend.confirm_queue({"mode": "user", "ids": ["blank-sent-1"]})
+        self.assertEqual(result["confirmed"], [])
+        self.assertEqual([item["id"] for item in result["recent_duplicates"]], ["blank-sent-1"])
+
+    def test_blank_company_send_of_one_source_does_not_block_another(self):
+        store = backend.get_store("user")
+        self._add_job("blank-first", offerpilot_id="vendor-first", source_platform="boss")
+        self._add_job("blank-second", offerpilot_id="vendor-second", source_platform="zhilian")
+        self._pending_row("blank-second")
+        stamp = dt.datetime.now(dt.timezone.utc).astimezone().isoformat()
+        store.set_deliveries([{
+            "batch_id": "dlv-blank-2",
+            "status": "completed",
+            "created_at": stamp,
+            "items": [{"job_id": "blank-first", "status": "sent", "finished_at": stamp}],
+        }])
+        result = backend.confirm_queue({"mode": "user", "ids": ["blank-second"]})
+        self.assertEqual(result["confirmed"], ["blank-second"])
+        self.assertEqual(result["recent_duplicates"], [])
+
+
+class ConfirmQueueLogTests(SeededStoreTestCase):
+    def test_confirm_log_reports_rows_skipped_as_not_pending(self):
+        store = backend.get_store("user")
+        approved = next(row for row in store.queue() if row.get("status") == "approved")
+        result = backend.confirm_queue({"mode": "user", "ids": [str(approved["id"])]})
+        self.assertEqual(result["confirmed"], [])
+        self.assertEqual(result["not_pending"], [str(approved["id"])])
+        latest = store.activity(1)[0]
+        self.assertEqual(latest["action"], "人工通过待确认岗位")
+        self.assertIn("非待确认跳过 1 条", latest["detail"])
+
+
+class DeliverySyncTaskStateTests(unittest.TestCase):
+    """A batch may only be finalized once its own task has really ended."""
+
+    class _Store:
+        def __init__(self, deliveries):
+            self._deliveries = deliveries
+            self.events = []
+            self.saved = 0
+
+        def deliveries(self):
+            return self._deliveries
+
+        def set_deliveries(self, rows):
+            self._deliveries = rows
+            self.saved += 1
+
+        def append_pipeline_event(self, event):
+            self.events.append(event)
+
+    @staticmethod
+    def _server(tasks):
+        runner = MagicMock()
+        runner.status.return_value = {"active": None, "last_task": None, "tasks": tasks}
+        server = MagicMock()
+        server.task_runner = runner
+        return server
+
+    @staticmethod
+    def _batch():
+        return [{
+            "batch_id": "dlv-task",
+            "task_id": "task-1",
+            "status": "starting",
+            "requested": 1,
+            "items": [{"job_id": "job-1", "offerpilot_id": "v1", "company": "A", "title": "甲", "status": "sending"}],
+        }]
+
+    def test_batch_task_still_running_or_queued_is_not_finalized(self):
+        for status in ("running", "stopping", "queued", "pending"):
+            with self.subTest(status=status):
+                store = self._Store(self._batch())
+                boss_state = {
+                    "task": {"id": "task-2", "status": "running"},
+                    "last_task": {"id": "task-2", "stop_reason": ""},
+                }
+                with patch.object(
+                    backend.offerpilot_runtime, "load_backend",
+                    return_value=self._server([{"id": "task-1", "status": status}]),
+                ), patch.object(backend.offerpilot_runtime, "get_greetings") as preview:
+                    backend._sync_deliveries(store, boss_state)
+                preview.assert_not_called()
+                batch = store.deliveries()[0]
+                self.assertEqual(batch["status"], "starting")
+                self.assertEqual(batch["items"][0]["status"], "sending")
+                self.assertEqual(store.events, [])
+                self.assertEqual(store.saved, 0)
+
+    def test_finished_batch_task_is_finalized_even_when_another_task_runs(self):
+        store = self._Store(self._batch())
+        boss_state = {
+            "task": {"id": "task-2", "status": "running"},
+            "last_task": {"id": "task-2", "stop_reason": ""},
+        }
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend",
+            return_value=self._server([{"id": "task-1", "status": "completed"}]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings",
+            return_value={"ok": True, "greetings": [{"id": "v1", "status": "approved"}]},
+        ), patch.object(backend.offerpilot_runtime, "task_stop_reason", return_value=""):
+            backend._sync_deliveries(store, boss_state)
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["status"], "failed")
+        self.assertEqual(batch["items"][0]["status"], "deferred")
+        self.assertEqual(store.saved, 1)
+
+    def test_unknown_batch_task_waits_while_another_task_is_active(self):
+        store = self._Store(self._batch())
+        boss_state = {
+            "task": {"id": "task-2", "status": "running"},
+            "last_task": {"id": "task-2", "stop_reason": ""},
+        }
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend", return_value=self._server([]),
+        ), patch.object(backend.offerpilot_runtime, "get_greetings") as preview:
+            backend._sync_deliveries(store, boss_state)
+        preview.assert_not_called()
+        self.assertEqual(store.deliveries()[0]["status"], "starting")
+        self.assertEqual(store.saved, 0)
+
+    def test_unknown_batch_task_with_no_active_task_is_finalized(self):
+        store = self._Store(self._batch())
+        boss_state = {"task": None, "last_task": {"id": "task-1", "stop_reason": "daily_limit"}}
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend", return_value=self._server([]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings",
+            return_value={"ok": True, "greetings": [{"id": "v1", "status": "approved"}]},
+        ):
+            backend._sync_deliveries(store, boss_state)
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["items"][0]["status"], "deferred")
+        self.assertEqual(batch["items"][0]["error_code"], "daily_limit")
+        self.assertEqual(store.saved, 1)
+
+
+class ParseJdStoreWriteTests(SeededStoreTestCase):
+    """parse_jd rewrites jobs.json, so it must share the serialized store lock."""
+
+    def test_parse_jd_is_serialized_like_import_jobs(self):
+        self.assertTrue(hasattr(backend.parse_jd, "__wrapped__"))
+        self.assertTrue(hasattr(backend.import_jobs, "__wrapped__"))
+
+
+class PoolFingerprintTests(SeededStoreTestCase):
+    """The pool key uses the precheck normalization and keeps the channel."""
+
+    def _job(self, **overrides):
+        job = {
+            "company": "虚构指纹有限公司",
+            "title": "产品经理",
+            "city": "上海",
+            "source_channel": "boss",
+            "raw_text": "",
+        }
+        job.update(overrides)
+        return job
+
+    def test_legal_company_suffix_and_spacing_do_not_make_a_new_job(self):
+        first = self._job()
+        second = self._job(company="虚构指纹", title="产品经理  ")
+        self.assertEqual(backend._job_fingerprint(first), backend._job_fingerprint(second))
+
+    def test_channel_stays_part_of_the_key(self):
+        boss = self._job(source_channel="boss")
+        zhilian = self._job(source_channel="zhilian")
+        self.assertNotEqual(backend._job_fingerprint(boss), backend._job_fingerprint(zhilian))
+
+    def test_blank_identity_falls_back_to_the_jd_text_hash(self):
+        first = self._job(company="未填写公司", title="未填写岗位", raw_text="测试 JD 甲", id="row-a")
+        other = self._job(company="未填写公司", title="未填写岗位", raw_text="测试 JD 乙", id="row-b")
+        twin = self._job(company="", title="", raw_text="测试 JD 甲", id="row-c")
+        self.assertNotEqual(backend._job_fingerprint(first), backend._job_fingerprint(other))
+        self.assertEqual(backend._job_fingerprint(first), backend._job_fingerprint(twin))
+
+    def test_blank_identity_prefers_source_url_then_platform_id(self):
+        url_job = self._job(company="", title="", source_url="https://example.invalid/job/1")
+        other_url = self._job(company="", title="", source_url="https://example.invalid/job/2")
+        platform_job = self._job(company="", title="", source_platform="boss", platform_job_id="p-1")
+        self.assertNotEqual(backend._job_fingerprint(url_job), backend._job_fingerprint(other_url))
+        self.assertIn("platform:boss|p-1", backend._job_fingerprint(platform_job))
+
+    def test_import_jobs_treats_suffixed_company_as_the_same_job(self):
+        first = backend.import_jobs({
+            "mode": "user",
+            "text": json.dumps([{
+                "company": "虚构静态指纹有限公司", "title": "数据分析师", "city": "上海",
+            }], ensure_ascii=False),
+        })
+        self.assertEqual(len(first["added"]), 1)
+        second = backend.import_jobs({
+            "mode": "user",
+            "text": json.dumps([{
+                "company": "虚构静态指纹", "title": "数据分析师", "city": "上海",
+            }], ensure_ascii=False),
+        })
+        self.assertEqual(second["added"], [])
+        self.assertEqual(second["duplicates"], 1)
+
+
+class ImportJobsRestoreTests(SeededStoreTestCase):
+    def test_import_jobs_restores_a_soft_deleted_row(self):
+        payload = json.dumps([{
+            "company": "虚构静态导入公司", "title": "数据分析师", "city": "上海",
+        }], ensure_ascii=False)
+        first = backend.import_jobs({"mode": "user", "text": payload})
+        self.assertEqual(len(first["added"]), 1)
+        job_id = first["added"][0]
+        backend.delete_jobs({"mode": "user", "ids": [job_id]})
+        self.assertNotIn(job_id, {job["id"] for job in backend.get_store("user").jobs()})
+
+        again = backend.import_jobs({"mode": "user", "text": payload})
+        self.assertEqual(again["added"], [])
+        self.assertEqual(again["duplicates"], 0)
+        self.assertEqual(again["restored"], [job_id])
+        self.assertIn(job_id, {job["id"] for job in backend.get_store("user").jobs()})
+        latest = backend.get_store("user").activity(1)[0]
+        self.assertIn("恢复 1 条", latest["detail"])
+
+
+class CollectImportHardFilterTests(SeededStoreTestCase):
+    """Collector imports must run the shared hard filter and keep its verdict."""
+
+    def _runtime_job(self, job_id, **overrides):
+        job = {
+            "id": job_id,
+            "title": "电销专员",
+            "company": "虚构硬筛采集公司",
+            "city": "深圳",
+            "salary": "8-12k",
+            "score": 72,
+            "score_coverage": 0.6,
+        }
+        job.update(overrides)
+        return job
+
+    def test_collect_import_persists_reject_reasons(self):
+        store = backend.get_store("user")
+        result = backend._import_offerpilot_records(
+            store, [self._runtime_job("op-hard-1")], ["op-hard-1"]
+        )
+        self.assertEqual(len(result["added"]), 1)
+        self.assertEqual(result["hard_filter_blocked"], 1)
+        job = next(row for row in store.jobs() if row.get("offerpilot_id") == "op-hard-1")
+        hard = job["hard_filter"]
+        self.assertEqual(hard["status"], "reject")
+        fields = {reason["field"] for reason in hard["reasons"]}
+        self.assertIn("city", fields)
+        self.assertIn("jd_text", fields)
+        self.assertIn("salary_min", fields)
+
+    def test_collect_import_of_a_passing_job_stores_pass(self):
+        store = backend.get_store("user")
+        passing = self._runtime_job(
+            "op-hard-2", title="产品经理", city="上海", salary="20-30k"
+        )
+        result = backend._import_offerpilot_records(store, [passing], ["op-hard-2"])
+        self.assertEqual(result["hard_filter_blocked"], 0)
+        job = next(row for row in store.jobs() if row.get("offerpilot_id") == "op-hard-2")
+        self.assertEqual(job["hard_filter"]["status"], "pass")
+        self.assertEqual(job["hard_filter"]["reasons"], [])
+
+
+class EnqueueHardFilterTests(SeededStoreTestCase):
+    """enqueue re-checks excluded terms and the salary floor even without a prior import."""
+
+    def _add_document_scored_job(self, job_id, **overrides):
+        store = backend.get_store("user")
+        rows = store.jobs()
+        job = {
+            "id": job_id,
+            "company": "虚构入队硬筛公司",
+            "title": "产品经理",
+            "city": "上海",
+            "salary_text": "20-30k",
+            "score": 92,
+            "score_raw": 92,
+            "score_scale": backend.MATCH_SCORE_SCALE_LABEL,
+            "scoring_model": backend.MATCH_SCORE_MODEL,
+            "score_coverage": 0.9,
+            "source_channel": "manual_paste",
+            "raw_text": "",
+        }
+        job.update(overrides)
+        rows.append(job)
+        store.set_jobs(rows)
+        return job
+
+    def test_enqueue_blocks_excluded_term_and_low_salary_with_readable_reason(self):
+        self._add_document_scored_job("hard-enqueue-1", title="电销专员", salary_text="8-12k")
+        result = backend.enqueue({"mode": "user", "ids": ["hard-enqueue-1"]})
+        self.assertEqual(result["accepted"], [])
+        self.assertEqual(
+            [item["id"] for item in result["hard_filter_blocked"]], ["hard-enqueue-1"]
+        )
+        reason = result["hard_filter_blocked"][0]["reason"]
+        self.assertIsInstance(reason, str)
+        self.assertIn("排除词", reason)
+        self.assertIn("薪资下限", reason)
+        self.assertIn("拦截不入队", result["message"])
+
+    def test_enqueue_blocks_excluded_term_found_in_raw_jd_text(self):
+        self._add_document_scored_job("hard-enqueue-2", raw_text="岗位说明：需要接受单休。")
+        result = backend.enqueue({"mode": "user", "ids": ["hard-enqueue-2"]})
+        self.assertEqual([item["id"] for item in result["hard_filter_blocked"]], ["hard-enqueue-2"])
+        self.assertIn("单休", result["hard_filter_blocked"][0]["reason"])
+
+    def test_enqueue_still_accepts_a_job_that_passes_the_hard_filter(self):
+        self._add_document_scored_job("hard-enqueue-3")
+        result = backend.enqueue({"mode": "user", "ids": ["hard-enqueue-3"]})
+        self.assertEqual(result["accepted"], ["hard-enqueue-3"])
+        self.assertEqual(result["hard_filter_blocked"], [])
+
+
+class CityMatchingTests(SeededStoreTestCase):
+    def test_suffix_and_region_are_compared_by_main_city_name(self):
+        self.assertEqual(backend._job_city_reject({"city": "上海·浦东"}, ["上海市"]), "")
+        self.assertEqual(backend._job_city_reject({"city": "上海市"}, ["上海"]), "")
+        self.assertEqual(backend._job_city_reject({"city": "北京-朝阳"}, ["北京市"]), "")
+        self.assertEqual(backend._job_city_reject({"city": "杭州"}, ["上海市", "杭州"]), "")
+
+    def test_city_outside_the_target_list_is_rejected_with_the_same_message(self):
+        self.assertEqual(
+            backend._job_city_reject({"city": "北京市"}, ["上海市"]),
+            "城市不在目标城市列表：北京市",
+        )
+
+    def test_missing_city_passes_without_guessing(self):
+        self.assertEqual(backend._job_city_reject({"city": ""}, ["上海市"]), "")
+        with patch.object(backend.filters, "load_config", return_value={}):
+            self.assertEqual(backend._job_city_reject({"city": "深圳"}, []), "")
+
+    def test_core_name_strips_only_city_level_suffixes(self):
+        self.assertEqual(backend._city_core("上海市浦东新区"), "上海")
+        self.assertEqual(backend._city_core("浙江省"), "浙江")
+        self.assertEqual(backend._city_core("上海"), "上海")
+
+
+class SnapshotJobProjectionTests(SeededStoreTestCase):
+    """The snapshot only gains review fields; the top-level contract is unchanged."""
+
+    def _import(self, job_id, **overrides):
+        store = backend.get_store("user")
+        record = {
+            "id": job_id,
+            "title": "产品经理",
+            "company": "虚构投影公司",
+            "city": "上海",
+            "salary": "20-30k",
+            "score": 82,
+            "score_coverage": 0.75,
+            "mandatory_status": "satisfied",
+            "hiring_status": "open",
+        }
+        record.update(overrides)
+        backend._import_offerpilot_records(store, [record], [job_id])
+        snapshot = backend.snapshot("user")
+        return snapshot, next(
+            row for row in snapshot["jobs"] if row.get("offerpilot_id") == job_id
+        )
+
+    def test_projection_adds_review_fields_without_changing_top_level_keys(self):
+        snapshot, job = self._import("op-proj-1")
+        self.assertEqual(set(snapshot), EXPECTED_SNAPSHOT_KEYS)
+        self.assertEqual(job["mandatory_status"], "satisfied")
+        self.assertEqual(job["hiring_status"], "open")
+        self.assertEqual(job["score_scale"], "100")
+        self.assertEqual(job["score_coverage"], 0.75)
+        self.assertEqual(job["offerpilot_id"], "op-proj-1")
+        self.assertEqual(job["hard_filter"], {"status": "pass", "reasons": []})
+
+    def test_reject_reasons_are_readable_strings(self):
+        _, job = self._import(
+            "op-proj-2", title="电销专员", city="深圳", salary="8-12k"
+        )
+        self.assertEqual(job["hard_filter"]["status"], "reject")
+        self.assertTrue(job["hard_filter"]["reasons"])
+        self.assertTrue(all(isinstance(text, str) for text in job["hard_filter"]["reasons"]))
+        self.assertTrue(
+            any("排除词" in text for text in job["hard_filter"]["reasons"])
+        )
+
+    def test_legacy_manual_score_reports_scale_5_and_unscored_reports_none(self):
+        store = backend.get_store("user")
+        rows = store.jobs()
+        rows.append({
+            "id": "legacy-score-1",
+            "company": "虚构旧评分公司",
+            "title": "产品助理",
+            "city": "上海",
+            "score": 4,
+            "source_channel": "manual_paste",
+        })
+        rows.append({
+            "id": "legacy-noscore-1",
+            "company": "虚构未评分公司",
+            "title": "产品助理",
+            "city": "上海",
+            "source_channel": "manual_paste",
+        })
+        store.set_jobs(rows)
+        snapshot = backend.snapshot("user")
+        by_id = {job["id"]: job for job in snapshot["jobs"]}
+        self.assertEqual(by_id["legacy-score-1"]["score_scale"], "5")
+        self.assertIsNone(by_id["legacy-noscore-1"]["score_scale"])
+
+
+class CollectLimitTests(SeededStoreTestCase):
+    def test_import_and_pipeline_keep_the_100_job_limit(self):
+        ids = [f"collect-{index}" for index in range(101)]
+        with self.assertRaises(backend.ApiError):
+            backend.import_offerpilot_jobs({"mode": "user", "ids": ids})
+        with self.assertRaises(backend.ApiError):
+            backend.run_offerpilot_pipeline({"mode": "user", "ids": ids})
 
 
 if __name__ == "__main__":

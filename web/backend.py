@@ -1332,7 +1332,102 @@ def _contact_plan(
 
 
 def _job_fingerprint(job: dict[str, Any]) -> str:
-    return "|".join(str(job.get(key) or "").strip() for key in ("company", "title", "city", "source_channel"))
+    """Pool-level identity key: normalized company/title/city plus the source channel.
+
+    Company, title and city use the same normalization as ``_dedup_fingerprint``
+    (tools/precheck.py), so two records that differ only by punctuation,
+    spacing, width or a legal company suffix are the same job. The channel stays
+    part of the key: the same opening collected from two platforms may be
+    handled separately. A blank or placeholder company/title falls back to
+    content identity — the JD text hash, a source URL or a platform job id — so
+    two different JDs are never treated as duplicates.
+    """
+    company = str(job.get("company") or "").strip()
+    title = str(job.get("title") or "").strip()
+    channel = str(job.get("source_channel") or "").strip()
+    if company and company != PLACEHOLDER_COMPANY and title and title != PLACEHOLDER_TITLE:
+        return "job:" + precheck.compute_fingerprint(company, title, job.get("city")) + "|" + channel
+    identity = ""
+    raw_text = str(job.get("raw_text") or "").strip()
+    if raw_text:
+        identity = "jd:" + hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    if not identity:
+        for field in ("source_url", "url"):
+            value = str(job.get(field) or "").strip()
+            if value:
+                identity = f"url:{value}"
+                break
+    if not identity:
+        platform = str(job.get("source_platform") or job.get("platform") or "").strip()
+        platform_job_id = str(job.get("platform_job_id") or "").strip()
+        if platform and platform_job_id:
+            identity = f"platform:{platform}|{platform_job_id}"
+    if not identity:
+        offerpilot_id = str(job.get("offerpilot_id") or "").strip()
+        if offerpilot_id:
+            identity = f"offerpilot:{offerpilot_id}"
+    if not identity:
+        own_id = str(job.get("id") or "").strip()
+        identity = f"row:{own_id}" if own_id else ""
+    return f"{identity}|{channel}" if identity else ""
+
+
+def _pool_duplicate_index(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Group pool rows by identity key; rows without any usable identity are skipped."""
+    index: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        key = _job_fingerprint(row)
+        if key:
+            index.setdefault(key, []).append(row)
+    return index
+
+
+def _resolve_pool_duplicate(
+    index: dict[str, list[dict[str, Any]]], fingerprint: str
+) -> tuple[dict[str, Any] | None, bool]:
+    """Find the pool row with this identity; revive it when it was soft-deleted.
+
+    A soft-deleted record is still the same job: adding it again restores it
+    (``deleted_at`` cleared) instead of creating a second copy or reporting an
+    unrelated duplicate. Returns ``(row, restored)``; ``(None, False)`` means
+    the key is new.
+    """
+    if not fingerprint:
+        return None, False
+    for row in index.get(fingerprint) or []:
+        if row.get("deleted_at"):
+            row.pop("deleted_at", None)
+            return row, True
+        return row, False
+    return None, False
+
+
+def _hard_filter_view(value: Any) -> dict[str, Any] | None:
+    """JSON-safe hard-filter view for the snapshot: ``{status, reasons:[可读字符串]}``."""
+    if isinstance(value, str):
+        return {"status": value, "reasons": []}
+    if not isinstance(value, dict):
+        return None
+    raw_reasons = value.get("reasons")
+    reasons: list[str] = []
+    for item in raw_reasons if isinstance(raw_reasons, list) else []:
+        if isinstance(item, dict):
+            text = str(item.get("message") or item.get("code") or "").strip()
+        else:
+            text = str(item or "").strip()
+        if text:
+            reasons.append(text)
+    status = str(value.get("status") or ("reject" if reasons else "unknown"))
+    return {"status": status, "reasons": reasons}
+
+
+def _score_scale_of(job: dict[str, Any]) -> str | None:
+    """Which scale the numeric score is on: ``100`` for document scores, ``5`` for legacy manual ones."""
+    if _score(job) is None:
+        return None
+    if job.get("score_scale") == MATCH_SCORE_SCALE_LABEL:
+        return "100"
+    return "5"
 
 
 def get_store(mode: str = "user", seed_if_empty: bool = True) -> Store:
@@ -1863,13 +1958,40 @@ def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str,
     active_id = str(active.get("id") or "")
     active_status = str(active.get("status") or "")
     last = boss_state.get("last_task") if isinstance(boss_state.get("last_task"), dict) else {}
+    # 本批任务自己的状态：active 只指向当前占用运行时的任务，排队中的批次
+    # 可能不是 active，不能据此提前定稿。
+    task_statuses: dict[str, str] | None = None
+
+    def task_status_of(task_id: str) -> str:
+        nonlocal task_statuses
+        if not task_id:
+            return ""
+        if task_statuses is None:
+            task_statuses = {}
+            try:
+                status = offerpilot_runtime.load_backend().task_runner.status() or {}
+            except Exception:
+                status = {}
+            for task in status.get("tasks") or []:
+                if isinstance(task, dict):
+                    task_statuses[str(task.get("id") or "")] = str(task.get("status") or "")
+        return task_statuses.get(task_id, "")
+
+    unfinished_statuses = {"running", "stopping", "queued", "pending"}
     changed = False
     for batch in deliveries:
         if batch.get("status") not in {"starting", "sending"}:
             continue
         task_id = str(batch.get("task_id") or "")
-        if active_id and task_id and active_id == task_id and active_status in {"running", "stopping"}:
+        if active_id and task_id and active_id == task_id and active_status in unfinished_statuses:
             continue
+        if task_id:
+            own_status = task_status_of(task_id)
+            if own_status in unfinished_statuses:
+                continue
+            if not own_status and active_id:
+                # 查不到本批任务，但运行时仍有别的任务在跑：无法确认本批已结束，等下次同步。
+                continue
         items = [item for item in batch.get("items") or [] if isinstance(item, dict)]
         vendor_ids = [str(item.get("offerpilot_id") or "") for item in items if item.get("offerpilot_id")]
         preview: dict[str, Any] = {}
@@ -2064,15 +2186,18 @@ def _rescale_imported_jobs(store: Store) -> int:
 
 def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]], ids: list[str]) -> dict[str, Any]:
     """Copy selected read-only OfferPilot jobs into the workbench job pool."""
-    # all_jobs(): soft-deleted rows still count as duplicates, so they never revive.
+    # all_jobs(): soft-deleted rows are part of the index; a match revives them.
     rows = store.all_jobs()
-    existing = {_job_fingerprint(row) for row in rows}
+    index = _pool_duplicate_index(rows)
+    hard_cfg = _hard_filter_config(_profile_target_cities(store.profile()))
     by_id = {str(job.get("id")): job for job in runtime_jobs if isinstance(job, dict)}
     added: list[str] = []
+    restored: list[str] = []
+    hard_rejected = 0
     duplicates = 0
     unscored = 0
     backfilled = 0
-    for index, job_id in enumerate(ids, start=1):
+    for position, job_id in enumerate(ids, start=1):
         source = by_id.get(job_id)
         if source is None:
             continue
@@ -2105,41 +2230,67 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
             "hiring_status": source.get("hiring_status") or "unknown",
             "mandatory_conditions": source.get("mandatory_conditions") or [],
         }
-        job = _normalize_job(record, index, platform)
+        # 采集导入同样要过共享硬性筛选（城市/排除词/薪资下限），结果随记录持久化；
+        # 命中 reject 的记录仍然入库，但 enqueue 会按同一规则复查并拦下。
+        hard = filters.apply_hard_filters(_hard_filter_fields(record), hard_cfg)
+        record["hard_filter"] = hard["hard_filter"]
+        if hard["hard_filter"]["status"] == "reject":
+            hard_rejected += 1
+        job = _normalize_job(record, position, platform)
         fingerprint = _job_fingerprint(job)
-        if fingerprint in existing:
-            duplicates += 1
+        match, revived = _resolve_pool_duplicate(index, fingerprint)
+        if match is not None:
+            if revived:
+                restored.append(str(match.get("id") or ""))
+                # Re-apply the current profile's hard filter to the revived row.
+                match["hard_filter"] = record["hard_filter"]
+            else:
+                duplicates += 1
             # Backfill an unscored row; a row already carrying a document score
             # is refreshed because re-scoring is the same rule, not a user edit.
             if score is not None:
-                for row in rows:
-                    if _job_fingerprint(row) != fingerprint:
-                        continue
-                    if row.get("score") is None or record["scoring_model"] == MATCH_SCORE_MODEL:
-                        row["score"] = score
-                        row["score_raw"] = raw_score
-                        row["score_scale"] = record["score_scale"]
-                        row["scoring_model"] = record["scoring_model"]
-                        row["score_coverage"] = coverage
-                        row["mandatory_status"] = record["mandatory_status"]
-                        row["hiring_status"] = record["hiring_status"]
-                        row["mandatory_conditions"] = record["mandatory_conditions"]
-                        backfilled += 1
-                    break
+                if match.get("score") is None or record["scoring_model"] == MATCH_SCORE_MODEL:
+                    match["score"] = score
+                    match["score_raw"] = raw_score
+                    match["score_scale"] = record["score_scale"]
+                    match["scoring_model"] = record["scoring_model"]
+                    match["score_coverage"] = coverage
+                    match["mandatory_status"] = record["mandatory_status"]
+                    match["hiring_status"] = record["hiring_status"]
+                    match["mandatory_conditions"] = record["mandatory_conditions"]
+                    backfilled += 1
             continue
-        existing.add(fingerprint)
         rows.append(job)
+        if fingerprint:
+            index.setdefault(fingerprint, []).append(job)
         added.append(str(job["id"]))
     store.set_jobs(rows)
-    store.log("导入采集岗位", f"新增 {len(added)} 条，重复 {duplicates} 条，未评分 {unscored} 条，回填评分 {backfilled} 条")
+    log_detail = (
+        f"新增 {len(added)} 条，重复 {duplicates} 条，恢复 {len(restored)} 条，"
+        f"硬性筛选拦截 {hard_rejected} 条，未评分 {unscored} 条，回填评分 {backfilled} 条"
+    )
+    store.log("导入采集岗位", log_detail)
     message = f"已导入 {len(added)} 条到岗位池"
     if duplicates:
         message += f"，跳过 {duplicates} 条重复记录"
+    if restored:
+        message += f"，恢复 {len(restored)} 条此前删除的记录"
+    if hard_rejected:
+        message += f"；其中 {hard_rejected} 条命中城市/排除词/薪资硬性筛选，入队时会被拦下"
     if backfilled:
         message += f"；{backfilled} 条已有记录补上了评分"
     if unscored:
         message += f"；其中 {unscored} 条没有评分，不会进入审批队列"
-    return {"ok": True, "added": added, "duplicates": duplicates, "unscored": unscored, "backfilled": backfilled, "message": message}
+    return {
+        "ok": True,
+        "added": added,
+        "duplicates": duplicates,
+        "restored": restored,
+        "hard_filter_blocked": hard_rejected,
+        "unscored": unscored,
+        "backfilled": backfilled,
+        "message": message,
+    }
 
 
 
@@ -2655,9 +2806,13 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
         "mail_rows": _mail_rows(sliced["mails"]),
         "jobs": [{k: job.get(k) for k in (
             "id", "company", "title", "city", "salary_label", "source_channel",
-            "posted_at", "hard_filter", "warnings", "score", "state", "approval",
+            "posted_at", "warnings", "score", "state", "approval",
             "fingerprint", "raw_text", "date", "created_at",
+            "mandatory_status", "hiring_status", "score_coverage", "offerpilot_id",
         )} | {
+            # 硬筛原因在快照里只给可读字符串，原始 reason 字典不直接进界面。
+            "hard_filter": _hard_filter_view(job.get("hard_filter")),
+            "score_scale": _score_scale_of(job),
             "risk": risk_map.get(str(job.get("id"))),
             "materials": materials_by_vendor.get(str(job.get("offerpilot_id") or "")),
         } for job in filtered_jobs],
@@ -2725,6 +2880,7 @@ def decorate_job_analysis(
     }
 
 
+@_serialized_store_write
 def parse_jd(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     text = _bounded_text(payload.get("text"), "JD 文本")
@@ -2744,8 +2900,24 @@ def parse_jd(payload: dict[str, Any]) -> dict[str, Any]:
         decorate_job_analysis(job, profile=profile, cv_text=cv_text, variants=store.variants())
     )
     rows = store.all_jobs()  # keeps soft-deleted records in jobs.json
-    key = _job_fingerprint(job)
-    if any(_job_fingerprint(row) == key for row in rows):
+    index = _pool_duplicate_index(rows)
+    match, restored = _resolve_pool_duplicate(index, _job_fingerprint(job))
+    if match is not None:
+        if restored:
+            # The job was deleted by the user before; adding it again revives
+            # the original record instead of creating a second copy.
+            store.set_jobs(rows)
+            store.log("恢复已删除岗位", f"{match.get('company')} · {match.get('title')}")
+            restored_view = dict(match)
+            restored_view.update(
+                decorate_job_analysis(match, profile=profile, cv_text=cv_text, variants=store.variants())
+            )
+            return {
+                "ok": True,
+                "restored": [str(match.get("id") or "")],
+                "job": restored_view,
+                "message": "该岗位此前已删除，已恢复",
+            }
         store.log("拒绝重复岗位", job["title"], False)
         return {"ok": False, "duplicate": True, "job": job_view, "message": "相同公司、岗位、城市、渠道的记录已存在"}
     rows.append(job)
@@ -2765,20 +2937,39 @@ def import_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     converted = offerpilot_adapter.convert_payload(raw)
     store = get_store(mode)
     rows = store.all_jobs()  # keeps soft-deleted records; they count as duplicates
-    existing = {_job_fingerprint(row) for row in rows}
+    index = _pool_duplicate_index(rows)
     added: list[str] = []
+    restored: list[str] = []
     duplicates = 0
-    for index, record in enumerate(converted["jobs"], start=1):
-        job = _normalize_job(record, index, converted["source_channel"])
-        if _job_fingerprint(job) in existing:
-            duplicates += 1
+    for position, record in enumerate(converted["jobs"], start=1):
+        job = _normalize_job(record, position, converted["source_channel"])
+        key = _job_fingerprint(job)
+        match, revived = _resolve_pool_duplicate(index, key)
+        if match is not None:
+            if revived:
+                restored.append(str(match.get("id") or ""))
+            else:
+                duplicates += 1
             continue
-        existing.add(_job_fingerprint(job))
         rows.append(job)
+        if key:
+            index.setdefault(key, []).append(job)
         added.append(str(job["id"]))
     store.set_jobs(rows)
-    store.log("导入静态岗位池", f"新增 {len(added)} 条，重复 {duplicates} 条")
-    return {"ok": True, "count": len(converted["jobs"]), "added": added, "duplicates": duplicates, "message": f"已导入 {len(added)} 条，跳过 {duplicates} 条重复记录"}
+    log_detail = f"新增 {len(added)} 条，重复 {duplicates} 条"
+    message = f"已导入 {len(added)} 条，跳过 {duplicates} 条重复记录"
+    if restored:
+        log_detail += f"，恢复 {len(restored)} 条此前删除的记录"
+        message += f"，恢复 {len(restored)} 条此前删除的记录"
+    store.log("导入静态岗位池", log_detail)
+    return {
+        "ok": True,
+        "count": len(converted["jobs"]),
+        "added": added,
+        "duplicates": duplicates,
+        "restored": restored,
+        "message": message,
+    }
 
 
 # 30 天内同一岗位（公司、岗位名、城市指纹相同）不重复入队或发送，窗口规则与 tools/precheck.py 一致。
@@ -2818,15 +3009,46 @@ def _parse_day(value: Any) -> dt.date | None:
         return None
 
 
-def _dedup_fingerprint(company: Any, title: Any, city: Any) -> str:
-    """Same fingerprint rule as tools/precheck.py. Placeholder names never match each other."""
+def _dedup_fingerprint(
+    company: Any,
+    title: Any,
+    city: Any,
+    job: dict[str, Any] | None = None,
+    job_id: str = "",
+) -> str:
+    """Same fingerprint rule as tools/precheck.py. Placeholder names never match each other.
+
+    A job without a usable company/title pair is not automatically "unique": it
+    falls back to its own stable identifier so the same job cannot be queued or
+    sent twice within the window. Keys are prefixed with ``id:`` so they can
+    never collide with a company/title fingerprint, and two blank-name jobs with
+    different identifiers stay unrelated. Without any identifier the job cannot
+    be matched and keeps the old empty-key behavior.
+    """
     company_text = str(company or "").strip()
     title_text = str(title or "").strip()
-    if not company_text or company_text == PLACEHOLDER_COMPANY:
-        return ""
-    if not title_text or title_text == PLACEHOLDER_TITLE:
-        return ""
-    return precheck.compute_fingerprint(company_text, title_text, city)
+    if (
+        company_text
+        and company_text != PLACEHOLDER_COMPANY
+        and title_text
+        and title_text != PLACEHOLDER_TITLE
+    ):
+        return precheck.compute_fingerprint(company_text, title_text, city)
+
+    record = job if isinstance(job, dict) else {}
+    for field in ("source_url", "url"):
+        value = str(record.get(field) or "").strip()
+        if value:
+            return f"id:{field}:{value}"
+    offerpilot_id = str(record.get("offerpilot_id") or "").strip()
+    if offerpilot_id:
+        return f"id:offerpilot:{offerpilot_id}"
+    platform = str(record.get("source_platform") or record.get("platform") or "").strip()
+    platform_job_id = str(record.get("platform_job_id") or "").strip()
+    if platform and platform_job_id:
+        return f"id:platform:{platform}|{platform_job_id}"
+    fallback = str(record.get("id") or job_id or "").strip()
+    return f"id:job:{fallback}" if fallback else ""
 
 
 def _recent_duplicate_index(
@@ -2852,7 +3074,7 @@ def _recent_duplicate_index(
         if precheck.normalize_status(status) in precheck.EXCLUDED_STATUSES:
             return
         job = jobs_by_id.get(job_id) or {}
-        key = _dedup_fingerprint(job.get("company"), job.get("title"), job.get("city"))
+        key = _dedup_fingerprint(job.get("company"), job.get("title"), job.get("city"), job, job_id)
         if not key or key in index:
             return
         index[key] = {"job_id": job_id, "date": day.isoformat(), "source": source, "status": status}
@@ -2885,7 +3107,7 @@ def _split_recent_duplicates(
     held: list[dict[str, Any]] = []
     for job_id in job_ids:
         job = jobs_by_id.get(job_id) or {}
-        key = _dedup_fingerprint(job.get("company"), job.get("title"), job.get("city"))
+        key = _dedup_fingerprint(job.get("company"), job.get("title"), job.get("city"), job, job_id)
         hit = index.get(key) if key else None
         if hit is None:
             kept.append(job_id)
@@ -2914,27 +3136,106 @@ def _missing_intake_fields(job: dict[str, Any]) -> list[str]:
     return missing
 
 
-def _job_city_reject(job: dict[str, Any], profile_cities: list[str]) -> str:
-    """Return a reject reason when the job's city is outside the profile's target cities, else "".
+CITY_SUFFIXES = ("新区", "市", "区", "县", "省")
+# 城市由 _job_city_reject 单独复查（需要双向包含匹配），这里只拦排除词与薪资下限。
+HARD_FILTER_BLOCK_FIELDS = ("jd_text", "salary_min")
 
-    The shared filter (tools/filters.py) is the rule owner. Target cities come from
-    profile.json (job_intent.cities), falling back to tools/config.json only when the
-    profile has none. A missing job city passes with a warning, never a guess.
+
+def _profile_target_cities(profile: dict[str, Any]) -> list[str]:
+    """Target cities from profile.json (job_intent.cities); empty when unset."""
+    intent = profile.get("job_intent") if isinstance(profile.get("job_intent"), dict) else {}
+    cities = intent.get("cities") if isinstance(intent.get("cities"), list) else []
+    return [str(city).strip() for city in cities if str(city).strip()]
+
+
+def _hard_filter_config(profile_cities: list[str]) -> dict[str, Any]:
+    """Shared filter config with the profile's target cities taking precedence.
+
+    tools/filters.py stays the rule owner and is only read here; the profile's
+    city list replaces the config default only when the profile has one.
     """
     cfg = dict(filters.load_config())
     if profile_cities:
-        cfg["target_cities"] = profile_cities
-    fields = {
-        "company": job.get("company") or "",
-        "title": job.get("title") or "",
-        "city": job.get("city") or "",
-        "salary_text": job.get("salary_text") or job.get("salary_label") or "",
-        "raw_text": "",
+        cfg["target_cities"] = list(profile_cities)
+    return cfg
+
+
+def _hard_filter_fields(job: dict[str, Any]) -> dict[str, str]:
+    """Fields the shared hard filter reads. JD text stays data, never instructions."""
+    return {
+        "company": str(job.get("company") or ""),
+        "title": str(job.get("title") or ""),
+        "city": str(job.get("city") or ""),
+        "salary_text": str(job.get("salary_text") or job.get("salary_label") or ""),
+        "source_channel": str(job.get("source_channel") or ""),
+        "contact": str(job.get("contact") or ""),
+        "raw_text": str(job.get("raw_text") or ""),
     }
-    result = filters.apply_hard_filters(fields, cfg)
-    reasons = result["hard_filter"]["reasons"]
-    city_reasons = [item for item in reasons if item.get("field") == "city"]
-    return str(city_reasons[0]["message"]) if city_reasons else ""
+
+
+def _hard_filter_block_reason(job: dict[str, Any], cfg: dict[str, Any]) -> str:
+    """Re-check excluded terms and the salary floor; return a readable reason or "".
+
+    City is checked by ``_job_city_reject`` with its own matching rule, so city
+    reasons from the shared filter are ignored here to avoid rejecting a job the
+    city gate already passed (e.g. 上海市 vs 上海·浦东).
+    """
+    result = filters.apply_hard_filters(_hard_filter_fields(job), cfg)
+    messages = [
+        str(item.get("message") or "").strip()
+        for item in result["hard_filter"]["reasons"]
+        if isinstance(item, dict) and item.get("field") in HARD_FILTER_BLOCK_FIELDS
+    ]
+    return "；".join(text for text in messages if text)
+
+
+def _city_core(value: Any) -> str:
+    """主城市名：去掉「·」「-」后面的区域，再去掉 市/区/县/省 后缀。"""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.split(r"[·・\-–—]", text, maxsplit=1)[0].strip()
+    # 「上海市浦东新区」没有分隔符时，主城市名到第一个「市」为止。
+    marker = text.find("市")
+    if 0 < marker < len(text) - 1:
+        text = text[: marker + 1]
+    for suffix in CITY_SUFFIXES:
+        if text.endswith(suffix) and len(text) > len(suffix):
+            text = text[: -len(suffix)].strip()
+            break
+    return text.casefold()
+
+
+def _city_matches(job_city: Any, target: Any) -> bool:
+    """双向包含：上海市 ≈ 上海·浦东 ≈ 上海。"""
+    job_core = _city_core(job_city)
+    target_core = _city_core(target)
+    if not job_core or not target_core:
+        return False
+    return job_core in target_core or target_core in job_core
+
+
+def _job_city_reject(job: dict[str, Any], profile_cities: list[str]) -> str:
+    """Return a reject reason when the job's city is outside the profile's target cities, else "".
+
+    Target cities come from profile.json (job_intent.cities), falling back to
+    tools/config.json only when the profile has none. Both sides are reduced to
+    their main city name (region after ``·``/``-`` dropped, 市/区/县/省 suffix
+    removed) and compared by two-way containment, so 「上海市」matches
+    「上海·浦东」. A missing job city passes with a warning, never a guess.
+    """
+    city = str(job.get("city") or "").strip()
+    if not city:
+        return ""
+    targets = profile_cities or [
+        str(item) for item in filters.load_config().get("target_cities") or []
+    ]
+    targets = [str(item).strip() for item in targets if str(item).strip()]
+    if not targets:
+        return ""
+    if any(_city_matches(city, target) for target in targets):
+        return ""
+    return f"城市不在目标城市列表：{city}"
 
 
 def _append_manual_queue(store: Store, entries: list[dict[str, Any]], reason: str = "") -> list[str]:
@@ -2983,12 +3284,14 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     store = get_store(mode)
     jobs = {str(job.get("id")): job for job in store.jobs()}
     ids, recent_duplicates = _split_recent_duplicates(store, jobs, ids)
-    profile_cities = [str(city) for city in (store.profile().get("job_intent") or {}).get("cities") or [] if str(city).strip()]
+    profile_cities = _profile_target_cities(store.profile())
+    hard_cfg = _hard_filter_config(profile_cities)
     doc_candidates: list[dict[str, Any]] = []
     manual_only: set[str] = set()
     dropped_ids: list[str] = []
     risk_blocked: list[str] = []
     city_blocked: list[dict[str, Any]] = []
+    hard_filter_blocked: list[dict[str, Any]] = []
     mandatory_blocked: list[dict[str, Any]] = []
     closed_blocked: list[dict[str, Any]] = []
     incomplete: list[dict[str, Any]] = []
@@ -3006,6 +3309,12 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         city_reason = _job_city_reject(job, profile_cities)
         if city_reason:
             city_blocked.append({"id": job_id, "reason": city_reason})
+            continue
+        # 采集导入会持久化 hard_filter，但这里按当前 profile 复查一遍：
+        # 排除词与薪资下限为硬性拒绝，手动加入也不放行。
+        hard_reason = _hard_filter_block_reason(job, hard_cfg)
+        if hard_reason:
+            hard_filter_blocked.append({"id": job_id, "reason": hard_reason})
             continue
         missing = _missing_intake_fields(job)
         if missing:
@@ -3109,6 +3418,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     result["approved"] = approved
     result["risk_blocked"] = risk_blocked
     result["city_blocked"] = city_blocked
+    result["hard_filter_blocked"] = hard_filter_blocked
     result["mandatory_blocked"] = mandatory_blocked
     result["closed_blocked"] = closed_blocked
     result["incomplete"] = incomplete
@@ -3118,6 +3428,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         "加入审批队列",
         f"按规则自动通过 {len(approved)} 条，手动加入 {len(manual)} 条（原因：{override_reason or '无'}）；"
         f"未入队 {len(result['dropped']) + len(result['duplicate'])} 条；"
+        f"城市拦截 {len(city_blocked)} 条，硬性筛选拦截 {len(hard_filter_blocked)} 条；"
         f"必备条件不满足 {len(mandatory_blocked)} 条，已关闭 {len(closed_blocked)} 条；"
         f"{RECENT_DUPLICATE_DAYS} 天内重复拦截 {len(recent_duplicates)} 条",
     )
@@ -3130,6 +3441,8 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         message += f"；{len(risk_blocked)} 条疑似高风险岗位（收费/承诺类），已拦截不入队"
     if city_blocked:
         message += f"；{len(city_blocked)} 条城市不在目标城市内，已拦截不入队"
+    if hard_filter_blocked:
+        message += f"；{len(hard_filter_blocked)} 条命中硬性排除词或薪资下限，已拦截不入队"
     if mandatory_blocked:
         message += (
             f"；{len(mandatory_blocked)} 条必备条件明确不满足，已移出默认推荐"
@@ -3173,7 +3486,11 @@ def confirm_queue(payload: dict[str, Any]) -> dict[str, Any]:
     }
     result["recent_duplicates"] = held
     result["not_pending"] = not_pending
-    store.log("人工通过待确认岗位", f"{len(result['confirmed'])} 条；30 天内重复拦截 {len(held)} 条；auto_submit=false")
+    store.log(
+        "人工通过待确认岗位",
+        f"非待确认跳过 {len(not_pending)} 条；通过 {len(result['confirmed'])} 条；"
+        f"30 天内重复拦截 {len(held)} 条；auto_submit=false",
+    )
     message = "已通过；发送前还会再让你复核一次"
     if held:
         message += f"；{len(held)} 条 {RECENT_DUPLICATE_DAYS} 天内已发送过，未通过"
