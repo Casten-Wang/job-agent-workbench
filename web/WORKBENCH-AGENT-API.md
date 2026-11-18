@@ -53,7 +53,9 @@
 
 ## 验收命令与限制
 
-OfferPilot 根测试使用本机默认 Python，`python -I -B -m unittest discover -s tools/tests -q`。引擎与 Agent 测试使用仓库 `.venv` 的 Python：`.venv/bin/python -X utf8 -m unittest discover -s interview_agent/tests -q`（Windows 为 `.venv\Scripts\python.exe`）。Windows Python 3.11 的 `-I` 子进程会忽略编码环境变量，部分旧 CLI 测试在该解释器下有 GBK/UTF-8 冲突；这不通过修改断言掩盖。
+根测试统一用 `sh tools/run_tests.sh`（工作台、`tests`、`interview_agent/tests` 三组）。引擎与 Agent 测试使用仓库 `.venv` 的 Python：`.venv/bin/python -X utf8 -m unittest discover -s interview_agent/tests -q`（Windows 为 `.venv\Scripts\python.exe`）。Windows Python 3.11 的 `-I` 子进程会忽略编码环境变量，部分旧 CLI 测试在该解释器下有 GBK/UTF-8 冲突；这不通过修改断言掩盖。
+
+（历史验收记录：以下 `验证/` 脚本与 `outputs/` 目录在作者本机的上级工作区，不在本仓库中。）
 
 上级 `验证/workbench_agent_smoke.py --verify` 使用真实 localhost HTTP、隔离数据库与协议测试模型完成主链。`--live --verify` 则使用已有 DPAPI 配置的 Step 密钥和同样的合成资料进行真实模型验收；不会记录密钥，也不使用真实 user 资料。验收结果与页面证据保存在上级 `outputs/workbench-agent/`。
 

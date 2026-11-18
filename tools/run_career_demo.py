@@ -1,4 +1,4 @@
-"""Start the workbench and isolated demo/personal engines; keys stay in memory."""
+"""Start the workbench and isolated demo/personal engines; the model key comes only from 设置 > AI 接口设置."""
 
 import argparse
 import getpass
@@ -16,15 +16,12 @@ def main():
     parser = argparse.ArgumentParser(description="OfferPilot public project verification demo")
     parser.add_argument("--engine-root", type=Path, default=ROOT.parent,
                         help="Directory containing interview_agent and interview_hub")
-    parser.add_argument("--key-stdin", action="store_true", help="Read the model API key with hidden input")
     parser.add_argument("--knowledge-only", action="store_true", help="Start workbench and offline knowledge without a model key")
     parser.add_argument("--langsmith", action="store_true", help="Enable opt-in LangSmith tracing; reads its key hidden when absent")
     parser.add_argument("--langsmith-project", default="offerpilot-local", help="LangSmith project name")
     args = parser.parse_args()
     if not (args.engine_root / "interview_agent/api.py").is_file():
         parser.error("--engine-root must contain the existing Python interview service")
-    if args.key_stdin:
-        os.environ["INTERVIEW_API_KEY"] = getpass.getpass("Step API key (hidden): ")
     if args.langsmith:
         if not os.environ.get("LANGSMITH_API_KEY"):
             os.environ["LANGSMITH_API_KEY"] = getpass.getpass("LangSmith API key (hidden): ")

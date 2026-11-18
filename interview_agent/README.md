@@ -1,8 +1,8 @@
 # Python 面试运行时
 
-单条面经匿名收藏、更新订阅、应用内消息和自检见 [面经订阅说明](../offerpilot/web/NOTE-SUBSCRIPTIONS.md)。该能力接入完整个人 Agent；需要用户提供明确链接，不提供关键词搜索或批量抓取。
+单条面经匿名收藏、更新订阅、应用内消息和自检见 [面经订阅说明](../web/NOTE-SUBSCRIPTIONS.md)。该能力接入完整个人 Agent；需要用户提供明确链接，不提供关键词搜索或批量抓取。
 
-本机离线项目知识库可与个人资料服务共同运行，也可通过 `python -m interview_agent.knowledge_api` 独立启动，无需模型凭据。启动、Web 自动预热、固定版本检索及对外接口见 [知识库接口文档](../offerpilot/web/KNOWLEDGE-API.md)。该模块只提供项目资料，不新增面试交互。
+本机离线项目知识库可与个人资料服务共同运行，也可通过 `python -m interview_agent.knowledge_api` 独立启动，无需模型凭据。启动、Web 自动预热、固定版本检索及对外接口见 [知识库接口文档](../web/KNOWLEDGE-API.md)。该模块只提供项目资料，不新增面试交互。
 
 当前业务入口统一为 Python + FastAPI + LangGraph。HTTPX 直接连接阶跃 Step Plan，默认 `step-5-preview`，产品启动和运行不需要 Node、Pi SDK 或子进程桥接。
 
@@ -12,21 +12,21 @@
 
 ## 环境与启动
 
-需要 Python 3.11+。当前机器独立环境为 `.venv-interview`，不改动既有 Python 环境。
+需要 Python 3.11+。使用仓库根目录的 `.venv`（与工作台共用，安装见根目录 README）；下面的命令以 Windows 为例，macOS / Linux 把 `.venv/Scripts/python.exe` 换成 `.venv/bin/python`。
 
 ```powershell
-python -m venv .venv-interview
-.venv-interview/Scripts/python.exe -m pip install -r interview_agent/requirements.lock.txt
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r interview_agent/requirements.lock.txt
 ```
 
 工作区根目录启动：
 
 ```powershell
-$env:INTERVIEW_AGENT_TOKEN = .venv-interview/Scripts/python.exe -c "import secrets;print(secrets.token_urlsafe(32))"
+$env:INTERVIEW_AGENT_TOKEN = .venv/Scripts/python.exe -c "import secrets;print(secrets.token_urlsafe(32))"
 $secretInput = Read-Host 'Step API key' -AsSecureString
 $env:STEP_API_KEY = [Net.NetworkCredential]::new('', $secretInput).Password
 $env:NO_PROXY = '127.0.0.1,localhost'
-.venv-interview/Scripts/python.exe -m interview_agent
+.venv/Scripts/python.exe -m interview_agent
 ```
 
 默认监听 `http://127.0.0.1:18747`，单 worker。使用原业务数据库 `outputs/interview-hub/interview.db`，运行检查点单独在 `outputs/interview-agent/checkpoints.db`；可用 `--db`、`--checkpoints`、`--owner`、`--port` 指定。模型非凭据配置位于 `interview_agent/provider.json`，环境变量 `INTERVIEW_PROVIDER`、`INTERVIEW_MODEL`、`INTERVIEW_BASE_URL` 可覆盖。访问凭据按 `INTERVIEW_API_KEY`、`STEP_API_KEY`、`STEPFUN_API_KEY` 的顺序读取；不再读取 `PI_INTERVIEW_*` 或 `.pi` 配置。
@@ -68,7 +68,7 @@ LangGraph 检查点是进行中状态的唯一写入来源，业务 SQLite 继�
 显式导入某个旧 JSON，指定它原来的业务数据库。导入会核对源码、材料、问题计划、模型和待评价回答；保留原文件，不重新出题、不重新评价。
 
 ```powershell
-.venv-interview/Scripts/python.exe -m interview_agent --db outputs/interview-hub/interview.db --import-legacy outputs/pi-interview/sessions/旧会话ID.json
+.venv/Scripts/python.exe -m interview_agent --db outputs/interview-hub/interview.db --import-legacy outputs/pi-interview/sessions/旧会话ID.json
 ```
 
 导入要求当前模型与原会话一致；模型不同请先切回原模型或创建新轮次。已有 Python 检查点不能被导入覆盖。完成会话恢复原复盘；进行中会话在等待点继续。JSON 导入只提供本机命令，没有开放任意文件路径的 HTTP 接口。原问题 ID（如 pi_q1）是历史数据关联键，继续保留，不代表需要 Pi。原模型来源和已经保存的总结文本保持原样。
@@ -76,9 +76,9 @@ LangGraph 检查点是进行中状态的唯一写入来源，业务 SQLite 继�
 ## 验证
 
 ```powershell
-.venv-interview/Scripts/python.exe -X utf8 -m unittest discover -s interview_agent/tests -v
-.venv-interview/Scripts/python.exe -X utf8 -m unittest discover -s tests -q
-.venv-interview/Scripts/python.exe -X utf8 -m interview_agent.verify --key-stdin
+.venv/Scripts/python.exe -X utf8 -m unittest discover -s interview_agent/tests -v
+.venv/Scripts/python.exe -X utf8 -m unittest discover -s tests -q
+.venv/Scripts/python.exe -X utf8 -m interview_agent.verify --key-stdin
 ```
 
 最后一个命令使用隐藏输入的模型 key，启动真实临时 localhost FastAPI 服务，通过 HTTP 请求运行 LangGraph→Python HTTPX→Step 5，再保存公开样例的合成回答与复盘；结束后关闭服务，报告位于 `outputs/interview-agent/live-verification.json`。报告中的 runtime 必须为 python-httpx，旧 Pi 联调结果不作为本轮直接调用的验证依据。

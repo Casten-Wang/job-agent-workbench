@@ -4,10 +4,10 @@
 
 ## 启动
 
-正常使用 `tools/run_career_demo.py` 启动工作台时，个人服务同时提供知识库接口。只有资料服务需求时，在工作区根目录运行，无需模型密钥：
+正常使用 `tools/run_career_demo.py` 启动工作台时，个人服务同时提供知识库接口。只有资料服务需求时，在仓库根目录运行（macOS / Linux 把 `.\.venv\Scripts\python.exe` 换成 `.venv/bin/python`），无需模型密钥：
 
 ```powershell
-& '.\.venv-interview\Scripts\python.exe' -B '.\offerpilot\tools\run_career_demo.py' --knowledge-only
+& '.\.venv\Scripts\python.exe' -B '.\tools\run_career_demo.py' --engine-root . --knowledge-only
 ```
 
 工作台地址为 `http://127.0.0.1:8766/`。`--knowledge-only` 仅启动工作台及知识库，简历模型与面试功能不可用。若同端口已有旧服务，先正常停止旧服务，再使用新代码启动；不要同时运行两个个人服务。
@@ -16,7 +16,7 @@
 
 ```powershell
 $env:OFFERPILOT_CAREER_USER_TOKEN = (python -c "import secrets; print(secrets.token_urlsafe(32))").Trim()
-& '.\.venv-interview\Scripts\python.exe' -B -m interview_agent.knowledge_api --root '.\offerpilot\web\data\user\career-agent'
+& '.\.venv\Scripts\python.exe' -B -m interview_agent.knowledge_api --root '.\web\data\user\career-agent'
 ```
 
 独立服务默认 `127.0.0.1:18748`，owner 默认为 `offerpilot-personal`；可用 `--port` 和 `--owner` 指定其他本机实例。所有接口包括 `/health` 均要求 `Authorization: Bearer <服务令牌>`。令牌供可信后端使用，不放进候选人网页。正常工作台启动会生成并在进程内传递令牌。

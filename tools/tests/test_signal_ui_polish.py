@@ -383,6 +383,18 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertIn("--remote-debugging-port=9222", readme)
         self.assertIn("chrome.exe", readme)
 
+    def test_markdown_relative_links_resolve(self):
+        import re
+        for rel in ("README.md", "interview_agent/README.md", "web/KNOWLEDGE-API.md", "web/WORKBENCH-AGENT-API.md", "web/PERSONAL-CAREER-API.md"):
+            base = (PROJECT_ROOT / rel).parent
+            for target in re.findall(r"\]\((?!https?://|#|mailto:)([^)#\s]+)", _read(PROJECT_ROOT / rel)):
+                self.assertTrue((base / target).exists(), (rel, target))
+
+    def test_launcher_has_no_dead_key_option(self):
+        source = _read(PROJECT_ROOT / "tools/run_career_demo.py")
+        self.assertNotIn("--key-stdin", source)
+        self.assertNotIn("getpass.getpass(\"Step API key", source)
+
     def test_launcher_banner_does_not_claim_fixed_model(self):
         self.assertNotIn("step-5-preview", _read(PROJECT_ROOT / "tools/run_career_demo.py"))
 
