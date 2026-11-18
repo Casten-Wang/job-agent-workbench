@@ -51,6 +51,9 @@
     $('stop').hidden=!active() && current?.status!=='waiting_approval';
     $('send').hidden=active();
     $('send').disabled=busy || active() || !$('input').value.trim();
+    const hasResults=Boolean(current?.artifacts?.length || materialResult()?.preview);
+    $('show-results').disabled=!hasResults;
+    $('show-results').title=hasResults?'':'还没有可看的内容：先提交项目材料，确认材料并选定岗位后，这里会显示简历和招呼语草稿。';
     $('panel').setAttribute('aria-busy',String(active()));
     $('activity').hidden=!active();
     const last=events.at(-1);
@@ -79,7 +82,7 @@
       $('jump').hidden=true;if(panel.querySelector('.wa-welcome'))return;
       const welcome=node('div',undefined,'wa-welcome'),mark=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
       mark.setAttribute('viewBox','0 0 48 48');mark.setAttribute('aria-hidden','true');mark.classList.add('wa-welcome-mark');path.setAttribute('d','M24 3v12M24 33v12M3 24h12M33 24h12M9 9l9 9M30 30l9 9M9 39l9-9M30 18l9-9');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','3');path.setAttribute('stroke-linecap','round');mark.append(path);
-      welcome.append(mark,node('p','OFFERPILOT','wa-eyebrow'),node('h4','下一份机会，从这里开始。'));
+      welcome.append(mark,node('p','OfferPilot','wa-eyebrow'),node('h4','下一份机会，从这里开始。'));
       const prompts=node('div',undefined,'wa-prompts');
       [['找合适的岗位','从已有岗位里推荐 3 个上海后端岗'],['准备申请材料','帮我梳理已有材料，准备目标岗位的简历和招呼语'],['回顾求职进展','汇总我的岗位、HR 回复和面试准备状态']].forEach(([label,text])=>prompts.append(button(label,async()=>{$('input').value=text;keepInput();resizeInput();controls();$('input').focus();})));
       welcome.append(prompts);panel.replaceChildren(welcome);return;

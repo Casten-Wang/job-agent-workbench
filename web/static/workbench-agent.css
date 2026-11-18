@@ -60,7 +60,7 @@
 .wa-jump { position:absolute; bottom:12px; left:50%; translate:-50% 0; border:.5px solid var(--line)!important; background:var(--wa-elevated,var(--surface))!important; }
 .wa-welcome { display:flex; min-height:100%; flex-direction:column; align-items:center; justify-content:center; padding:36px 0 60px; text-align:center; }
 .wa-welcome-mark { width:44px; height:44px; margin-bottom:24px; color:var(--wa-brand); }
-.wa-eyebrow { margin:0; font-size:12px; letter-spacing:.16em; color:var(--mute); }
+.wa-eyebrow { margin:0; font-size:12px; letter-spacing:.04em; color:var(--mute); }
 .wa-welcome h4 { margin:16px 0 28px; font-size:24px; font-weight:400; font-family:Georgia,'Noto Serif SC','Songti SC',SimSun,serif; line-height:1.6; text-wrap:balance; color:var(--ink); }
 .wa-prompts { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 .wa-prompts button { border:.5px solid var(--line)!important; background:transparent; padding:8px 12px; }
