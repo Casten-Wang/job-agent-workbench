@@ -69,7 +69,7 @@ class DossierMarkupTests(unittest.TestCase):
 
     def test_three_match_values_stay_separate(self):
         block = _block(self.script)
-        for label in ("适配分", "判断置信度", "岗位风险等级"):
+        for label in ("适配分", "判断依据", "岗位风险等级"):
             with self.subTest(label=label):
                 self.assertIn(label, block)
         # fit_score / fit_confidence / risk_level 各自一项，不合并成一个分数。
@@ -145,7 +145,7 @@ class DossierModelTests(unittest.TestCase):
         self.assertEqual([item["value"] for item in result["standard"]], [None] * 9)
         self.assertEqual(
             [(item["label"], item["value"]) for item in result["match"]],
-            [("适配分", None), ("判断置信度", None), ("岗位风险等级", None)],
+            [("适配分", None), ("判断依据", None), ("岗位风险等级", None)],
         )
         self.assertEqual(result["trace"], [])
         self.assertEqual(result["parts"]["checklist"], [])

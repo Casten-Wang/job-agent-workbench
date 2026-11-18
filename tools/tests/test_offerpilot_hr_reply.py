@@ -240,6 +240,9 @@ class ConversationRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(sent["company"], "上海邦中")
         self.assertEqual(self.fake.sent, [("tab-thread", "您好，我可以周四下午沟通。")])
+        # Sending must not steal the user's screen focus: the conversation tab
+        # used to send the reply is opened in the background like every read.
+        self.assertTrue(all(item["background"] is True for item in self.fake.opened))
 
     def test_empty_and_overlong_text_are_rejected(self):
         result = self._prime()

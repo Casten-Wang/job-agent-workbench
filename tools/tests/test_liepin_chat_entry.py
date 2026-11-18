@@ -333,7 +333,7 @@ class _FakeLiepinMonitor:
                 if self.document_after_click is not None:
                     self.document = self.document_after_click  # the click renders the drawer
             return json.dumps(result, ensure_ascii=False)
-        if "contact.get-contact-list" in script:
+        if "const contacts = []" in script:
             # This fixture only models the DOM; the interface read reports
             # unavailable so the reader exercises its documented fallback.
             return json.dumps({"available": False, "reason": "接口不可用"}, ensure_ascii=False)

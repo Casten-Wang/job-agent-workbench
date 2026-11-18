@@ -1088,12 +1088,17 @@ JS_LIEPIN_ENSURE_DRAWER_WWW = r"""
 JS_LIEPIN_CHAT_LIST = r"""
 (() => {
     const drawer = document.querySelector('#im-basic-contact');
-    if (!drawer) return {available: false, reason: '未找到猎聘聊天抽屉'};
-    const root = drawer.querySelector('.im-ui-contacts-wrap') || drawer;
-    const items = Array.from(root.querySelectorAll('.im-ui-contact-list-item'));
+    if (!drawer) return {available: false, reason: '未找到猎聘聊天抽屉', drawer_found: false, matched: 0};
+    // The drawer can mount an empty loading wrap before the real list (seen on
+    // the 2026-11 www build), so read rows from the whole drawer instead of the
+    // first .im-ui-contacts-wrap.
+    const wraps = Array.from(drawer.querySelectorAll('.im-ui-contacts-wrap'));
+    const items = Array.from(drawer.querySelectorAll('.im-ui-contact-list-item'));
     // matched: how many row nodes the selector found, so an empty list can be told
-    // apart from a selector that matched nothing on this page.
+    // apart from a selector mismatch on this page.  The fallback selector only
+    // feeds the diagnostic, never the rows.
     const matched = items.length;
+    const fallbackMatched = drawer.querySelectorAll('[class*="contact-item"]').length;
     const lines = (el) => (el.innerText || '').split('\n').map((s) => s.trim()).filter(Boolean);
     const pick = (el, selectors) => {
         for (const sel of selectors) {
@@ -1105,12 +1110,15 @@ JS_LIEPIN_CHAT_LIST = r"""
     const rows = items.map((el) => {
         const parts = lines(el);
         // Rows read "招聘方·公司名"; keep only the company part for matching.
-        const company = pick(el, ['.im-ui-company-info', '[class*=company]'])
-            .replace(/^招聘方[·・]\s*/, '');
-        const hr_name = pick(el, ['.im-ui-title', '[class*=name]']) || parts[0] || '';
+        const company = pick(el, [
+            '.im-ui-company-info', '.im-ui-contact-title-sub', '[class*=company]',
+        ]).replace(/^招聘方[·・]\s*/, '');
+        const hr_name = pick(el, [
+            '.im-ui-title', '.im-ui-contact-title-name', '[class*=name]',
+        ]) || parts[0] || '';
         const last = pick(el, [
             '.im-ui-last-message-super', '.im-ui-last-message-special',
-            '.im-ui-content', '[class*=last-message]',
+            '.im-ui-last-message', '.im-ui-content', '[class*=last-message]',
         ]);
         return {
             company: company,
@@ -1118,11 +1126,17 @@ JS_LIEPIN_CHAT_LIST = r"""
             hr_title: '',
             last_message: last || (parts.length > 2 ? parts[parts.length - 2] : ''),
             last_message_at: pick(el, ['[class*=time]']) || (parts.length ? parts[parts.length - 1] : ''),
-            has_unread: !!el.querySelector('.im-ui-unread-count-badge, [class*=unread]'),
+            has_unread: !!el.querySelector(
+                '.im-ui-unread-count-badge, .ant-im-badge-count, [class*=unread], [class*=badge-count]'
+            ),
             has_reply: !!last,
         };
     });
-    return {available: true, rows: rows, matched: matched};
+    return {
+        available: true, rows: rows, matched: matched,
+        drawer_found: true, wrap_count: wraps.length,
+        fallback_matched: fallbackMatched,
+    };
 })()
 """
 
@@ -1879,7 +1893,7 @@ def _boss_history_messages(
         else:
             # Cards, job links and system notices are never HR or our words.
             sender = "system"
-            text = body_info.get("headTitle") or body_info.get("text") or "系统消息"
+            text = body_info.get("headTitle") or body_info.get("text") or "[卡片消息，工作台不支持预览，请在平台内查看]"
         messages.append({
             "sender": sender,
             "text": _redact_contacts(text)[:HR_MESSAGE_MAX_CHARS],
@@ -1892,13 +1906,15 @@ def _boss_history_messages(
 # --- Zhilian / Liepin interface reads ----------------------------------------
 #
 # Zhilian's list is a same-origin GET; its history lives in the page's NIM
-# SDK instance (no HTTP history endpoint).  Liepin's contact list and history
-# are read through the drawer's own store methods, which call the read-only
-# ``contact.get-contact-list`` and ``chat.chat-list`` endpoints; the list
-# expression falls back to that same-origin form POST when the store exposes
-# no contact method.  It never calls ``openChat``/``refreshChat``/``readed-msg``
-# and so never marks a conversation read.  Any failure falls back to the
-# existing DOM readers.
+# SDK instance (no HTTP history endpoint).  Liepin's 2026-11 www build keeps
+# the contact rows and the chat reader in React component props; the page's
+# loaded contact objects (the same fields the read-only contact-list response
+# returns) and its ``getChatList`` prop (the chat-list call with notify=false)
+# are used first.  Older builds expose a drawer store instead, tried second.
+# A direct form POST to ``contact.get-contact-list`` was probed and returns a
+# non-success flag without the page's request interceptor, so it is not used.
+# Nothing here calls ``openChat``/``refreshChat``/``readed-msg`` and so nothing
+# marks a conversation read.  Any failure falls back to the DOM readers.
 #
 # Ids and the page's own store stay in memory only: never returned to the UI,
 # never logged, never written to disk.
@@ -2054,7 +2070,7 @@ def _zhilian_custom_text(message: dict[str, Any]) -> str:
                 value = last.get(key)
                 if isinstance(value, str) and value.strip():
                     return value.strip()
-    return "系统消息"
+    return "[卡片消息，工作台不支持预览，请在平台内查看]"
 
 
 def _zhilian_history_messages(raw: Any) -> list[dict[str, Any]] | None:
@@ -2087,40 +2103,78 @@ def _zhilian_history_messages(raw: Any) -> list[dict[str, Any]] | None:
     return messages
 
 
-def _liepin_list_expression() -> str:
-    """Fixed expression: the drawer's contact list, read-only.
-
-    The page's own store method is preferred when it exists; otherwise the
-    same-origin form POST is sent with the store's in-memory ``imId``.  Only
-    status and body leave the page; no id, cookie or header is returned.
-    """
-    return r"""
-(async () => {
+# Helpers shared by the Liepin list/history expressions.  The 2026-11 www
+# build exposes React nodes under ``__reactInternalInstance$`` (a fiber, not
+# the old internal instance) instead of ``__reactFiber$``, and the drawer keeps
+# its contact data and chat reader in component props rather than a store, so
+# both shapes are walked here.  Nothing is read from ``imId``/cookies/storage;
+# contact ids stay in page memory and only row fields are returned.
+_LIEPIN_PAGE_HELPERS = r"""
     const fiberKey = (el) => {
         for (const key of Object.keys(el || {})) {
             if (key.indexOf('__reactFiber$') === 0) return key;
+            if (key.indexOf('__reactInternalInstance$') === 0) return key;
+        }
+        return null;
+    };
+    const propsOf = (node) => {
+        if (!node) return null;
+        if (node.memoizedProps || node.pendingProps) return node.memoizedProps || node.pendingProps;
+        return (node._currentElement && node._currentElement.props) || null;
+    };
+    const upNode = (node) => {
+        if (!node) return null;
+        if (node.return) return node.return;
+        const owner = node._currentElement && node._currentElement._owner;
+        return (owner && owner._instance) || null;
+    };
+    const rootOf = (node) => {
+        let root = node;
+        for (let depth = 0; root && depth < 500; depth += 1) {
+            const up = upNode(root);
+            if (!up) break;
+            root = up;
+        }
+        return root;
+    };
+    const contactOf = (el) => {
+        const key = fiberKey(el);
+        let node = key ? el[key] : null;
+        for (let depth = 0; node && depth < 8; depth += 1) {
+            const props = propsOf(node);
+            if (props && props.contact && props.contact.oppositeImId) return props.contact;
+            node = upNode(node);
         }
         return null;
     };
     const storeFrom = (node) => {
-        for (const value of [node.stateNode, node.memoizedProps, node.pendingProps]) {
-            if (value && value.getChatList && value.options && value.options.imId) return value;
-            if (value && value.store && value.store.getChatList && value.store.options && value.store.options.imId) return value.store;
+        for (const value of [node && node.stateNode, node && node.memoizedProps, node && node.pendingProps]) {
+            if (!value) continue;
+            if (value.getChatList && value.options && value.options.imId) return value;
+            if (value.store && value.store.getChatList && value.store.options && value.store.options.imId) return value.store;
         }
         return null;
     };
-    const findStore = (start) => {
-        let node = start;
-        for (let depth = 0; node && depth < 200; depth += 1) {
-            const store = storeFrom(node);
-            if (store) return store;
-            node = node.return;
+    const findInTree = (start, test) => {
+        const stack = start ? [start] : [];
+        const seen = new Set();
+        let visited = 0;
+        while (stack.length && visited < 20000) {
+            const node = stack.pop();
+            visited += 1;
+            if (!node || seen.has(node)) continue;
+            seen.add(node);
+            const hit = test(node);
+            if (hit) return hit;
+            if (node.child) stack.push(node.child);
+            if (node.sibling) stack.push(node.sibling);
         }
         return null;
     };
-    const contactRows = (value) => {
+    const listRows = (value) => {
         if (!value) return null;
         if (Array.isArray(value)) return value;
+        if (Array.isArray(value.list)) return value.list;
         const data = value.data;
         if (Array.isArray(data)) return data;
         if (data) {
@@ -2130,53 +2184,44 @@ def _liepin_list_expression() -> str:
         }
         return null;
     };
+"""
+
+
+def _liepin_list_expression() -> str:
+    """Fixed expression: the drawer's contact list, read-only.
+
+    The page's loaded contact objects (component props, same fields as the
+    contact-list response) are read first; a store with ``getContactList`` is
+    used when an older build exposes one.  No id, cookie or header leaves the
+    page, and no request is sent from here.
+    """
+    return (
+        "(async () => {\n"
+        + _LIEPIN_PAGE_HELPERS
+        + r"""
     try {
         const items = Array.from(document.querySelectorAll('.im-ui-contact-list-item'));
-        let store = null;
+        const contacts = [];
         for (const el of items) {
-            const key = fiberKey(el);
-            if (!key) continue;
-            store = findStore(el[key]);
-            if (store) break;
+            const contact = contactOf(el);
+            if (contact) contacts.push(contact);
         }
+        if (contacts.length) return JSON.stringify({available: true, rows: contacts, via: 'props'});
+        const first = items[0];
+        const root = first ? rootOf(first[fiberKey(first)]) : null;
+        const store = root ? findInTree(root, (node) => storeFrom(node)) : null;
         if (!store) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
-        let rows = null;
-        if (store.getContactList) {
-            try {
-                rows = contactRows(await Promise.resolve(store.getContactList({sortValue: '', curPage: 0})));
-            } catch (err) {
-                rows = null;
-            }
-        }
-        if (rows === null) {
-            const imId = String((store.options && store.options.imId) || '');
-            if (!imId) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
-            const form = new URLSearchParams({
-                sortValue: '', curPage: '0', pageSize: '50',
-                imUserType: '0', imApp: '1', imId: imId,
-            });
-            const response = await fetch('https://api-c.liepin.com/api/com.liepin.im.c.contact.get-contact-list', {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'fscpClientId': '11156',
-                    'fscpVersion': '1.0.0',
-                },
-                body: form.toString(),
-            });
-            let answer = null;
-            try { answer = await response.json(); } catch (err) { answer = null; }
-            rows = contactRows(answer);
-            if (rows === null) return JSON.stringify({available: false, reason: '会话列表读取失败'});
-        }
-        return JSON.stringify({available: true, rows: rows});
+        if (!store.getContactList) return JSON.stringify({available: false, reason: '会话列表读取失败'});
+        const answered = await Promise.resolve(store.getContactList({sortValue: '', curPage: 0}));
+        const rows = listRows(answered);
+        if (!rows) return JSON.stringify({available: false, reason: '会话列表读取失败'});
+        return JSON.stringify({available: true, rows: rows, via: 'store'});
     } catch (err) {
         return JSON.stringify({available: false, reason: '会话列表读取失败'});
     }
 })()
 """
+    )
 
 
 def _liepin_api_rows(raw: Any) -> list[dict[str, Any]] | None:
@@ -2268,60 +2313,44 @@ def _liepin_conversation_items(rows: list[dict[str, Any]], *, with_params: bool 
 
 
 def _liepin_history_expression(entry: dict[str, Any], params: dict[str, Any] | None = None) -> str:
-    """Fixed expression: the drawer's own store, read-only chat-list call."""
-    script = r"""
-(async () => {
-    const hrName = __HR_NAME__;
-    const company = __COMPANY__;
-    const wanted = __OPPOSITE_ID__;
-    const fiberKey = (el) => {
-        for (const key of Object.keys(el || {})) {
-            if (key.indexOf('__reactFiber$') === 0) return key;
-        }
-        return null;
-    };
-    const storeFrom = (node) => {
-        for (const value of [node.stateNode, node.memoizedProps, node.pendingProps]) {
-            if (value && value.getChatList && value.options && value.options.imId) return value;
-            if (value && value.store && value.store.getChatList && value.store.options && value.store.options.imId) return value.store;
-        }
-        return null;
-    };
-    const findStore = (start) => {
-        let node = start;
-        for (let depth = 0; node && depth < 200; depth += 1) {
-            const store = storeFrom(node);
-            if (store) return store;
-            node = node.return;
-        }
-        return null;
-    };
+    """Fixed expression: the page's own read-only chat-list call.
+
+    The 2026-11 www build passes ``getChatList`` to the chat panel as a prop
+    (a ref-forwarded store method) and keeps contact objects in props; older
+    builds expose a store on the fiber chain, which is tried second.  Neither
+    call sets ``notify`` and neither marks the conversation read.
+    """
+    script = (
+        "(async () => {\n"
+        "    const hrName = __HR_NAME__;\n"
+        "    const company = __COMPANY__;\n"
+        "    const wanted = __OPPOSITE_ID__;\n"
+        + _LIEPIN_PAGE_HELPERS
+        + r"""
     try {
         const items = Array.from(document.querySelectorAll('.im-ui-contact-list-item'));
         let contact = null;
-        let store = null;
         for (const el of items) {
-            const key = fiberKey(el);
-            if (!key) continue;
-            let node = el[key];
-            let candidate = null;
-            for (let depth = 0; node && depth < 8; depth += 1) {
-                const props = node.memoizedProps;
-                if (props && props.contact && props.contact.oppositeImId) { candidate = props.contact; break; }
-                node = node.return;
-            }
+            const candidate = contactOf(el);
             if (!candidate) continue;
-            if (wanted && String(candidate.oppositeImId || '') === wanted) {
-                contact = candidate; store = findStore(el[key]); break;
-            }
+            if (wanted && String(candidate.oppositeImId || '') === wanted) { contact = candidate; break; }
             const name = String(candidate.name || '').trim();
             const org = String(candidate.company || '').trim();
-            if (name === hrName && (!company || org === company)) { contact = candidate; store = findStore(el[key]); break; }
+            if (name === hrName && (!company || org === company)) { contact = candidate; break; }
         }
-        if (!contact || !store) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
+        if (!contact) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
+        const first = items[0];
+        const root = first ? rootOf(first[fiberKey(first)]) : null;
+        const chatList = root ? findInTree(root, (node) => {
+            const props = propsOf(node);
+            return props && props.getChatList ? props.getChatList : null;
+        }) : null;
+        const store = (!chatList && root) ? findInTree(root, (node) => storeFrom(node)) : null;
+        const reader = chatList || (store && store.getChatList);
+        if (!reader) return JSON.stringify({available: false, reason: '聊天面板未就绪'});
         const result = await new Promise((resolve) => {
             try {
-                Promise.resolve(store.getChatList('', contact.oppositeImId, false))
+                Promise.resolve(reader('', contact.oppositeImId, false))
                     .then((value) => resolve(value || {}))
                     .catch((err) => resolve({error: String((err && err.message) || err)}));
             } catch (err) {
@@ -2335,6 +2364,7 @@ def _liepin_history_expression(entry: dict[str, Any], params: dict[str, Any] | N
     }
 })()
 """
+    )
     script = script.replace("__HR_NAME__", json.dumps(entry.get("hr_name") or "", ensure_ascii=False))
     script = script.replace("__COMPANY__", json.dumps(entry.get("company") or "", ensure_ascii=False))
     script = script.replace(
@@ -2356,7 +2386,7 @@ def _liepin_message_text(row: dict[str, Any]) -> str:
             value = body.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
-    return "系统消息"
+    return "[卡片消息，工作台不支持预览，请在平台内查看]"
 
 
 def _liepin_history_messages(raw: Any) -> list[dict[str, Any]] | None:
@@ -2843,6 +2873,7 @@ def _list_liepin_conversations_within(deadline: "_ChatReadDeadline") -> dict[str
     if not target_id:
         raise OfferPilotUnavailable(f"无法打开{label}聊天页面，请检查登录状态")
     source = "api"
+    via: str | None = None
     drawer_branch: str | None = None
     payload: dict[str, Any] | None = None
     try:
@@ -2879,6 +2910,7 @@ def _list_liepin_conversations_within(deadline: "_ChatReadDeadline") -> dict[str
             api_rows = _liepin_api_rows(raw)
             if api_rows is not None:
                 rows = _liepin_rows_from_api(api_rows)
+                via = str((_json_object(raw) or {}).get("via") or "") or None
         except ChatReadTimeout:
             raise
         except Exception:
@@ -2923,6 +2955,9 @@ def _list_liepin_conversations_within(deadline: "_ChatReadDeadline") -> dict[str
         "count": len(items),
         "source": source,
     }
+    if source == "api":
+        # "props" = the page's loaded contact objects; "store" = an older build.
+        result["via"] = via
     if source == "dom":
         # Diagnostics only: which drawer branch ran, and how many row nodes the
         # selector matched.  count=0 with matched=0 means the page showed no rows
@@ -2930,6 +2965,16 @@ def _list_liepin_conversations_within(deadline: "_ChatReadDeadline") -> dict[str
         result["drawer_branch"] = drawer_branch
         matched = (payload or {}).get("matched")
         result["matched"] = int(matched) if isinstance(matched, int) else None
+        result["drawer_found"] = bool((payload or {}).get("drawer_found"))
+        wraps = (payload or {}).get("wrap_count")
+        result["wrap_count"] = int(wraps) if isinstance(wraps, int) else None
+        fallback = (payload or {}).get("fallback_matched")
+        result["fallback_matched"] = int(fallback) if isinstance(fallback, int) else None
+        # matched=0 with fallback rows means the row selector drifted; both 0
+        # means the drawer really shows no conversations.
+        result["selector_mismatch"] = bool(
+            result["matched"] == 0 and isinstance(fallback, int) and fallback > 0
+        )
     return result
 
 
@@ -3966,7 +4011,7 @@ def send_reply(
     target_id = monitor._open_conversation_from_chat_list(
         {"hr_name": entry.get("hr_name") or "", "company": entry.get("company") or ""},
         config,
-        background=False,
+        background=True,
     )
     if not target_id:
         raise OfferPilotUnavailable("无法打开该会话，请重新读取会话列表")

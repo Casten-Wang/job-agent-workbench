@@ -455,7 +455,7 @@ class HrFrontendSyncAndStatesTests(unittest.TestCase):
         self.assertIn('id="hr-platform-status"', self.mail_view)
         self.assertIn("HR_VISIBLE_PLATFORMS = ['boss', 'zhilian', 'liepin']", self.hr)
         status = _between(self.hr, "function hrPlatformStatusRows(", "async function hrLoadSummary(")
-        self.assertIn("row.source === 'api' ? '接口' : row.source === 'dom' ? '页面' : ''", status)
+        self.assertIn("row.source === 'api' ? '接口同步' : row.source === 'dom' ? '网页同步' : ''", status)
         self.assertIn("(entry && entry.error) || state.hrPlatformErrors[platform]", status)
         self.assertIn("const node = el('div', { className: `hr-platform-row${row.error ? ' is-error' : ''}` });", status)
 

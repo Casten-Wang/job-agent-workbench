@@ -455,3 +455,28 @@ body.offer-ui:not(#wa-theme-off) tbody tr:hover { background: var(--accent-soft)
 body.offer-ui:not(#wa-theme-off) th { font-weight: 600; font-size: 12px; }
 body.offer-ui:not(#wa-theme-off) details > summary { cursor: pointer; border-radius: 8px; }
 body.offer-ui:not(#wa-theme-off) .status { border-radius: 12px; }
+
+/* 手机宽度：外观切换压成一行，首页待办按钮与数字同行 */
+@media (max-width: 900px) {
+  body.offer-ui:not(#wa-theme-off) .sidebar-footer { padding: 4px 0 0; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-block { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-block .control-label { margin: 0; flex: none; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-block .segmented { flex: 1; max-width: 260px; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-boundary { display: none; }
+}
+@media (max-width: 560px) {
+  body.offer-ui:not(#wa-theme-off) .home-task { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 34px; text-align: right; }
+  body.offer-ui:not(#wa-theme-off) .home-task .button { grid-column: 1 / -1; justify-self: start; }
+  body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
+}
+/* 手机宽度：顶栏第二行放主题切换（品牌 / 导航 / 主题三行，不叠层） */
+@media (max-width: 900px) {
+  body.offer-ui:not(#wa-theme-off) .sidebar { display: flex; flex-direction: column; }
+  body.offer-ui:not(#wa-theme-off) .sidebar .brand { order: 1; }
+  body.offer-ui:not(#wa-theme-off) .sidebar .nav { order: 2; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-footer { order: 3; padding: 6px 0 2px; border: 0; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-block .control-label { display: none; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-block .segmented { max-width: none; width: 100%; }
+  body.offer-ui:not(#wa-theme-off) .sidebar-block .segmented button { padding: 4px 8px; min-height: 28px; font-size: 12px; }
+}

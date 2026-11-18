@@ -138,6 +138,7 @@ class _FakePage:
         self.zhilian_mode = "api"   # api / error
         self.liepin_store = "api"   # api / missing
         self.liepin_list = "api"    # api / error
+        self.liepin_dom_mismatch = False
         self.list_calls = 0
         self.history_calls = 0
         self.scripts: list[str] = []
@@ -189,11 +190,11 @@ class _FakePage:
         if "getHistoryMsgs" in script:
             self.history_calls += 1
             return json.dumps(ZHILIAN_HISTORY)
-        if "contact.get-contact-list" in script:
+        if "const contacts = []" in script:
             self.list_calls += 1
             if self.liepin_list == "error":
                 return json.dumps({"available": False, "reason": "会话列表读取失败"})
-            return json.dumps({"available": True, "rows": LIEPIN_API_ROWS})
+            return json.dumps({"available": True, "rows": LIEPIN_API_ROWS, "via": "props"})
         if "getChatList" in script:
             self.history_calls += 1
             if self.liepin_store == "missing":
@@ -202,6 +203,11 @@ class _FakePage:
         if script == self.JS_ZHILIAN_CHAT_LIST:
             return json.dumps({"available": True, "rows": ZHILIAN_DOM_ROWS})
         if script == self.JS_LIEPIN_CHAT_LIST:
+            if self.liepin_dom_mismatch:
+                return json.dumps({
+                    "available": True, "rows": [], "matched": 0,
+                    "drawer_found": True, "wrap_count": 2, "fallback_matched": 3,
+                })
             return json.dumps({"available": True, "rows": LIEPIN_DOM_ROWS})
         if script == self.JS_LIEPIN_ENSURE_DRAWER_WWW:
             return json.dumps({"available": True, "branch": "expanded"})
@@ -269,6 +275,7 @@ class _Case(unittest.TestCase):
     def test_liepin_list_maps_the_interface(self):
         result = runtime.list_conversations("liepin")
         self.assertEqual(result["source"], "api")
+        self.assertEqual(result["via"], "props")
         self.assertEqual(result["count"], 1)
         row = result["conversations"][0]
         self.assertEqual(row["hr_name"], "示例招聘官猎")
@@ -298,13 +305,36 @@ class _Case(unittest.TestCase):
         self.assertTrue(all(tab["background"] for tab in self.page.new_tabs))
         self.assertNotIn("l-tab", self.page.closed, "the user's own tab is never closed")
 
+    def test_liepin_dom_reports_a_selector_mismatch(self):
+        self.page.liepin_list = "error"
+        self.page.liepin_dom_mismatch = True
+        result = runtime.list_conversations("liepin")
+        self.assertEqual(result["source"], "dom")
+        self.assertEqual(result["count"], 0)
+        self.assertEqual(result["matched"], 0)
+        self.assertEqual(result["fallback_matched"], 3)
+        self.assertTrue(result["selector_mismatch"])
+        self.assertTrue(result["drawer_found"])
+        self.assertEqual(result["wrap_count"], 2)
+
+    def test_liepin_list_reads_the_page_props_not_a_new_request(self):
+        listing_script = runtime._liepin_list_expression()
+        self.assertIn("__reactInternalInstance$", listing_script)
+        self.assertIn("__reactFiber$", listing_script)
+        self.assertIn("props.contact", listing_script)
+        self.assertNotIn("fetch(", listing_script, "no request is sent from the reader")
+        history_script = runtime._liepin_history_expression({"hr_name": "甲", "company": "乙"})
+        self.assertIn("__reactInternalInstance$", history_script)
+        self.assertIn("props.getChatList", history_script)
+        self.assertIn("reader(''", history_script)
+
     def test_liepin_history_uses_the_interface_contact_id(self):
         listed = runtime.list_conversations("liepin")
         conversation_id = listed["conversations"][0]["id"]
         thread = runtime.get_thread(conversation_id, "liepin")
         self.assertEqual(thread["source"], "api")
         self.assertEqual([m["sender"] for m in thread["messages"]], ["hr", "me", "hr"])
-        history_script = next(script for script in self.page.scripts if "getChatList(" in script)
+        history_script = next(script for script in self.page.scripts if "reader(''" in script)
         self.assertIn("opposite-0001", history_script)
         self.assertEqual(self.page.new_tabs, [], "the user's drawer tab is reused")
 

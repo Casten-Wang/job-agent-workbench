@@ -2373,7 +2373,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertIn("channelLabel(job.source_channel)", jobs_block)
         columns_line = next(
             line for line in script.splitlines()
-            if "'硬过滤'" in line and "'风险'" in line
+            if "'硬条件'" in line and "'风险'" in line
         )
         self.assertIn("'薪资', '来源平台', '评分'", columns_line)
         self.assertNotIn("'渠道'", columns_line)
@@ -2507,7 +2507,7 @@ class WorkbenchFlowTests(unittest.TestCase):
         self.assertEqual([stage["key"] for stage in model], ["intake", "queue", "greeting", "confirm"])
         self.assertEqual(
             [stage["title"] for stage in model],
-            ["采集", "评分入队", "招呼语已生成", "等你确认"],
+            ["采集", "评分筛选", "招呼语已生成", "等你确认"],
         )
         self.assertEqual([stage["index"] for stage in model], ["01", "02", "03", "04"])
         self.assertEqual([stage["count"] for stage in model], [6, 4, 1, 3])
@@ -2541,7 +2541,7 @@ class WorkbenchFlowTests(unittest.TestCase):
             "function workbenchFourStages",
             "data-workbench-stage",
             "workbench-confirm-button",
-            "去审批队列确认",
+            "去确认岗位",
             "renderPipeline(snapshot);",
         ):
             with self.subTest(marker=marker):
@@ -2616,7 +2616,7 @@ class QueueDeliveryModalTests(unittest.TestCase):
                 self.assertIn(marker, script)
         modal = script[script.index("function renderDeliveryModal"):]
         modal = modal[: modal.index("function deliveryProgressText")]
-        for marker in ("来源：", "找不到依据，请核对后再发送", "无证据数字"):
+        for marker in ("来源：", "找不到依据，请核对后再发送", "资料里找不到依据的数字"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, modal)
 

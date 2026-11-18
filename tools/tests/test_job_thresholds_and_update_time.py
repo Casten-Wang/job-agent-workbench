@@ -119,7 +119,7 @@ class ConfidenceColumnTests(_SnapshotCase):
         source = APP_JS.read_text(encoding="utf-8")
         self.assertIn("confidenceCell(row)", source)
         self.assertNotIn("row.high_confidence ? badge", source)
-        self.assertIn("'判断置信度'", source)
+        self.assertIn("'判断依据'", source)
 
     def test_snapshot_queue_row_carries_fit_confidence(self) -> None:
         job = _doc_job("job-conf-1")
@@ -196,7 +196,7 @@ class ApprovalMinResidueTests(unittest.TestCase):
 
     def test_queue_empty_text_mentions_no_threshold(self) -> None:
         source = self._source()
-        self.assertIn("待确认队列为空。可以在「岗位」表把岗位加入队列。", source)
+        self.assertIn("待确认队列为空。到「岗位池」把想联系的岗位加入队列。", source)
         self.assertNotIn("达到入队线", source)
 
     def test_helper_treats_only_missing_scores_as_manual(self) -> None:

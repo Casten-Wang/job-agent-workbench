@@ -36,14 +36,14 @@
         <p class="nav-group-label">核心流程</p>
         <button class="nav-item is-active" type="button" data-hub="workbench" data-view="workbench" aria-current="page"><span class="nav-index" aria-hidden="true">01</span><span class="nav-text"><span>首页</span><small>今天要做的事</small></span></button>
         <button class="nav-item" type="button" data-hub="agent" data-view="agent"><span class="nav-index" aria-hidden="true">02</span><span class="nav-text"><span>对话助理</span><small>Agent 对话</small></span></button>
-        <button class="nav-item" type="button" data-hub="find" data-view="collect"><span class="nav-index" aria-hidden="true">03</span><span class="nav-text"><span>岗位流水线</span><small>采集 · 筛选 · 通过 · 回复</small></span><span class="hr-nav-unread" id="hr-nav-unread" aria-label="未读 HR 消息" hidden></span></button>
+        <button class="nav-item" type="button" data-hub="find" data-view="collect"><span class="nav-index" aria-hidden="true">03</span><span class="nav-text"><span>岗位流水线</span><small>采集、筛选、通过、回复</small></span><span class="hr-nav-unread" id="hr-nav-unread" aria-label="未读 HR 消息" hidden></span></button>
         <p class="nav-group-label">成长工具</p>
-        <button class="nav-item" type="button" data-hub="profile" data-view="profile"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>个人资料</span><small>事实源</small></span></button>
+        <button class="nav-item" type="button" data-hub="profile" data-view="profile"><span class="nav-index" aria-hidden="true">04</span><span class="nav-text"><span>个人资料</span><small>资料与偏好</small></span></button>
         <button class="nav-item" type="button" data-hub="resume" data-view="resume"><span class="nav-index" aria-hidden="true">05</span><span class="nav-text"><span>定制简历</span><small>简历检查</small></span></button>
         <button class="nav-item" type="button" data-hub="interview" data-view="interview"><span class="nav-index" aria-hidden="true">06</span><span class="nav-text"><span>模拟面试</span><small>题单与复盘</small></span></button>
         <button class="nav-item" type="button" data-hub="push" data-view="push"><span class="nav-index" aria-hidden="true">07</span><span class="nav-text"><span>信息推送</span><small>通知预览</small></span></button>
         <p class="nav-group-label">系统</p>
-        <button class="nav-item" type="button" data-hub="data" data-view="data"><span class="nav-index" aria-hidden="true">08</span><span class="nav-text"><span>设置</span><small>导出 · 边界</small></span></button>
+        <button class="nav-item" type="button" data-hub="data" data-view="data"><span class="nav-index" aria-hidden="true">08</span><span class="nav-text"><span>设置</span><small>导出与运行边界</small></span></button>
       </nav>
 
       <div class="sidebar-footer">
@@ -144,7 +144,7 @@
           <section class="panel offerpilot-panel" aria-labelledby="offerpilot-title">
             <div class="panel-head">
               <div>
-                <h3 id="offerpilot-title">BOSS 直聘 · 岗位采集</h3>
+                <h3 id="offerpilot-title">BOSS 直聘岗位采集</h3>
               </div>
               <div class="offerpilot-head-actions">
                 <span class="badge badge-neutral" id="offerpilot-connection">未检测</span>
@@ -159,7 +159,7 @@
                   <select id="offerpilot-mode">
                     <option value="collect">仅采集</option>
                     <option value="monitor">仅监控 HR 回复</option>
-                    <option value="full" selected>完整流程（推荐）：采集 → 评分 → 入队 → 招呼语，停在发送确认</option>
+                    <option value="full" selected>完整流程（推荐）：采集后自动评分、放进待确认队列并生成招呼语，最后停在发送确认</option>
                   </select>
                 </div>
                 <div class="form-field" data-collect-search>
@@ -188,7 +188,7 @@
                 <div class="collect-resume-main">
                   <strong>评分简历（必传）</strong>
                   <p id="collect-resume-status">尚未读取简历状态。</p>
-                  <p>将简历拖到这里，或点击「上传简历」；支持 PDF、DOCX、MD，最大 5 MB。</p>
+                  <p>将简历拖到这里，或点击「上传简历」；支持 PDF、DOCX、Markdown，最大 5 MB。</p>
                   <p class="resume-drop-status" aria-live="polite"></p>
                 </div>
                 <div class="collect-resume-actions">
@@ -198,7 +198,7 @@
               </div>
               <label class="checkbox-label" hidden><input type="checkbox" id="collect-auto-score"> 采集后自动评分</label>
               <div class="collect-summary" id="collect-summary" aria-live="polite"></div>
-              <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk" checked> 我知道自动化操作可能被平台限制账号</label>
+              <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk" checked> 我知道自动化操作可能导致账号被平台限制</label>
               <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
               <div class="form-actions">
                 <button class="button button-quiet" type="button" id="collect-preflight">检查环境</button>
@@ -211,7 +211,7 @@
               <div class="panel-head">
                 <div>
                   <h4 id="collect-check-title">启动前检查</h4>
-                  <p class="panel-note">错误项会阻止启动；修改条件后会自动重新检查。</p>
+                  <p class="panel-note">有问题时会阻止启动；改完条件会自动重新检查。</p>
                 </div>
               </div>
               <div class="collect-checks" id="collect-checks"><p class="hint">填写条件后会自动检查，也可以点击「检查环境」重新检查。</p></div>
@@ -222,7 +222,7 @@
               <ul class="collect-explain">
                 <li><strong>会：</strong>在 BOSS 搜索上述关键词与城市，读取岗位卡片和详情：标题、公司、城市、薪资、经验/学历与 JD 文本。</li>
                 <li><strong>会：</strong>写入本机 <code>web/data/user/offerpilot/data/offerpilot.db</code>，任务完成后自动导入岗位池。</li>
-                <li><strong>完整流程会：</strong>自动评分、把符合岗位要求的岗位加入审批队列（城市、30 天重复、高风险与必备条件照旧拦截），并为已通过岗位生成招呼语；随后停在最终确认门。</li>
+                <li><strong>完整流程会：</strong>自动评分、把符合岗位要求的岗位加入审批队列（城市、30 天内重复、高风险与必备条件照旧拦截），并为已通过的岗位生成招呼语；之后停在发送确认前，等你核对。</li>
                 <li><strong>不会：</strong>不发送招呼语、不投递、不读取聊天记录、不上传简历；只有开启 AI 评分时才会调用你配置的模型。</li>
               </ul>
             </details>
@@ -237,7 +237,7 @@
               <div class="panel-head">
                 <div>
                   <h4 id="offerpilot-jobs-title">采集结果</h4>
-                  <p class="panel-note">任务完成后会自动导入岗位池；下面是本机岗位库的只读快照。未按岗位文档评分或必备条件明确不满足的岗位不会自动进入审批队列。</p>
+                  <p class="panel-note">任务完成后会自动导入岗位池；下面是本机岗位的只读列表。没有按岗位文档评分、或明确不满足必备条件的岗位，不会自动进入审批队列。</p>
                 </div>
                 <p class="panel-count" id="offerpilot-jobs-count">尚未读取</p>
               </div>
@@ -246,7 +246,7 @@
                 <button class="button button-quiet button-small" type="button" id="offerpilot-open-jobs">去岗位池挑选</button>
               </div>
               <details class="offerpilot-details">
-                <summary>查看只读明细</summary>
+                <summary>查看明细</summary>
                 <div id="offerpilot-jobs-table"></div>
               </details>
             </section>
@@ -274,7 +274,7 @@
               <p id="wa-notice" class="wa-notice" role="status"></p>
               <details id="wa-note-inbox" class="wa-note-inbox" hidden>
                 <summary><span id="wa-note-count" role="status" aria-atomic="true">面经消息</span></summary>
-                <p>收藏和订阅用户给出的单条链接；应用运行时检查更新，遇到登录或验证会暂停。</p>
+                <p>这里显示你收藏的面经链接；运行时会自动检查更新，遇到登录或验证会暂停。</p>
                 <button type="button" id="wa-note-help" class="button button-quiet button-small">面经命令用法</button>
                 <button type="button" id="wa-note-check" class="button button-quiet button-small">运行自检</button>
                 <p id="wa-note-status" role="status"></p>
@@ -298,7 +298,7 @@
                 <div id="wa-context" class="wa-context"></div>
                 <label for="wa-input" class="wa-input-label">发送给 OfferPilot</label>
                 <textarea id="wa-input" rows="2" maxlength="12000" placeholder="描述求职目标，或继续完善你的草稿…"></textarea>
-                <div class="wa-composer-actions"><button type="button" id="wa-toggle-material" class="button button-quiet button-small" aria-expanded="false" aria-controls="wa-material-form">＋ 材料</button><button type="button" id="wa-show-results" class="button button-quiet button-small">草稿与结果</button><span class="wa-key-hint">Shift + Enter 换行</span><button type="button" id="wa-stop" class="button button-quiet button-small" disabled hidden>停止</button><button type="submit" id="wa-send" class="button button-small" aria-label="发送消息">发送 ↑</button></div>
+                <div class="wa-composer-actions"><button type="button" id="wa-toggle-material" class="button button-quiet button-small" aria-expanded="false" aria-controls="wa-material-form">＋ 材料</button><button type="button" id="wa-show-results" class="button button-quiet button-small">草稿与结果</button><span class="wa-key-hint">Shift + Enter 换行</span><button type="button" id="wa-stop" class="button button-quiet button-small" disabled hidden>停止</button><button type="submit" id="wa-send" class="button button-small" aria-label="发送消息">发送</button></div>
               </form>
               <form id="wa-material-form" class="wa-material-form" hidden>
                 <h4>补充材料</h4>
@@ -323,7 +323,7 @@
               <details><summary>修改差异</summary><pre id="wa-diff"></pre></details>
               <details><summary>事实来源与复核</summary><div id="wa-sources"></div></details>
               </div>
-              <div id="wa-result-actions" class="wa-result-actions"><button type="button" id="wa-save" class="button button-small">保存正式版本</button><button type="button" id="wa-copy" class="button button-quiet button-small">复制草稿</button><button type="button" id="wa-delivery" class="button button-quiet button-small">去发送复核</button></div>
+              <div id="wa-result-actions" class="wa-result-actions"><button type="button" id="wa-save" class="button button-small">保存正式版本</button><button type="button" id="wa-copy" class="button button-quiet button-small">复制草稿</button><button type="button" id="wa-delivery" class="button button-quiet button-small">去确认发送</button></div>
               <div id="wa-versions"></div>
             </aside>
           </section>
@@ -332,7 +332,7 @@
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="jobs-title">岗位池</h2>
-            <p class="view-lede">采集到的岗位会自动进入这里，并按岗位要求与你的简历证据评分。符合要求的岗位会自动通过，进入「3 通过」；未评分或必备条件不满足的岗位可以点「手动加入」，由你自行判断。高风险岗位（例如收费、培训贷、保就业承诺）会被拦截，不能加入。所有动作只写本机文件，不访问平台。</p>
+            <p class="view-lede">采集到的岗位会自动进入这里，并按岗位要求和你的简历评分。符合条件的岗位会自动通过，进入「3 通过」；没有评分或必备条件不满足的岗位，可以点「手动加入」，由你自己判断。高风险岗位（如收费、培训贷、保就业承诺）会被拦下，不能加入。这些操作只写本机文件，不访问平台。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
               <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
@@ -346,7 +346,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="jobs-table-title">岗位表</h3>
-                <p class="panel-note">状态更新只提供当前状态允许的 transitions；审批状态只表示人工确认结果。</p>
+                <p class="panel-note">每条岗位只能切换到规则允许的下一步；「已确认」只表示你同意联系，不代表已经投递。</p>
               </div>
               <p class="panel-count" id="jobs-count">显示 0 条</p>
             </div>
@@ -376,7 +376,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="jobs-dossier-title">岗位详情</h3>
-                <p class="panel-note" id="jobs-dossier-sub">标准字段、三项匹配结果与核对材料；缺失的项显示为未知。</p>
+                <p class="panel-note" id="jobs-dossier-sub">岗位原文、三项匹配结果和核对材料；缺失的项显示为未知。</p>
               </div>
               <button class="button button-quiet button-small" type="button" id="jobs-dossier-close">收起</button>
             </div>
@@ -390,7 +390,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="jd-entry-title">录入 JD</h3>
-                  <p class="panel-note">粘贴岗位描述，按本地规则解析；可选评分用于审批阈值。</p>
+                  <p class="panel-note">粘贴岗位描述后按本地规则解析；评分可以留空。</p>
                 </div>
               </div>
               <form class="form-grid" id="jd-form">
@@ -415,11 +415,11 @@
             </section>
 
             <details class="panel advanced-panel">
-              <summary>高级：导入 OfferPilot 静态 JSON</summary>
+              <summary>高级：导入岗位 JSON</summary>
               <div class="panel-head">
                 <div>
-                  <h3 id="import-title">导入 OfferPilot 静态 JSON</h3>
-                  <p class="panel-note">只接受本机粘贴的静态导出 JSON；不登录、不抓取。</p>
+                  <h3 id="import-title">导入岗位 JSON</h3>
+                  <p class="panel-note">只读取你粘贴的导出 JSON，不登录、不抓取。</p>
                 </div>
               </div>
               <form class="form-grid" id="import-form">
@@ -428,8 +428,8 @@
                   <textarea id="import-json" rows="10" placeholder='{"jobs": [{"company": "…", "title": "…", "city": "…"}]}' spellcheck="false"></textarea>
                 </div>
                 <div class="form-field full form-actions">
-                  <button class="button" type="submit" id="import-submit">导入静态岗位池</button>
-                  <p class="hint">重复项自动跳过；错误会以中文提示。</p>
+                  <button class="button" type="submit" id="import-submit">导入岗位</button>
+                  <p class="hint">重复的岗位会自动跳过；有问题时会用中文提示。</p>
                 </div>
               </form>
               <div class="action-result" id="import-result" hidden></div>
@@ -450,7 +450,7 @@
               <button class="ui-hub-tab" type="button" data-view="mail">4 回复</button>
             </nav>
           </header>
-          <p class="notice notice-accent" id="queue-policy">生成招呼语后会自动弹出核对窗口；你在窗口里确认后才发出，不会再弹浏览器确认框。</p>
+          <p class="notice notice-accent" id="queue-policy">生成招呼语后会自动弹出核对窗口；只有你在窗口里确认后才会发出。</p>
           <div id="wa-handoff-slot" class="wa-handoff-slot"></div>
           <p class="notice" id="queue-pipeline-status" hidden></p>
 
@@ -475,7 +475,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="queue-review-title">人工核对</h3>
-                <p class="panel-note" id="queue-review-sub">逐条核对岗位要求与项目证据；通过和发送仍用上方原有按钮，这里只读。</p>
+                <p class="panel-note" id="queue-review-sub">逐条核对岗位要求与项目证据；通过和发送仍用上面的按钮，这里只看不改。</p>
               </div>
               <button class="button button-quiet button-small" type="button" id="queue-review-close">收起</button>
             </div>
@@ -485,7 +485,7 @@
           <section class="panel" aria-labelledby="approved-title">
             <div class="panel-head">
               <div>
-                <h3 id="approved-title">已通过，可以回复</h3>
+                <h3 id="approved-title">已通过，可以联系</h3>
               </div>
               <p class="panel-count" id="queue-approved-count">0 条已确认</p>
             </div>
@@ -506,7 +506,7 @@
                 <p class="queue-delivery-summary" id="queue-delivery-summary"></p>
                 <ul class="queue-delivery-list" id="queue-delivery-list"></ul>
                 <p class="queue-modal-progress" id="queue-delivery-progress" role="status" aria-live="polite"></p>
-                <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk" checked> 我知道自动化操作可能被平台限制账号</label>
+                <label class="checkbox-label"><input type="checkbox" id="queue-delivery-risk" checked> 我知道自动化操作可能导致账号被平台限制</label>
                 <div class="queue-delivery-actions">
                   <button class="button" type="button" id="queue-delivery-start" disabled>确认发送本批 0 条</button>
                 </div>
@@ -533,7 +533,7 @@
             <header class="hr-topbar">
               <div class="hr-topbar-title">
                 <h3 id="hr-panel-title">HR 会话</h3>
-                <p class="hr-topbar-note">只读读取本机 Chrome 中各平台的会话（BOSS / 智联 / 猎聘）；回复每次只发一条，需你逐条确认。</p>
+                <p class="hr-topbar-note">从本机 Chrome 读取各平台会话（BOSS、智联、猎聘）；回复一次只发一条，每条都要你确认。</p>
               </div>
               <div class="hr-topbar-actions">
                 <p class="hr-sync" id="hr-sync-status" role="status" aria-live="polite" data-state="idle">
@@ -599,7 +599,7 @@
                 <p class="hr-reply-who" id="hr-reply-who"></p>
                 <p class="hr-reply-text" id="hr-reply-modal-text"></p>
                 <p class="hr-reply-progress" id="hr-reply-modal-progress" role="status" aria-live="polite"></p>
-                <label class="checkbox-label"><input type="checkbox" id="hr-reply-modal-risk" checked> 我知道自动化操作可能被平台限制账号</label>
+                <label class="checkbox-label"><input type="checkbox" id="hr-reply-modal-risk" checked> 我知道自动化操作可能导致账号被平台限制</label>
                 <div class="hr-reply-actions">
                   <button class="button" type="button" id="hr-reply-confirm" disabled>确认发送这条回复</button>
                 </div>
@@ -615,7 +615,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="mail-parse-title">解析邮件</h3>
-                  <p class="panel-note">主题与正文按不可信数据展示；缺失字段保持为空，不猜测。</p>
+                  <p class="panel-note">主题和正文只当普通文本展示；缺失的字段留空，不猜测。</p>
                 </div>
               </div>
               <form class="form-grid" id="mail-form">
@@ -636,7 +636,7 @@
                   <input id="mail-date" type="date">
                 </div>
                 <div class="form-field full">
-                  <label for="mail-message-id">Message-ID（可选）</label>
+                  <label for="mail-message-id">Message-ID（邮件编号，可选）</label>
                   <input id="mail-message-id" type="text" autocomplete="off" spellcheck="false" placeholder="<id@example.invalid>">
                 </div>
                 <div class="form-field full form-actions">
@@ -651,7 +651,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="mail-list-title">已解析邮件</h3>
-                  <p class="panel-note">只有识别出明确 event_time 的邮件才可生成 .ics；不猜测日期。</p>
+                  <p class="panel-note">只有邮件里写明具体时间的才能生成日历文件；不猜测日期。</p>
                 </div>
               </div>
               <div id="mail-action-result"></div>
@@ -663,15 +663,15 @@
         <section class="view" id="view-profile" data-view-panel="profile" aria-labelledby="profile-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="profile-title">个人资料</h2>
-            <p class="view-lede">这里是工作台的结构化事实源：基本信息、求职偏好、教育/工作/项目经历与技能。保存后只写入本机 <code>web/data/&lt;mode&gt;/profile.json</code>；招呼语、模拟面试与定制简历会优先读取这里的专业信息，联系方式不会进入草稿。</p>
+            <p class="view-lede">这里填写的基本信息、求职偏好、教育/工作/项目经历和技能，会用于生成招呼语、模拟面试和定制简历。保存后只写在本机，联系方式不会进入草稿。</p>
           </header>
 
           <section class="panel integration-panel" aria-labelledby="profile-api-title">
             <div class="integration-head">
               <span class="integration-mark" aria-hidden="true">05</span>
               <div>
-                <h3 id="profile-api-title">个人资料接口 · 已开放</h3>
-                <p>其他本地模块可读取结构化资料；写入走统一动作入口，仍需本人在页面上确认。</p>
+                <h3 id="profile-api-title">本机资料接口</h3>
+                <p>本机其他工具可以读取这份资料；修改仍要你在这个页面上确认并保存。</p>
               </div>
               <span class="badge badge-good">本地可用</span>
             </div>
@@ -679,7 +679,7 @@
               <div><dt>读取</dt><dd><code>GET /api/profile?mode=user</code> 返回资料与完整度；不包含任何凭据</dd></div>
               <div><dt>写入</dt><dd><code>POST /api/action</code> → <code>{"action":"save-profile","mode":"user","profile":{...}}</code></dd></div>
               <div><dt>导入</dt><dd><code>import-profile-cv</code> 支持上传 PDF、DOCX、MD、TXT（由 Agent 提取资料与经历），也可读取本机 <code>workspace/resume.md</code>；只返回建议，不自动保存</dd></div>
-              <div><dt>边界</dt><dd>仅 loopback；联系方式不进入招呼语/题单；不自动投递</dd></div>
+              <div><dt>边界</dt><dd>只在本机访问；联系方式不进入招呼语和题单；不自动投递</dd></div>
             </dl>
             <p><a class="button button-quiet button-small" href="/api/doc/profile-api" download="PROFILE-API.md">下载接口文档</a></p>
           </section>
@@ -773,7 +773,7 @@
         <section class="view" id="view-interview" data-view-panel="interview" aria-labelledby="interview-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="interview-title">模拟面试</h2>
-            <p class="view-lede">Mock 题单只从本地题库取题；复盘只摘录逐字稿中的显式证据。</p>
+            <p class="view-lede">题单只从本地题库取题；复盘只摘录逐字稿里写出来的内容。</p>
           </header>
 
           <div class="pipeline interview-hub" id="interview-hub" aria-label="模拟面试四张卡片"></div>
@@ -786,7 +786,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="chat-title">文字模拟面试</h3>
-                  <p class="panel-note">开始前只选择轮次、时长、岗位和 JD。页面只显示规则、问题和回答；准备问题期间不会展示内部规划。</p>
+                  <p class="panel-note">开始前先选轮次、时长、岗位和 JD。页面只显示规则、问题和回答，不显示后台的准备过程。</p>
                 </div>
                 <p class="chat-progress" id="chat-progress">剩余 30 分钟</p>
               </div>
@@ -849,7 +849,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="worksheet-title">生成 Mock 题单</h3>
-                  <p class="panel-note">按时长分配三个分段；题库为空时明确提示，不编造题目。题目只来自本地题库，不会进入模拟面试的本场材料或对话题面。</p>
+                  <p class="panel-note">按所选时长分成三段；题目只来自本地题库，题库为空时会提示，不会编造。</p>
                 </div>
               </div>
               <form class="form-grid" id="worksheet-form">
@@ -892,7 +892,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="debrief-title">逐字稿复盘</h3>
-                  <p class="panel-note">空字段表示逐字稿没有显式证据；不生成实质性能力评价。按原规则仍可在本模块使用。</p>
+                  <p class="panel-note">逐字稿里没有明确依据的字段会留空，不凭空评价。</p>
                 </div>
               </div>
               <form class="form-grid" id="debrief-form">
@@ -918,7 +918,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="chat-library-title-heading">题库与面经</h3>
-                  <p class="panel-note">面经和岗位知识在这里新增、修改或删除，会留在本机。开始这场面试时不必勾选，也没有本场上传。</p>
+                  <p class="panel-note">面经和岗位知识都保存在本机，可以随时新增、修改或删除；开始面试时不需要在这里勾选。</p>
                 </div>
               </div>
               <div class="chat-library" id="chat-library">
@@ -968,7 +968,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="bank-title">补充题库</h3>
-                  <p class="panel-note">题目写入当前模式的本地题库，只供 Mock 题单使用，不会进入模拟面试对话。</p>
+                  <p class="panel-note">题目存入本机题库，只用于生成 Mock 题单，不会出现在模拟面试对话里。</p>
                 </div>
               </div>
               <form class="form-grid" id="bank-form">
@@ -1021,7 +1021,7 @@
         <section class="view" id="view-push" data-view-panel="push" aria-labelledby="push-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="push-title">信息推送</h2>
-            <p class="view-lede">把岗位状态、面试提醒与 HR 回复整理成通知。当前只生成 dry-run 载荷，不连接真实推送服务。</p>
+            <p class="view-lede">把岗位状态、面试提醒和 HR 回复整理成通知内容。这里只预览将要发送的内容，不会真的发出。</p>
           </header>
 
 
@@ -1029,14 +1029,14 @@
             <div class="integration-head">
               <span class="integration-mark" aria-hidden="true">07</span>
               <div>
-                <h3 id="push-agent-title">推送 Agent · 接口预留</h3>
-                <p>外部推送 Agent 可订阅本地状态事件并决定发送渠道；工作台只保留载荷预览与边界说明。</p>
+                <h3 id="push-agent-title">推送 Agent（未接入）</h3>
+                <p>以后可以由外部推送工具订阅这些通知并选择发送渠道；现在只能在这里预览内容。</p>
               </div>
               <span class="badge badge-neutral">待接入</span>
             </div>
             <dl class="integration-meta">
               <div><dt>输入</dt><dd>岗位状态、面试时间、HR 回复分类</dd></div>
-              <div><dt>输出</dt><dd>通知文案与渠道载荷（当前 dry-run）</dd></div>
+              <div><dt>输出</dt><dd>通知文案和要发往的渠道（目前只预览）</dd></div>
               <div><dt>边界</dt><dd>不保存凭据；不发起外部 HTTP 请求</dd></div>
             </dl>
           </section>
@@ -1044,8 +1044,8 @@
           <section class="panel" aria-labelledby="dry-run-title">
             <div class="panel-head">
               <div>
-                <h3 id="dry-run-title">飞书 dry-run 载荷</h3>
-                <p class="panel-note">只显示将要发送的 JSON 结构；没有发出 HTTP 请求，也没有配置凭据。</p>
+                <h3 id="dry-run-title">飞书通知预览</h3>
+                <p class="panel-note">只显示将要发送的 JSON 内容；不会发出请求，也不会保存凭据。</p>
               </div>
             </div>
             <form class="form-grid" id="dry-run-form">
@@ -1070,7 +1070,7 @@
                 <input id="dry-channel" type="text" value="manual_paste" autocomplete="off">
               </div>
               <div class="form-field full form-actions">
-                <button class="button" type="submit" id="dry-run-button">生成 dry-run 载荷</button>
+                <button class="button" type="submit" id="dry-run-button">生成通知预览</button>
               </div>
             </form>
             <pre class="code-block" id="dry-run-result" hidden></pre>
@@ -1080,7 +1080,7 @@
         <section class="view" id="view-resume" data-view-panel="resume" aria-labelledby="resume-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="resume-title">定制简历</h2>
-            <p class="view-lede">围绕单个岗位整理可核实的经历原文，并做 ATS 静态可读性检查。不修改 Master Resume，不编造数字。</p>
+            <p class="view-lede">围绕一个岗位整理可核实的经历原文，并检查简历筛选系统（ATS）能不能读懂。不改动主简历，不编造数字。</p>
           </header>
 
 
@@ -1088,8 +1088,8 @@
             <div class="integration-head">
               <span class="integration-mark" aria-hidden="true">08</span>
               <div>
-                <h3 id="resume-agent-title">定制简历 Agent · 接口预留</h3>
-                <p>外部简历 Agent 可按岗位生成单栏 ATS 版本；当前保留经历变体、关键词核对与 PDF 预检入口。</p>
+                <h3 id="resume-agent-title">定制简历 Agent（未接入）</h3>
+                <p>外部简历 Agent 可以按岗位生成单栏简历；现在可用的是经历变体、关键词核对和 PDF 预检。</p>
               </div>
               <span class="badge badge-neutral">待接入</span>
             </div>
@@ -1105,7 +1105,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="ats-title">ATS 简历可读性检查</h3>
-                  <p class="panel-note">本地选择 PDF，前端读成 Base64 后交给本机检查；不上传外部服务。</p>
+                  <p class="panel-note">在本机选择 PDF，只在本机检查，不上传到外部服务。</p>
                 </div>
               </div>
               <form class="form-grid" id="ats-form">
@@ -1121,10 +1121,10 @@
                 </div>
                 <div class="form-field full form-actions">
                   <button class="button" type="submit" id="ats-submit">检查 PDF</button>
-                  <p class="hint">只做静态可读性预检，不渲染、不 OCR。</p>
+                  <p class="hint">只检查文字层能不能被筛选系统读到，不渲染页面，也不识别扫描件。</p>
                 </div>
               </form>
-              <p class="notice" id="ats-note">needs_manual_check 不是通过；无法提取文字层时仍需人工核查。</p>
+              <p class="notice" id="ats-note">「需人工检查」不等于通过；提取不到文字时，请自己再核对一遍。</p>
               <div class="action-result" id="ats-result" hidden></div>
             </section>
 
@@ -1132,7 +1132,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="variant-title">保存经历变体</h3>
-                  <p class="panel-note">只保存你手动改写的原文；不修改 Master Resume，不生成数字。</p>
+                  <p class="panel-note">只保存你手动改写的原文；不改动主简历，也不编造数字。</p>
                 </div>
               </div>
               <form class="form-grid" id="variant-form">
@@ -1150,13 +1150,13 @@
               </form>
               <div class="action-result" id="variant-result" hidden></div>
               <h4 class="subhead">已保存变体</h4>
-              <p class="panel-note">每行可只读对比主稿，逐段展示新增、删除与改写；不会修改主稿或保存任何内容。</p>
+              <p class="panel-note">每行可以对比主稿，逐段展示新增、删除和改写；不会修改主稿。</p>
               <div id="variant-list"></div>
               <div class="action-result resume-compare-result" id="resume-compare-result" aria-live="polite" hidden></div>
             </section>
           </div>
           <section class="panel career-user-panel" id="cu-resume-panel" aria-labelledby="cu-title">
-            <div class="panel-head"><div><h3 id="cu-title">从真实经历到定制简历</h3><p class="panel-note">选择导入方式 → 整理与确认经历 → 预览 → 保存并导出</p></div><span class="badge" id="cu-connection">经历导入</span></div>
+            <div class="panel-head"><div><h3 id="cu-title">从真实经历到定制简历</h3><p class="panel-note">先选导入方式，再整理并确认经历，然后预览，最后保存并导出。</p></div><span class="badge" id="cu-connection">经历导入</span></div>
             <div id="cu-personal" hidden>
               <p class="hint">生成简历会使用你在个人资料中确认的信息。<button class="button button-quiet" type="button" data-view-link="profile">填写 / 更新个人资料</button></p>
               <fieldset class="cu-source-choice"><legend>选择导入方式</legend>
@@ -1217,7 +1217,7 @@
                 </form>
               </section>
               <section id="cu-project-review" hidden><h4>确认实际属于你的经历表述</h4><p class="career-message" id="cu-project-positioning"></p><p class="career-message" id="cu-project-summary"></p><p class="hint" id="cu-coverage"></p><div id="cu-claims"></div><p class="hint">只勾选你实际负责且愿意在简历中陈述的工作。模型整理的表述仍需你核对。</p><button class="button" id="cu-start-readiness" type="button">确认所选经历，生成简历预览</button></section>
-              <section id="cu-resume-preview" hidden><h4>简历预览</h4><fieldset class="cu-template-choice"><legend>选择简历模板 · A4 单栏</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级 · 克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文 · 黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据导入材料和本人确认生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
+              <section id="cu-resume-preview" hidden><h4>简历预览</h4><fieldset class="cu-template-choice"><legend>选择简历模板（A4 单栏）</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级 · 克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文 · 黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据导入材料和本人确认生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
               <section id="cu-saved-resume" hidden><h4>已保存的简历版本</h4><p class="hint" id="cu-version-label"></p><div class="career-actions"><button class="button button-quiet" id="cu-download" type="button">下载 Markdown</button><button class="button button-quiet" id="cu-download-pdf" type="button">下载 PDF</button><button class="button button-quiet" id="cu-print" type="button">打印 / 导出 PDF</button><button class="button button-quiet" id="cu-regenerate" type="button">用最新个人资料生成新版</button><button class="button" id="cu-start-formal" type="button" hidden>基于此版本开始正式模拟面试</button></div></section>
               <section id="cu-history" hidden><h4>简历版本记录</h4><div id="cu-versions"></div></section>
             </div>
@@ -1227,14 +1227,14 @@
         <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="data-title">设置</h2>
-            <p class="view-lede">配置 AI 接口（保存后可一键测试连接）、运行本地测试、生成验收报告或导出数据。外观在左侧设置区切换。</p>
+            <p class="view-lede">配置 AI 接口，保存后可以测试连接；也可以运行本地测试、生成验收报告或导出数据。外观在左侧切换。</p>
           </header>
 
           <section class="panel" aria-labelledby="ops-title">
             <div class="panel-head">
               <div>
                 <h3 id="ops-title">本地操作</h3>
-                <p class="panel-note">测试与报告都在本进程内运行；导出只包含本地工作台数据。</p>
+                <p class="panel-note">测试和报告都在本机运行；导出只包含本工作台的数据。</p>
               </div>
             </div>
             <div class="button-row">
@@ -1249,7 +1249,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="ai-settings-title">AI 接口</h3>
-                <p class="panel-note">打招呼语、简历解析与岗位评分使用这里的模型服务。密钥只保存在本机，保存后不会再显示。</p>
+                <p class="panel-note">招呼语、简历解析和岗位评分会使用这里配置的模型。密钥只保存在本机，保存后不再显示。</p>
               </div>
               <span class="badge badge-neutral" id="ai-settings-badge">读取中</span>
             </div>
@@ -1274,8 +1274,8 @@
           <section class="panel" aria-labelledby="downloads-title">
             <div class="panel-head">
               <div>
-                <h3 id="downloads-title">下载列表</h3>
-                <p class="panel-note">准备清单、ICS、题单、验收报告与导出文件都保存在当前模式目录。</p>
+                <h3 id="downloads-title">下载文件</h3>
+                <p class="panel-note">准备清单、日历文件、题单、验收报告和导出文件都保存在本机。</p>
               </div>
             </div>
             <div id="downloads-table"></div>
@@ -1285,7 +1285,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="boundaries-title">运行边界</h3>
-                <p class="panel-note">这些边界是产品约束，不是可切换的配置。</p>
+                <p class="panel-note">这些限制固定生效，不能关闭。</p>
               </div>
             </div>
             <div id="boundaries-table"></div>
@@ -1304,13 +1304,13 @@
           </section>
 
           <h3 class="section-label" id="system-title">系统</h3>
-          <p class="view-lede">运行看板与流程图表，只读展示本地数据，不影响上方操作。</p>
+          <p class="view-lede">运行看板和图表只展示本地数据，不影响上面的操作。</p>
 
           <section class="panel pipeline-panel" aria-labelledby="pipeline-title">
             <div class="panel-head">
               <div>
                 <h3 id="pipeline-title">四步流程</h3>
-                <p class="panel-note">前三步由本地自动完成，只有最后一步需要你确认；本工作台只记录，不发送、不投递。</p>
+                <p class="panel-note">前三步由本地自动完成，最后一步等你确认；这里只记录进度。</p>
               </div>
               <a class="button button-quiet button-small" href="/api/doc/pipeline-api" download="PIPELINE-API.md">接口文档</a>
             </div>
@@ -1321,8 +1321,8 @@
           <section class="panel belt-panel" aria-labelledby="belt-title">
             <div class="panel-head">
               <div>
-                <h3 id="belt-title">9 状态工序带</h3>
-                <p class="panel-note">节点数字为当前筛选下的岗位数；点击节点按该状态筛选。箭头表示相邻工序，分支在焦点文字中列出。</p>
+                <h3 id="belt-title">岗位状态</h3>
+                <p class="panel-note">数字是当前筛选下的岗位数；点节点可按该状态筛选。箭头表示状态之间可以这样切换。</p>
               </div>
               <p class="focus-line" id="belt-focus">当前焦点：全部状态</p>
             </div>
@@ -1339,7 +1339,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="channel-chart-title">渠道转化</h3>
-                  <p class="panel-note">投递、面试、Offer 为同量纲计数；转化率见下方数据表。</p>
+                  <p class="panel-note">只统计单位相同的投递、面试和 Offer 数；转化率见下方表格。</p>
                 </div>
               </div>
               <div class="chart-canvas" id="channel-chart"></div>
@@ -1350,7 +1350,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="quarter-chart-title">季度计数</h3>
-                  <p class="panel-note">只画同量纲的投递、面试、Offer 计数；8 轴混合数据保留在表格中。</p>
+                  <p class="panel-note">只画投递、面试和 Offer 数；其他指标放在下方表格。</p>
                 </div>
               </div>
               <div class="chart-canvas" id="quarter-chart"></div>
@@ -1361,7 +1361,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="weakness-chart-title">弱点标签</h3>
-                  <p class="panel-note">来自本地复盘卡片的显式弱点标签计数，不评价真实能力。</p>
+                  <p class="panel-note">统计复盘卡片里明确标出的弱点标签，不代表真实能力。</p>
                 </div>
               </div>
               <div class="chart-canvas" id="weakness-chart"></div>
@@ -1372,7 +1372,7 @@
               <div class="panel-head">
                 <div>
                   <h3 id="mail-chart-title">邮件意图</h3>
-                  <p class="panel-note">来自离线规则分类的本地邮件数量。</p>
+                  <p class="panel-note">按本地规则给邮件分类后的数量。</p>
                 </div>
               </div>
               <div class="chart-canvas" id="mail-chart"></div>

@@ -35,7 +35,7 @@ const BOUNDARY_LABELS = {
 const BOUNDARY_VALUES = {
   embedded_offerpilot_only: '岗位自动化（仅本机、人工确认投递）',
   not_implemented_offline_build: '未实现（离线版本）',
-  dry_run_only: '仅 dry-run',
+  dry_run_only: '只生成预览',
   unavailable: '不可用'
 };
 const OFFERPILOT_MODE_LABELS = {
@@ -82,7 +82,7 @@ const OFFERPILOT_PACE = {
 const OFFERPILOT_MODE_HINTS = {
   collect: '采集岗位并按你的简历评分，不投递、不发消息。',
   monitor: '只检查已有会话中的 HR 回复，不采集新岗位、不发送消息。',
-  full: '采集后自动评分、入队并生成招呼语，停在最终确认门；发送仍需你确认。'
+  full: '采集后自动评分、放进待确认队列并生成招呼语，停在发送确认前；发送仍需你确认。'
 };
 const OFFERPILOT_JOB_STATUS_LABELS = {
   pending: '待评分',
@@ -648,7 +648,7 @@ function setRefreshing(active) {
 
 function friendlyError(error) {
   if (error instanceof TypeError) {
-    return '无法连接本地服务；请确认 web/server.py 正在运行。';
+    return '连不上本地服务；请确认工作台服务还在运行，然后点「刷新数据」重试。';
   }
   if (error && error.message) return error.message;
   return '未知错误。';
@@ -659,10 +659,10 @@ async function parseResponse(response) {
   try {
     data = await response.json();
   } catch (error) {
-    throw new Error(`服务返回了无法解析的响应（HTTP ${response.status}）。`);
+    throw new Error(`服务返回的内容无法解析（HTTP ${response.status}）。请刷新后重试。`);
   }
   if (!response.ok) {
-    const message = data && data.error ? data.error : `请求失败（HTTP ${response.status}）。`;
+    const message = data && data.error ? data.error : `请求没有成功（HTTP ${response.status}）。请稍后重试。`;
     throw new Error(message);
   }
   return data;
@@ -691,7 +691,7 @@ async function loadState(options = {}) {
     }
   } catch (error) {
     if (seq !== state.fetchSeq) return;
-    setStatus(`载入失败：${friendlyError(error)}`, 'error');
+    setStatus(`数据没有载入：${friendlyError(error)}`, 'error');
   } finally {
     if (seq === state.fetchSeq) setRefreshing(false);
   }
@@ -721,7 +721,7 @@ async function runAction(button, operation) {
   try {
     return await operation();
   } catch (error) {
-    setStatus(`操作失败：${friendlyError(error)}`, 'error');
+    setStatus(`没有完成：${friendlyError(error)}`, 'error');
     return null;
   } finally {
     if (button) {
@@ -1130,7 +1130,7 @@ function renderGroupedBar(container, options) {
       const barHeight = scaleMax ? (value / scaleMax) * plotHeight : 0;
       const x = center - barsWidth / 2 + seriesIndex * (barWidth + barGap);
       const y = margin.top + plotHeight - barHeight;
-      const labelText = `${category} · ${series.label}：${value}`;
+      const labelText = `${category}，${series.label}：${value}`;
       const bar = svgEl('rect', {
         x,
         y,
@@ -1394,7 +1394,7 @@ function workbenchFourStages(snapshot) {
     {
       key: 'queue',
       index: '02',
-      title: '评分入队',
+      title: '评分筛选',
       unit: '个岗位',
       count: queued,
       description: '按岗位要求与简历证据自动筛选，合适的岗位进入审批队列。',
@@ -1407,7 +1407,7 @@ function workbenchFourStages(snapshot) {
       title: '招呼语已生成',
       unit: '条',
       count: greetings,
-      description: '只为已入队岗位生成草稿，不会发送。',
+      description: '只为待确认岗位生成草稿，不会发送。',
       action: false,
       reason: null
     },
@@ -1470,7 +1470,7 @@ function renderPipeline(snapshot) {
       const button = el('button', {
         className: 'button button-small workbench-confirm-button',
         attrs: { type: 'button' },
-        text: '去审批队列确认'
+        text: '去确认岗位'
       });
       button.addEventListener('click', () => {
         showView('queue');
@@ -1493,7 +1493,7 @@ function renderPipeline(snapshot) {
         const status = PIPELINE_EVENT_LABELS[row.status] || row.status || '';
         const detail = row.message || row.job_id || '无附加说明';
         dom.pipelineEvents.append(el('div', { className: 'external-event' }, [
-          el('span', { className: `badge badge-${row.status === 'failed' ? 'bad' : 'neutral'}`, text: `${stage} · ${status}` }),
+          el('span', { className: `badge badge-${row.status === 'failed' ? 'bad' : 'neutral'}`, text: `${stage}，${status}` }),
           el('span', { className: 'external-event-detail', text: detail }),
           el('span', { className: 'external-event-time', text: formatDateTime(row.received_at) })
         ]));
@@ -1532,7 +1532,7 @@ function renderBelt(snapshot) {
       attrs: {
         type: 'button',
         'aria-pressed': String(state.jobState === stateName),
-        'aria-label': `${stateName}，${count} 个岗位；可流转至 ${outgoing.length ? outgoing.join('、') : '无，终态'}`
+        'aria-label': `${stateName}，${count} 个岗位；可流转至 ${outgoing.length ? outgoing.join('、') : '无，已是最终状态'}`
       }
     }, [
       el('span', { className: 'belt-index', text: String(index + 1) }),
@@ -1550,11 +1550,11 @@ function renderBelt(snapshot) {
 
   if (state.jobState === 'all') {
     const scope = snapshot.scope || {};
-    dom.beltFocus.textContent = `当前焦点：全部状态 · 显示 ${toInt(scope.jobs)} / 共 ${toInt(scope.all_jobs)} 个岗位`;
+    dom.beltFocus.textContent = `当前焦点：全部状态，显示 ${toInt(scope.jobs)} 个岗位，共 ${toInt(scope.all_jobs)} 个。`;
   } else {
     const count = toInt(counts[state.jobState]);
     const outgoing = Array.isArray(transitions[state.jobState]) ? transitions[state.jobState] : [];
-    dom.beltFocus.textContent = `当前焦点：${state.jobState} · ${count} 个岗位 · 可流转至：${outgoing.length ? outgoing.join('、') : '终态，无后续流转'}`;
+    dom.beltFocus.textContent = `当前焦点：${state.jobState}，${count} 个岗位；可以转到：${outgoing.length ? outgoing.join('、') : '已是最终状态'}`;
   }
 }
 
@@ -1721,7 +1721,7 @@ function approvalNode(value) {
   if (value === 'approved') return badge('已确认可人工投递', 'good', '✓');
   if (value === 'pending') return badge('待确认', 'warn', '!');
   if (value) return badge(String(value), 'neutral', '·');
-  return el('span', { className: 'muted', text: '未入队' });
+  return el('span', { className: 'muted', text: '未加入队列' });
 }
 
 /* jobs-dossier:start（tools/tests/test_jobs_dossier.py 会截取本段用 node 执行） */
@@ -1775,7 +1775,7 @@ function dossierMatch(job) {
   const match = job && typeof job.match === 'object' && job.match ? job.match : {};
   return [
     { key: 'fit_score', label: '适配分', value: dossierText(match.fit_score) },
-    { key: 'fit_confidence', label: '判断置信度', value: dossierText(match.fit_confidence) },
+    { key: 'fit_confidence', label: '判断依据', value: dossierText(match.fit_confidence) },
     { key: 'risk_level', label: '岗位风险等级', value: dossierText(match.risk_level) }
   ];
 }
@@ -2002,7 +2002,7 @@ function renderJobs(snapshot) {
       });
       actions.append(select);
     } else {
-      actions.append(el('span', { className: 'terminal-note', text: '终态，无后续流转' }));
+      actions.append(el('span', { className: 'terminal-note', text: '已是最终状态' }));
     }
 
     const dossierButton = el('button', {
@@ -2043,7 +2043,7 @@ function renderJobs(snapshot) {
 
   renderTable(dom.jobsTable, {
     caption: '表：岗位清单与允许的下一步',
-    columns: ['选择', '公司', '岗位', '城市', '薪资', '来源平台', '评分', '硬过滤', '风险', '状态', '审批状态', '警告数', '动作'],
+    columns: ['选择', '公司', '岗位', '城市', '薪资', '来源平台', '评分', '硬条件', '风险', '状态', '审批状态', '警告数', '动作'],
     rows,
     emptyText: '当前筛选下没有岗位。可以调整筛选，或在下方粘贴 JD / 导入静态 JSON。',
     className: 'jobs-table'
@@ -2566,8 +2566,8 @@ function renderProfileMeter(completeness) {
     text: state.profileDirty
       ? `当前显示已保存资料的完整度 ${percent}%；页面有未保存修改，保存后更新。`
       : missing.length
-        ? `完整度 ${percent}% · 还缺：${missing.join('、')}`
-        : `完整度 ${percent}% · 资料齐全，可用于生成草稿。`
+        ? `完整度 ${percent}%，还缺：${missing.join('、')}`
+        : `完整度 ${percent}%，资料齐全，可以生成草稿。`
   }));
   if (sections.length) {
     const chips = el('div', { className: 'chip-row' });
@@ -2603,7 +2603,7 @@ function renderProfileDraftBanner() {
   }
   clear(banner);
   banner.append(el('strong', {
-    text: `已根据你的简历预填了 ${state.profilePrefillCount} 项，请核对并补充后点「保存」——现在还只是草稿，没保存的话离开页面会丢失。`
+    text: `已按你的简历预填了 ${state.profilePrefillCount} 项，请核对后点「保存」；现在还是草稿，离开页面就会丢失。`
   }));
 }
 
@@ -2634,7 +2634,7 @@ async function autoPrefillProfileFromCv() {
   state.profileDirty = true;
   state.profilePrefillCount = profileCountPrefilled(data.profile);
   renderProfile(data.profile);
-  showInline(dom.profileResult, `已根据你的简历预填了 ${state.profilePrefillCount} 项，请核对后保存。`, 'ok');
+  showInline(dom.profileResult, `已按你的简历预填了 ${state.profilePrefillCount} 项，请核对后保存。`, 'ok');
 }
 
 function renderProfile(profile) {
@@ -2764,7 +2764,7 @@ async function importProfileFromCv(file) {
     showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD 或 TXT 文件，最大 5 MB。', 'error');
     return;
   }
-  if (state.profileDirty && !window.confirm('Agent 会更新识别到的资料及教育、工作和项目经历；未识别的资料保留。继续吗？')) return;
+  if (state.profileDirty && !window.confirm('导入会用识别结果更新资料、教育和经历；没识别到的部分保持不变。继续吗？')) return;
   state.profileImportBusy = true;
   dom.profileImport.disabled = true;
   dom.profileImport.setAttribute('aria-busy', 'true');
@@ -2775,7 +2775,7 @@ async function importProfileFromCv(file) {
   try {
     showInline(dom.profileResult, '正在读取简历文件…', 'info');
     const contentBase64 = await readFileAsBase64(file);
-    showInline(dom.profileResult, 'Agent 正在解析整份简历及教育、工作、项目经历，请稍候…', 'info');
+    showInline(dom.profileResult, '正在解析整份简历，包括教育、工作和项目经历，请稍候…', 'info');
     const data = await postAction('import-profile-cv', { filename: file.name, content_base64: contentBase64 });
     if (data.ok === false) throw new Error(data.message || '简历导入失败，请重新选择。');
     const profile = collectProfileForm();
@@ -2799,7 +2799,7 @@ async function importProfileFromCv(file) {
     renderProfile(profile);
     dom.profileImportText.textContent = data.source_text || '';
     dom.profileImportPreview.hidden = !data.source_text;
-    const counts = `教育 ${suggested.education?.length || 0} 条 · 工作/实习 ${suggested.experiences?.length || 0} 条 · 项目 ${suggested.projects?.length || 0} 条。`;
+    const counts = `教育 ${suggested.education?.length || 0} 条，工作/实习 ${suggested.experiences?.length || 0} 条，项目 ${suggested.projects?.length || 0} 条。`;
     showInline(dom.profileResult, [data.message, counts, ...(data.warnings || [])].join('\n'), data.warnings?.length ? 'warn' : 'ok');
     setStatus('简历已解析，请核对并确认真实性后保存。', 'ok');
   } catch (error) {
@@ -2919,11 +2919,11 @@ function renderOfferPilotTask(task, lastTask) {
   const previous = lastTask && typeof lastTask === 'object' ? lastTask : null;
   const row = current || previous;
   if (!row) {
-    container.append(el('p', { className: 'hint', text: '尚无任务回报。岗位自动化就绪后可在此启动受控任务。' }));
+    container.append(el('p', { className: 'hint', text: '还没有任务记录。采集组件就绪后，可以在这里启动。' }));
     return;
   }
   if (!current && previous) {
-    container.append(el('p', { className: 'hint', text: '当前没有运行中的任务；以下为最近一次回报。' }));
+    container.append(el('p', { className: 'hint', text: '现在没有运行中的任务；下面是最近一次的结果。' }));
   }
   const line = el('div', { className: 'offerpilot-task-line' });
   line.append(el('strong', { text: OFFERPILOT_MODE_LABELS[row.mode] || row.mode || '任务' }));
@@ -2939,7 +2939,7 @@ function renderOfferPilotTask(task, lastTask) {
   if (current && row.id && ['running', 'stopping', 'queued', 'pending'].includes(String(row.status || ''))) {
     const stop = el('button', {
       className: 'button button-quiet button-small',
-      text: row.stop_requested ? '停止请求已发送' : '请求停止任务',
+      text: row.stop_requested ? '正在停止…' : '停止任务',
       attrs: { type: 'button' }
     });
     stop.disabled = Boolean(row.stop_requested) || String(row.status) === 'stopping';
@@ -3093,7 +3093,7 @@ function renderCollectChecks(preflight) {
   const mode = collectMode();
   const summary = el('p', {
     className: `notice ${preflight.ok ? '' : 'notice-accent'}`.trim(),
-    text: preflight.ok ? '检查通过，可以启动。' : '检查未通过；请先处理下面的阻塞项。'
+    text: preflight.ok ? '检查通过，可以启动。' : '检查未通过；请先处理下面的问题。'
   });
   dom.collectChecks.append(summary);
   if (!checks.length) {
@@ -3204,10 +3204,10 @@ function renderOfferPilot(boss) {
   }
   if (dom.offerpilotState) {
     clear(dom.offerpilotState);
-    dom.offerpilotState.append(offerpilotMetaRow('地址', el('span', { className: 'cell-mono', text: String(data.base_url || '—') })));
-    dom.offerpilotState.append(offerpilotMetaRow('连接', state.offerpilotCanStart ? '内嵌后端可用' : '依赖或数据未就绪'));
+    dom.offerpilotState.append(offerpilotMetaRow('运行方式', el('span', { className: 'cell-mono', text: String(data.base_url || '—').startsWith('embedded://') ? '内嵌运行（本机）' : String(data.base_url || '—') })));
+    dom.offerpilotState.append(offerpilotMetaRow('状态', state.offerpilotCanStart ? '采集组件可用' : '组件或数据没准备好'));
     if (connected && data.ai) {
-      dom.offerpilotState.append(offerpilotMetaRow('AI 配置', data.ai.configured ? '已配置（状态不回传密钥）' : '未配置（仍可无 AI 采集/监控）'));
+      dom.offerpilotState.append(offerpilotMetaRow('AI 配置', data.ai.configured ? '已配置（不会显示密钥）' : '未配置（仍可无 AI 采集/监控）'));
     }
     const capabilities = connected && data.capabilities ? data.capabilities : {};
     const keys = Object.keys(OFFERPILOT_CAPABILITY_LABELS).filter((key) => capabilities[key] === true);
@@ -3222,12 +3222,12 @@ function renderOfferPilot(boss) {
       if (Array.isArray(preferences.keywords) && preferences.keywords.length) parts.push(`关键词：${preferences.keywords.slice(0, 6).map(compactValue).join('、')}`);
       if (Array.isArray(preferences.cities) && preferences.cities.length) parts.push(`城市：${preferences.cities.slice(0, 6).map(compactValue).join('、')}`);
       if (preferences.salary !== undefined && preferences.salary !== null && preferences.salary !== '') parts.push(`薪资：${compactValue(preferences.salary)}`);
-      if (preferences.score_threshold !== undefined && preferences.score_threshold !== null) parts.push(`评分门：${compactValue(preferences.score_threshold)}/100`);
-      dom.offerpilotState.append(offerpilotMetaRow('偏好快照', parts.length ? parts.join('；') : '已连接，暂无偏好字段'));
+      if (preferences.score_threshold !== undefined && preferences.score_threshold !== null) parts.push(`最低分：${compactValue(preferences.score_threshold)}/100`);
+      dom.offerpilotState.append(offerpilotMetaRow('上次使用的偏好', parts.length ? parts.join('；') : '已连接，暂无偏好字段'));
     }
   }
   if (dom.offerpilotError) {
-    const error = connected ? '' : String(data.error || '岗位自动化组件依赖或数据未就绪；工作台仍可正常使用。');
+    const error = connected ? '' : String(data.error || '采集组件或数据还没准备好；工作台其他功能不受影响。');
     dom.offerpilotError.hidden = !error;
     dom.offerpilotError.textContent = error;
     dom.offerpilotError.className = `notice ${connected ? '' : 'notice-accent'}`.trim();
@@ -3254,7 +3254,7 @@ function renderOfferPilot(boss) {
     if (dom.offerpilotJobsCount) dom.offerpilotJobsCount.textContent = '未连接';
     if (dom.offerpilotJobsTable) {
       clear(dom.offerpilotJobsTable);
-      dom.offerpilotJobsTable.append(el('p', { className: 'hint', text: '岗位自动化就绪后，可在此读取采集结果。' }));
+      dom.offerpilotJobsTable.append(el('p', { className: 'hint', text: '采集组件就绪后，这里会显示采集结果。' }));
     }
   } else if (!state.offerpilotJobsLoaded) {
     loadOfferPilotJobs();
@@ -3294,7 +3294,7 @@ function syncOfferPilotStartState() {
   dom.offerpilotStart.title = state.offerpilotTaskActive
     ? '已有任务正在运行；请先停止或等待结束'
     : resumeMissing ? '请先上传评分简历'
-    : preflightReady ? '' : '先点击「检查环境」并处理阻塞项';
+    : preflightReady ? '' : '先点「检查环境」并处理问题';
 }
 
 function renderOfferPilotJobs() {
@@ -3311,7 +3311,7 @@ function renderOfferPilotJobs() {
       job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score),
       OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
     ]),
-    emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '岗位自动化未就绪。'
+    emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '采集组件还没准备好。'
   });
   syncOfferPilotSelection();
 }
@@ -3343,10 +3343,10 @@ async function loadOfferPilotJobs(options = {}) {
       if (!validIds.has(id)) state.offerpilotSelection.delete(id);
     });
     if (dom.offerpilotJobsCount) {
-      dom.offerpilotJobsCount.textContent = `只读 ${jobs.length} 条`;
+      dom.offerpilotJobsCount.textContent = `共 ${jobs.length} 条`;
     }
     renderOfferPilotJobs();
-    if (options.announce) setStatus(`已读取 ${jobs.length} 条采集结果；导入前不会写入岗位池。`, 'ok');
+    if (options.announce) setStatus(`读到 ${jobs.length} 条采集结果；导入前不会写入岗位池。`, 'ok');
   } catch (error) {
     state.offerpilotJobsLoaded = false;
     state.offerpilotJobs = [];
@@ -3365,7 +3365,7 @@ async function loadOfferPilotJobs(options = {}) {
 
 async function runOfferPilotPreflight(button) {
   if (!state.offerpilotCanStart) {
-    setStatus('内嵌后端未就绪；请先重新检测。', 'error');
+    setStatus('采集组件还没准备好；请点「重新检测」。', 'error');
     return;
   }
   const mode = collectMode();
@@ -3389,16 +3389,16 @@ async function runOfferPilotPreflight(button) {
     state.offerpilotPreflightKey = key;
     renderCollectChecks(data);
     if (data.ok) {
-      if (collectResumeMissing()) setStatus('环境检查通过，但还需要先上传评分简历才能启动。', 'warn');
-      else setStatus('环境检查通过，可以启动。', 'ok');
+      if (collectResumeMissing()) setStatus('检查通过，但还需要先上传评分简历才能启动。', 'warn');
+      else setStatus('检查通过，可以启动。', 'ok');
     }
-    else setStatus(`环境检查未通过：${(data.messages && data.messages[0]) || '请查看检查项'}`, 'warn');
+    else setStatus(`检查未通过：${(data.messages && data.messages[0]) || '请查看检查项'}`, 'warn');
   } catch (error) {
     const failure = { ok: false, checks: [], messages: [friendlyError(error)] };
     state.offerpilotPreflight = failure;
     state.offerpilotPreflightKey = key;
     renderCollectChecks(failure);
-    setStatus(`环境检查失败：${friendlyError(error)}`, 'error');
+    setStatus(`检查没有完成：${friendlyError(error)}`, 'error');
   } finally {
     if (button) {
       button.removeAttribute('aria-busy');
@@ -3434,8 +3434,8 @@ async function refreshOfferPilot(options = {}) {
     if (options.announce) {
       setStatus(
         data.state && data.state.ok
-          ? (state.offerpilotCanStart ? '岗位自动化已就绪。' : '岗位自动化未就绪；请先重新检测。')
-          : `岗位自动化不可用：${(data.state && data.state.error) || '依赖或数据未就绪'}`,
+          ? (state.offerpilotCanStart ? '采集组件已就绪。' : '采集组件还没准备好；请点「重新检测」。')
+          : `采集组件不可用：${(data.state && data.state.error) || '组件或数据没准备好'}`,
         data.state && data.state.ok ? 'ok' : 'warn'
       );
     }
@@ -3444,7 +3444,7 @@ async function refreshOfferPilot(options = {}) {
     maybeRunOfferPilotPreflight();
   } catch (error) {
     renderOfferPilot({ connected: false, error: friendlyError(error) });
-    if (options.announce) setStatus(`检测岗位自动化失败：${friendlyError(error)}`, 'error');
+    if (options.announce) setStatus(`检测采集组件失败：${friendlyError(error)}`, 'error');
   } finally {
     if (dom.offerpilotRefresh) dom.offerpilotRefresh.disabled = false;
   }
@@ -3453,11 +3453,11 @@ async function refreshOfferPilot(options = {}) {
 async function startOfferPilotTask(button) {
   const mode = collectMode();
   if (!['collect', 'monitor', 'full'].includes(mode)) {
-    setStatus('岗位自动化任务模式无效。', 'error');
+    setStatus('任务类型不正确；请重新选择后再启动。', 'error');
     return;
   }
   if (!state.offerpilotCanStart) {
-    setStatus('内嵌后端未就绪；请先重新检测。', 'error');
+    setStatus('采集组件还没准备好；请点「重新检测」。', 'error');
     return;
   }
   const needsSearch = collectNeedsSearch(mode);
@@ -3468,7 +3468,7 @@ async function startOfferPilotTask(button) {
     return;
   }
   if (!dom.offerpilotRisk.checked || !dom.offerpilotConfirm.checked) {
-    setStatus('启动前必须同时勾选风险确认与启动确认。', 'error');
+    setStatus('启动前请同时勾选风险提示和「确认启动」。', 'error');
     return;
   }
   const payload = {
@@ -3480,8 +3480,8 @@ async function startOfferPilotTask(button) {
   if (options) payload.options = options;
   const data = await runAction(button, () => postJson('/api/offerpilot/tasks', payload));
   if (!data) return;
-  setStatus(data.message || '岗位自动化任务已受控提交。', 'ok');
-  showInline(dom.offerpilotResult, data.message || '岗位自动化任务已受控提交。', 'ok');
+  setStatus(data.message || '任务已提交，正在后台运行。', 'ok');
+  showInline(dom.offerpilotResult, data.message || '任务已提交，正在后台运行。', 'ok');
   dom.offerpilotRisk.checked = true;
   dom.offerpilotConfirm.checked = false;
   state.offerpilotPreflight = null;
@@ -3528,7 +3528,7 @@ async function maybeAutoImportCollected(task) {
     const data = await postAction(full ? 'offerpilot-automate' : 'offerpilot-import', payload);
     if (data && data.ok) {
       const message = full
-        ? String(data.message || '自动流程已停在最终确认门')
+        ? String(data.message || '流程已停在发送确认前')
         : `采集完成，${data.message || '已自动导入岗位池'}`;
       if (full) state.offerpilotPipeline = data;
       renderPipelineStatus();
@@ -3540,7 +3540,7 @@ async function maybeAutoImportCollected(task) {
       if (full) {
         // 采集 → 评分 → 入队 → 招呼语 都是自动的，完成后直接落到审批队列。
         showView('queue');
-        setStatus(`${message} 请在「已通过，可以回复」里复核文案后确认发送。`, 'ok');
+        setStatus(`${message} 请在「已通过，可以联系」里核对后发送。`, 'ok');
       } else if (onCollect) {
         // 采集 → 自动导入 → 挑选岗位 是同一条主线，完成后直接落到岗位表。
         showView('jobs');
@@ -3562,7 +3562,7 @@ async function uploadOfferPilotResume(file) {
   if (!file) return;
   const name = String(file.name || '');
   if (!/\.(md|docx|pdf)$/i.test(name)) {
-    setStatus('简历只支持 .md、.docx 或 .pdf 格式。', 'error');
+    setStatus('简历只支持 Markdown、DOCX 或 PDF 格式。', 'error');
     return;
   }
   if (file.size > 5 * 1024 * 1024) {
@@ -3576,7 +3576,7 @@ async function uploadOfferPilotResume(file) {
     reader.readAsDataURL(file);
   });
   if (!dataUrl) {
-    setStatus('读取简历文件失败。', 'error');
+    setStatus('没能读取这份简历文件；请换一份再试。', 'error');
     return;
   }
   const base64 = dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl;
@@ -3616,8 +3616,8 @@ async function stopOfferPilotTask(taskId, button) {
     { data_mode: state.mode }
   ));
   if (!data) return;
-  setStatus('已向 OfferPilot 发送停止请求。', 'ok');
-  showInline(dom.offerpilotResult, '已向 OfferPilot 发送停止请求；以其任务状态回报为准。', 'ok');
+  setStatus('已请求停止。', 'ok');
+  showInline(dom.offerpilotResult, '已请求停止；当前这一步结束后就会停下，以任务状态为准。', 'ok');
   await refreshOfferPilot();
 }
 
@@ -3638,13 +3638,13 @@ async function enqueueJobs(jobs, button, manual = false) {
   ids.forEach((id) => state.jobsSelection.delete(id));
   let message = data.message || '已加入待确认队列。';
   if (Array.isArray(data.dropped) && data.dropped.length) {
-    message += ` 未入队 ${data.dropped.length} 条（未按文档评分或不符合入队规则）。`;
+    message += ` 有 ${data.dropped.length} 条没有加入（没有按岗位文档评分，或不符合加入条件）。`;
   }
   if (Array.isArray(data.duplicate) && data.duplicate.length) {
-    message += ` 重复 ${data.duplicate.length} 条。`;
+    message += ` 其中 ${data.duplicate.length} 条已经在队列里。`;
   }
   if (Array.isArray(data.recent_duplicates) && data.recent_duplicates.length) {
-    message += ` 30 天内已入队或发送过，已跳过 ${data.recent_duplicates.length} 条。`;
+    message += ` ${data.recent_duplicates.length} 条在 30 天内加入过或联系过，已跳过。`;
   }
   const accepted = (Array.isArray(data.accepted) && data.accepted.length > 0)
     || (Array.isArray(data.manual) && data.manual.length > 0);
@@ -3801,9 +3801,9 @@ function renderQueue(snapshot) {
   });
   renderTable(dom.queuePendingTable, {
     caption: '表：待确认队列',
-    columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断置信度', '核对'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断依据', '核对'],
     rows: pendingRows,
-    emptyText: '待确认队列为空。可以在「岗位」表把岗位加入队列。',
+    emptyText: '待确认队列为空。到「岗位池」把想联系的岗位加入队列。',
     className: 'data-table-wide'
   });
 
@@ -3835,7 +3835,7 @@ function renderQueue(snapshot) {
       greetingStatusBadge(row.greeting),
       deliveryStatusBadge(row.delivery),
       planBadge(row.plan),
-      badge('approved · 可人工投递', 'good', '✓'),
+      badge('已通过，可以联系', 'good', '✓'),
       reviewButton
     ];
   });
@@ -3843,7 +3843,7 @@ function renderQueue(snapshot) {
     caption: '表：已确认可人工投递',
     columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态', '核对'],
     rows: approvedRows,
-    emptyText: '还没有已确认的岗位。approved 只表示可人工投递，不代表已投递。',
+    emptyText: '还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。',
     className: 'data-table-wide'
   });
   renderQueueGreetings(approved);
@@ -3901,7 +3901,7 @@ function confidenceCell(row) {
     : percent >= 40
       ? badge(formatPercent(value), 'warn', '')
       : el('span', { className: 'muted', text: formatPercent(value) });
-  node.setAttribute('title', '判断置信度：必备条件证据的充分度；没有必备条件时取资料覆盖率');
+  node.setAttribute('title', '判断依据：必备条件有多少证据；没有必备条件时看资料覆盖率');
   return node;
 }
 
@@ -3931,16 +3931,16 @@ function renderQueueGreetings(approved) {
     const meta = [];
     if (greeting.selection) meta.push(`来源：${greeting.selection}`);
     if (Array.isArray(greeting.style_issues) && greeting.style_issues.length) {
-      meta.push(`风格提示：${greeting.style_issues.join('；')}`);
+      meta.push(`表达提醒：${greeting.style_issues.join('；')}`);
     }
-    if (meta.length) card.append(el('p', { className: 'queue-greeting-meta', text: meta.join(' · ') }));
+    if (meta.length) card.append(el('p', { className: 'queue-greeting-meta', text: meta.join('；') }));
     const evidence = greeting.evidence_check;
     if (evidence && Array.isArray(evidence.unsupported_claims) && evidence.unsupported_claims.length) {
       const list = el('ul', { className: 'queue-greeting-evidence' });
       evidence.unsupported_claims.forEach((claim) => {
         list.append(el('li', { text: `「${claim.context}」中的数字 ${claim.value} 在个人资料中找不到依据，请核对后再发送` }));
       });
-      card.append(el('p', { className: 'queue-greeting-meta', text: '无证据数字（仅提示，不会自动改写）：' }));
+      card.append(el('p', { className: 'queue-greeting-meta', text: '资料里找不到依据的数字（只提醒，不会自动改）：' }));
       card.append(list);
     }
     container.append(card);
@@ -3967,7 +3967,7 @@ function updateQueueApprovedSelectionUI() {
       || selected > 10
       || Boolean(state.offerpilotTaskActive);
     dom.queueGenerateGreetings.title = state.offerpilotTaskActive
-      ? '已有岗位自动化任务正在运行；请先停止或等待结束'
+      ? '已有采集任务在运行；请先停止或等它结束'
       : selected > 10
         ? '一次最多 10 条'
         : '只生成招呼语；完成后自动弹出核对窗口';
@@ -3981,7 +3981,7 @@ function updateQueueApprovedSelectionUI() {
       || Boolean(state.offerpilotTaskActive)
       || state.queueDeliveryOpen;
     dom.queueSendGreetings.title = state.offerpilotTaskActive
-      ? '已有岗位自动化任务正在运行；请先停止或等待结束'
+      ? '已有采集任务在运行；请先停止或等它结束'
       : !greetingReady
         ? '请先为所选岗位生成招呼语'
         : '查看并发送所选岗位的招呼语';
@@ -4122,7 +4122,7 @@ function renderDeliveryModal(rows) {
     if (evidence && Array.isArray(evidence.unsupported_claims) && evidence.unsupported_claims.length) {
       item.append(el('p', {
         className: 'queue-delivery-meta queue-delivery-warn',
-        text: '无证据数字（仅提示，不会自动改写）：'
+        text: '资料里找不到依据的数字（只提醒，不会自动改）：'
       }));
       const evidenceList = el('ul', { className: 'queue-delivery-evidence' });
       evidence.unsupported_claims.forEach((claim) => {
@@ -4333,7 +4333,7 @@ function renderClassification(container, classification, mail) {
     ['company', String(info.company || '未识别')],
     ['title', String(info.title || '未识别')],
     ['event_time', info.event_time ? String(info.event_time) : '未识别（不猜测日期）'],
-    ['置信度', formatPercent(info.confidence)],
+    ['识别把握', formatPercent(info.confidence)],
     ['Message-ID', String(source.message_id || info.message_id || '—')]
   ];
   pairs.forEach(([key, value]) => {
@@ -4351,7 +4351,7 @@ function renderClassification(container, classification, mail) {
 
   const anomalies = Array.isArray(info.input_anomalies) ? info.input_anomalies : [];
   if (anomalies.length) {
-    container.append(el('p', { className: 'card-subtitle', text: '输入异常（作为数据引用，不执行）' }));
+    container.append(el('p', { className: 'card-subtitle', text: '检测到可疑输入（只当文本显示，不会执行）' }));
     const ul = el('ul');
     anomalies.forEach((item) => {
       const quote = item && typeof item === 'object' ? String(item.quote || '') : String(item);
@@ -4588,10 +4588,10 @@ function hrRenderSyncStatus() {
   let text = '尚未同步';
   let status = 'idle';
   if (state.hrSyncing) {
-    text = clock ? `上次同步 ${clock} · 正在同步` : '正在同步…';
+    text = clock ? `上次同步 ${clock}，正在同步` : '正在同步…';
     status = 'syncing';
   } else if (clock) {
-    text = `上次同步 ${clock} · 已是最新`;
+    text = `上次同步 ${clock}，已是最新`;
     status = 'ok';
   }
   dom.hrSyncStatus.dataset.state = status;
@@ -4661,7 +4661,7 @@ function renderHrPlatformStatus(unavailable) {
       el('span', { className: 'hr-platform-dot', attrs: { 'aria-hidden': 'true' } }),
       el('span', { text: channelLabel(row.platform) })
     ]));
-    const sourceLabel = row.source === 'api' ? '接口' : row.source === 'dom' ? '页面' : '';
+    const sourceLabel = row.source === 'api' ? '接口同步' : row.source === 'dom' ? '网页同步' : '';
     const detailText = row.error
       ? row.error
       : [
@@ -4669,7 +4669,7 @@ function renderHrPlatformStatus(unavailable) {
         row.unread ? `${row.unread} 未读` : '',
         row.clock ? `已同步 ${row.clock}` : '',
         sourceLabel
-      ].filter(Boolean).join(' · ');
+      ].filter(Boolean).join('，');
     const detail = el('span', { className: 'hr-platform-row-detail', text: detailText });
     if (row.error) detail.setAttribute('title', row.error);
     node.append(detail);
@@ -4948,7 +4948,7 @@ function renderHrConversations() {
         top,
         el('span', {
           className: 'hr-conversation-sub',
-          text: [conversation.hr_title, conversation.company, conversation.title].filter(Boolean).join(' · ') || '—'
+          text: [conversation.hr_title, conversation.company, conversation.title].filter(Boolean).join('，') || '—'
         }),
         el('span', { className: 'hr-conversation-bottom' }, [
           el('span', {
@@ -4998,7 +4998,7 @@ function renderHrJobCard(conversation) {
   body.append(el('span', { className: 'hr-job-card-label', text: '关联岗位' }));
   body.append(el('strong', {
     className: 'hr-job-card-title',
-    text: [conversation.company, conversation.title].filter(Boolean).join(' · ') || '已关联岗位'
+    text: [conversation.company, conversation.title].filter(Boolean).join('，') || '已关联岗位'
   }));
   body.append(el('span', {
     className: 'hr-job-card-score',
@@ -5047,7 +5047,7 @@ function renderHrThread() {
   dom.hrDetailMeta.textContent = [
     conversation.platform ? channelLabel(conversation.platform) : '',
     conversation.hr_title
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join('，');
   renderHrJobCard(conversation);
 
   const thread = state.hrThread && state.hrThread.conversation
@@ -5087,7 +5087,7 @@ function renderHrThread() {
       const stamp = hrMessageStamp(message && message.time);
       bubble.append(el('p', {
         className: 'hr-message-meta',
-        text: kind === 'system' ? (stamp || who) : (stamp ? `${who} · ${stamp}` : who)
+        text: kind === 'system' ? (stamp || who) : (stamp ? `${who}，${stamp}` : who)
       }));
       bubble.append(el('p', { className: 'hr-message-text', text: String((message && message.text) || '') }));
       dom.hrMessages.append(bubble);
@@ -5323,7 +5323,7 @@ function openHrReplyModal(trigger) {
     `${conversation.hr_name || 'HR'}${conversation.hr_title ? `（${conversation.hr_title}）` : ''}`,
     conversation.company || '—',
     conversation.title
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join('，');
   dom.hrReplyModalText.textContent = text;
   dom.hrReplyModalRisk.checked = true;
   dom.hrReplyModalProgress.textContent = '';
@@ -6128,7 +6128,7 @@ function syncChatContextLabels() {
       const company = String(job.company || '').trim();
       const title = String(job.title || '').trim();
       dom.chatRoleLine.hidden = false;
-      dom.chatRoleLine.textContent = [company, title].filter(Boolean).join(' · ');
+      dom.chatRoleLine.textContent = [company, title].filter(Boolean).join('，');
     } else {
       dom.chatRoleLine.hidden = true;
       dom.chatRoleLine.textContent = '';
@@ -6300,7 +6300,7 @@ function fillChatJobOptions(snapshot) {
   clear(dom.chatJob);
   dom.chatJob.append(el('option', { text: '不选岗位', props: { value: '' } }));
   jobs.forEach((job) => {
-    const label = [job.company, job.title].filter(Boolean).join(' · ') || String(job.id || '岗位');
+    const label = [job.company, job.title].filter(Boolean).join('，') || String(job.id || '岗位');
     dom.chatJob.append(el('option', {
       text: label,
       props: { value: String(job.id || '') }
@@ -6544,7 +6544,7 @@ async function mockStreamQuestion(intent) {
     turn.incomplete = true;
     internal.incomplete = true;
     patchLastChatTurn();
-    setStatus('这一问没有说完：外部 AI 中断或超时。已出现的半句仍保留，标明未完成，不计入本轮进度。可以重试。你已提交的回答还在。', 'warn');
+    setStatus('这一问没有问完：模型中断或超时。已经出现的半句会保留并标为未完成，不计入进度；可以重试，你提交过的回答还在。', 'warn');
     syncChatPrimary();
   } finally {
     if (state.interviewChat.streamAbort === abort) state.interviewChat.streamAbort = null;
@@ -6788,7 +6788,7 @@ async function mockEndInterview() {
   syncChatPrimary();
   renderInterviewHub();
   showInterviewModule('debrief');
-  setStatus('本场已结束。准备度复盘在「面试复盘」。输入已不可再发送。', 'ok');
+  setStatus('本场已结束，准备度复盘在「面试复盘」里；这里不能再发送回答。', 'ok');
 }
 
 function mockExpireTime() {
@@ -7223,13 +7223,13 @@ function buildDebriefCard(card, collapsible) {
   const node = collapsible ? el('details', { className: 'card' }) : el('article', { className: 'card' });
   if (collapsible) {
     node.append(el('summary', {
-      text: `${formatDateTime(card.created_at)} · ${String(card.source || '网页输入')}`
+      text: `${formatDateTime(card.created_at)}，${String(card.source || '网页输入')}`
     }));
   } else {
     node.append(el('p', { className: 'result-title', text: '复盘卡片' }));
     node.append(el('p', {
       className: 'card-meta',
-      text: `${formatDateTime(card.created_at)} · ${String(card.source || '网页输入')}`
+      text: `${formatDateTime(card.created_at)}，${String(card.source || '网页输入')}`
     }));
   }
   const tags = Array.isArray(card.weakness_tags) ? card.weakness_tags : [];
@@ -7249,7 +7249,7 @@ function buildDebriefCard(card, collapsible) {
     const wrap = el('div');
     wrap.append(el('p', {
       className: 'card-subtitle',
-      text: '输入异常（作为数据引用，不执行）'
+      text: '检测到可疑输入（只当文本显示，不会执行）'
     }));
     const ul = el('ul');
     anomalies.forEach((item) => {
@@ -7374,7 +7374,7 @@ function renderVariantCompareResult(data, variant) {
       `删除 ${toInt(summary.removed)} 段`,
       `改写 ${toInt(summary.changed)} 段`,
       `未改 ${toInt(summary.unchanged)} 段`
-    ].join(' · ')
+    ].join('，')
   }));
   if (info.identical === true || !segments.length) {
     container.append(el('p', {
@@ -7421,7 +7421,7 @@ async function compareVariantWithMaster(variant, button) {
       text: String((variant && variant.text) || '')
     });
     renderVariantCompareResult(data, variant);
-    setStatus('已生成只读对比；主稿与变体均未修改。', 'ok');
+    setStatus('已生成对比；主稿和变体都没有改动。', 'ok');
   } catch (error) {
     const message = friendlyError(error);
     renderVariantCompareMessage('warn', message);
@@ -7491,7 +7491,7 @@ function renderBoundaries(snapshot) {
     caption: '表：不可绕过的运行边界',
     columns: ['边界', '当前状态'],
     rows: keys.map((key) => [boundaryLabel(key), boundaryValue(boundaries[key])]),
-    emptyText: '未返回 boundaries。',
+    emptyText: '没有读到运行边界。',
     className: 'data-table-wide'
   });
 }
@@ -7506,7 +7506,7 @@ function renderConfig(snapshot) {
     ['薪资下限', config.salary_min_threshold === undefined || config.salary_min_threshold === null
       ? '—'
       : `${toInt(config.salary_min_threshold)} 元`],
-    ['入队规则', '按岗位文档评分与必备条件自动筛选；不再按数字阈值入队'],
+    ['筛选规则', '按岗位文档评分和必备条件自动筛选，不设分数门槛'],
     ['弱点标签', listText(config.weakness_tags)],
     ['简历技能命中', listText(snapshot.cv_skills)]
   ];
@@ -7549,8 +7549,8 @@ async function saveAiSettings(event) {
   dom.aiSettingsKey.value = '';
   if (!data) return;
   renderAiSettings(data.settings);
-  showInline(dom.aiSettingsResult, data.message || 'AI 接口设置已保存', 'ok');
-  setStatus(data.message || 'AI 接口设置已保存', 'ok');
+  showInline(dom.aiSettingsResult, data.message || 'AI 接口已保存', 'ok');
+  setStatus(data.message || 'AI 接口已保存', 'ok');
 }
 
 async function testAiSettings() {
@@ -7574,7 +7574,7 @@ function renderData(snapshot) {
       formatDateTime(row.modified),
       downloadLink(String(row.name || ''), '下载')
     ]),
-    emptyText: '暂无下载文件。生成准备清单、ICS、题单或报告后会出现在这里。',
+    emptyText: '暂无下载文件。生成准备清单、日历文件、题单或报告后会出现在这里。',
     className: 'data-table-wide'
   });
   renderBoundaries(snapshot);
@@ -7644,8 +7644,8 @@ function renderAtsResult(result) {
     ['页数提示', info.page_count_hint === null || info.page_count_hint === undefined
       ? '未知'
       : String(info.page_count_hint)],
-    ['提取字符数', String(toInt(info.extracted_text_chars))],
-    ['关键词全部命中', info.all_keywords_found === true
+    ['提取到的字数', String(toInt(info.extracted_text_chars))],
+    ['关键词是否全部找到', info.all_keywords_found === true
       ? '是'
       : info.all_keywords_found === false
         ? '否'
@@ -7669,7 +7669,7 @@ function renderAtsResult(result) {
     });
     container.append(mount);
   } else {
-    container.append(el('p', { className: 'card-meta', text: '未提供关键词，未验证命中。' }));
+    container.append(el('p', { className: 'card-meta', text: '没有提供关键词，未做检查。' }));
   }
 
   const notes = Array.isArray(info.notes) ? info.notes : [];
@@ -7685,7 +7685,7 @@ function renderAtsResult(result) {
   if (verdict === 'needs_manual_check') {
     container.append(el('p', {
       className: 'notice',
-      text: 'needs_manual_check 不是通过；请人工核查文字层、分栏、表格与 OCR 场景。'
+      text: '「需人工检查」不等于通过；请自己核对文字层、分栏、表格和扫描件。'
     }));
   }
 }
@@ -7895,12 +7895,12 @@ function bindEvents() {
   dom.queueConfirmButton.addEventListener('click', async () => {
     const ids = Array.from(state.queueSelection);
     if (!ids.length) {
-      setStatus('请先勾选至少一条待确认岗位。', 'error');
+      setStatus('请先勾选要确认的岗位。', 'error');
       return;
     }
     const data = await runAction(dom.queueConfirmButton, () => postAction('confirm', { ids }));
     if (!data) return;
-    const ok = announceActionResult(data, '已通过；发送前还会再让你复核一次。');
+    const ok = announceActionResult(data, '已通过。发送前还会让你再核对一次。');
     if (ok) {
       state.queueSelection.clear();
       updateQueueSelectionUI();
@@ -7971,8 +7971,8 @@ function bindEvents() {
     let message = data.message || (data.ok === false
       ? (data.duplicate ? '相同岗位已存在。' : '岗位未录入。')
       : '岗位已录入本地工作区。');
-    if (warnings.length) message += ` 警告：${warnings.join('；')}`;
-    if (reasons.length) message += ` 硬过滤原因：${reasons.join('；')}`;
+    if (warnings.length) message += ` 提醒：${warnings.join('；')}`;
+    if (reasons.length) message += ` 被拦下的原因：${reasons.join('；')}`;
     if (data.ok === false) {
       setStatus(message, data.duplicate ? 'warn' : 'error');
       showInline(dom.jdResult, message, data.duplicate ? 'warn' : 'error');
@@ -7990,7 +7990,7 @@ function bindEvents() {
     event.preventDefault();
     const text = dom.importJson.value.trim();
     if (!text) {
-      setStatus('请先粘贴静态 JSON。', 'error');
+      setStatus('请先粘贴要导入的 JSON。', 'error');
       return;
     }
     const data = await runAction(document.getElementById('import-submit'), () => postAction('import-jobs', { text }));
@@ -8012,7 +8012,7 @@ function bindEvents() {
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setStatus('PDF 超过 5 MB 上限，未发送。', 'error');
+      setStatus('PDF 超过 5 MB，没有上传。', 'error');
       return;
     }
     const keywords = dom.atsKeywords.value.trim();
@@ -8025,7 +8025,7 @@ function bindEvents() {
       });
     });
     if (!data) return;
-    setStatus(data.message || '检查完成；无法解析的文字层仍需人工核查。', 'ok');
+    setStatus(data.message || '检查完成；提取不到的文字仍需自己核对。', 'ok');
     renderAtsResult(data.result);
   });
 
@@ -8152,7 +8152,7 @@ function bindEvents() {
     setStatus(data.message || '题单已生成。', kind);
     showTextResult(dom.worksheetResult, {
       message: data.message || '题单已生成。',
-      meta: `题目数：${count} · 计划时长：${minutes} 分钟 · 空题库不会编造题目`,
+      meta: `共 ${count} 题，计划 ${minutes} 分钟；题库为空时不会编造题目`,
       text: data.worksheet || '',
       downloadNames: data.download ? [data.download] : [],
       kind
@@ -8222,7 +8222,7 @@ function bindEvents() {
       appendVariantQualityHints(dom.variantResult, data.quality);
       return;
     }
-    setStatus(data.message || '经历原文已保存；未修改 Master Resume。', 'ok');
+    setStatus(data.message || '经历原文已保存，主简历没有被改动。', 'ok');
     showInline(dom.variantResult, data.message || '经历原文已保存。', 'ok');
     appendVariantQualityHints(dom.variantResult, data.quality);
     dom.variantProject.value = '';
@@ -8249,7 +8249,7 @@ function bindEvents() {
       source_channel: dom.dryChannel.value
     }));
     if (!data) return;
-    setStatus(data.message || '只显示 dry-run payload；没有发出 HTTP 请求。', 'ok');
+    setStatus(data.message || '已生成通知预览；没有发出任何请求。', 'ok');
     dom.dryRunResult.hidden = false;
     dom.dryRunResult.textContent = JSON.stringify(data.result || data, null, 2);
   });
