@@ -132,6 +132,8 @@
             </nav>
           </header>
 
+          <div class="sg-collect-grid">
+            <div class="sg-collect-main">
           <section class="panel collect-criteria-panel" aria-labelledby="collect-criteria-title">
             <div class="panel-head">
               <div>
@@ -201,25 +203,8 @@
               </div>
               <label class="checkbox-label" hidden><input type="checkbox" id="collect-auto-score"> 采集后自动评分</label>
               <div class="collect-summary" id="collect-summary" aria-live="polite"></div>
-              <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk" checked> 我知道自动化操作可能导致账号被平台限制</label>
-              <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
-              <div class="form-actions">
-                <button class="button button-quiet" type="button" id="collect-preflight">检查环境</button>
-                <button class="button" type="submit" id="offerpilot-start" disabled aria-describedby="offerpilot-start-reason">开始采集</button>
-              </div>
-              <p class="hint offerpilot-start-reason" id="offerpilot-start-reason" aria-live="polite"></p>
             </form>
             <div class="action-result" id="offerpilot-result" hidden></div>
-
-            <section class="collect-checks-panel" aria-labelledby="collect-check-title">
-              <div class="panel-head">
-                <div>
-                  <h4 id="collect-check-title">启动前检查</h4>
-                  <p class="panel-note">有问题时会阻止启动；改完条件会自动重新检查。</p>
-                </div>
-              </div>
-              <div class="collect-checks" id="collect-checks"><p class="hint">填写条件后会自动检查，也可以点击「检查环境」重新检查。</p></div>
-            </section>
 
             <details class="offerpilot-details collect-explain-details">
               <summary>会采集什么、不会做什么</summary>
@@ -260,6 +245,28 @@
               <dl class="integration-meta" id="offerpilot-state"></dl>
             </details>
           </section>
+            </div>
+            <aside class="sg-collect-rail" aria-label="启动前检查与启动">
+              <section class="panel sg-preflight-card" aria-labelledby="collect-check-title">
+                <div class="panel-head">
+                  <div>
+                    <h4 id="collect-check-title">启动前检查</h4>
+                    <p class="panel-note">有问题时会阻止启动；改完条件会自动重新检查。</p>
+                  </div>
+                </div>
+                <div class="collect-checks" id="collect-checks"><p class="hint">填写条件后会自动检查，也可以点击「检查环境」重新检查。</p></div>
+                <div class="sg-preflight-actions">
+                  <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk" checked> 我知道自动化操作可能导致账号被平台限制</label>
+                  <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
+                  <div class="form-actions">
+                    <button class="button button-quiet" type="button" id="collect-preflight">检查环境</button>
+                    <button class="button" type="submit" id="offerpilot-start" form="offerpilot-form" disabled aria-describedby="offerpilot-start-reason">开始采集</button>
+                  </div>
+                  <p class="hint offerpilot-start-reason sg-disabled-reason" id="offerpilot-start-reason" aria-live="polite"></p>
+                </div>
+              </section>
+            </aside>
+          </div>
         </section>
 
         <section class="view agent-view" id="view-agent" data-view-panel="agent" aria-labelledby="agent-title" hidden>
@@ -467,11 +474,12 @@
             </div>
             <div class="queue-toolbar">
               <label class="checkbox-label"><input type="checkbox" id="queue-select-all" aria-label="全选待确认"> 全选待确认</label>
-              <span class="panel-count" id="queue-selection-count">已选 0 条</span>
             </div>
             <div id="queue-pending-table"></div>
-            <div class="queue-toolbar">
+            <div class="queue-toolbar sg-bulk-bar" id="queue-pending-actions">
+              <span class="panel-count sg-bulk-count" id="queue-selection-count">已选 0 条</span>
               <button class="button button-small" type="button" id="queue-confirm-button" disabled>通过所选</button>
+              <span class="sg-disabled-reason">勾选岗位后可批量通过。</span>
             </div>
           </section>
 
@@ -495,11 +503,14 @@
             </div>
             <div class="queue-toolbar">
               <label class="checkbox-label"><input type="checkbox" id="queue-approved-select-all" aria-label="全选已确认"> 全选已确认</label>
-              <span class="panel-count" id="queue-approved-selection-count">已选 0 条</span>
-              <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
-              <button class="button button-small" type="button" id="queue-send-greetings" disabled>查看并发送</button>
             </div>
             <div id="queue-approved-table"></div>
+            <div class="queue-toolbar sg-bulk-bar" id="queue-approved-actions">
+              <span class="panel-count sg-bulk-count" id="queue-approved-selection-count">已选 0 条</span>
+              <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
+              <button class="button button-small" type="button" id="queue-send-greetings" disabled>查看并发送</button>
+              <span class="sg-disabled-reason">勾选已通过岗位后可生成或查看招呼语。</span>
+            </div>
             <div class="queue-greetings" id="queue-greetings"></div>
             <div class="queue-delivery-panel queue-delivery-modal" id="queue-delivery-panel" hidden>
               <div class="queue-modal" role="dialog" aria-modal="true" aria-labelledby="queue-delivery-title" aria-describedby="queue-delivery-summary">
@@ -583,7 +594,7 @@
                 </div>
                 <div class="hr-messages" id="hr-messages" aria-live="polite"></div>
                 <form class="hr-composer" id="hr-reply-form">
-                  <p class="hr-block-reason" id="hr-reply-block-reason" hidden></p>
+                  <p class="hr-block-reason sg-disabled-reason" id="hr-reply-block-reason" hidden></p>
                   <label class="hr-composer-label" for="hr-reply-input">回复</label>
                   <textarea id="hr-reply-input" rows="3" aria-label="回复内容" placeholder="输入回复内容；发送前会再确认一次。" disabled></textarea>
                   <div class="hr-composer-actions">

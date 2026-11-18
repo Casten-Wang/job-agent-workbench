@@ -996,11 +996,11 @@ function renderTable(container, options) {
   const tbody = el('tbody');
   if (!options.rows || !options.rows.length) {
     const row = el('tr');
-    const cell = el('td', {
-      className: 'empty-cell',
-      text: options.emptyText || '暂无数据。'
-    });
+    const cell = el('td', { className: 'empty-cell' });
     cell.setAttribute('colspan', String(options.columns.length));
+    // 空状态需要带下一步按钮时传 emptyNode；纯文本仍走 emptyText。
+    if (options.emptyNode) cell.append(options.emptyNode);
+    else cell.textContent = options.emptyText || '暂无数据。';
     row.append(cell);
     tbody.append(row);
   } else {
@@ -3343,7 +3343,10 @@ function renderOfferPilotJobs() {
       String(job.company || '—'),
       String(job.city || '—'),
       String(job.salary || '—'),
-      job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score),
+      el('span', {
+        className: 'sg-num',
+        text: job.score === undefined || job.score === null || Number(job.score) <= 0 ? '—' : String(job.score)
+      }),
       OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
     ]),
     emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '采集组件还没准备好。'
@@ -3792,6 +3795,25 @@ function renderPipelineStatus() {
   dom.queuePipelineStatus.hidden = false;
 }
 
+function queueEmptyNode(text, actionLabel = '去岗位池挑选') {
+  const empty = el('div', { className: 'sg-empty' });
+  empty.append(el('p', { className: 'sg-empty-text', text }));
+  const action = el('button', {
+    className: 'button button-quiet button-small',
+    text: actionLabel,
+    attrs: { type: 'button' }
+  });
+  action.addEventListener('click', () => showView('jobs'));
+  empty.append(action);
+  return empty;
+}
+
+// 公司 / 岗位在审批表里单行省略，完整内容放在 title（规格 3.4）。
+function queueTextCell(value) {
+  const text = String(value || '—');
+  return el('span', { className: 'sg-ellipsis', text, attrs: { title: text } });
+}
+
 function renderQueue(snapshot) {
   const queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
   const pending = queue.filter((row) => row.status === 'pending');
@@ -3825,9 +3847,9 @@ function renderQueue(snapshot) {
     reviewButton.addEventListener('click', () => openQueueReview(snapshot, row));
     return [
       checkbox,
-      String(row.company || '—'),
-      String(row.title || '—'),
-      formatScore(row.score),
+      queueTextCell(row.company),
+      queueTextCell(row.title),
+      el('span', { className: 'sg-num', text: formatScore(row.score) }),
       channelLabel(row.Source_Channel),
       formatDateTime(row.created_at),
       confidenceCell(row),
@@ -3839,6 +3861,7 @@ function renderQueue(snapshot) {
     columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断依据', '核对'],
     rows: pendingRows,
     emptyText: '待确认队列为空。到「岗位池」把想联系的岗位加入队列。',
+    emptyNode: queueEmptyNode('待确认队列为空。到「岗位池」把想联系的岗位加入队列。'),
     className: 'data-table-wide'
   });
 
@@ -3863,9 +3886,9 @@ function renderQueue(snapshot) {
     reviewButton.addEventListener('click', () => openQueueReview(snapshot, row));
     return [
       checkbox,
-      String(row.company || '—'),
-      String(row.title || '—'),
-      formatScore(row.score),
+      queueTextCell(row.company),
+      queueTextCell(row.title),
+      el('span', { className: 'sg-num', text: formatScore(row.score) }),
       channelLabel(row.Source_Channel),
       greetingStatusBadge(row.greeting),
       deliveryStatusBadge(row.delivery),
@@ -3879,6 +3902,7 @@ function renderQueue(snapshot) {
     columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态', '核对'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。',
+    emptyNode: queueEmptyNode('还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。'),
     className: 'data-table-wide'
   });
   renderQueueGreetings(approved);
@@ -5040,8 +5064,8 @@ function renderHrConversations() {
     if (unavailable) emptyText = '读不到 HR 会话。';
     else if (state.hrConversations.length) emptyText = '没有符合条件的会话。';
     else if (state.hrConversationsLoading) emptyText = '正在读取本机会话…';
-    const empty = el('div', { className: 'hr-empty-block' });
-    empty.append(el('p', { className: 'hr-empty', text: emptyText }));
+    const empty = el('div', { className: 'hr-empty-block sg-empty' });
+    empty.append(el('p', { className: 'hr-empty sg-empty-text', text: emptyText }));
     if (unavailable) {
       empty.append(el('p', { className: 'hr-empty-hint', text: '请先在本机 Chrome 登录各招聘平台，再重新读取。' }));
       empty.append(hrEmptyAction('重新读取会话'));
@@ -5074,17 +5098,20 @@ function renderHrConversations() {
       const top = el('span', { className: 'hr-conversation-top' });
       if (unread) top.append(el('span', { className: 'hr-unread-dot', attrs: { 'aria-hidden': 'true' } }));
       top.append(el('strong', { className: 'hr-conversation-hr', text: String(conversation.hr_name || 'HR') }));
+      const platformLabel = channelLabel(conversation.platform);
       const tags = el('span', { className: 'hr-conversation-tags' });
       if (conversation.platform) {
         tags.append(el('span', {
-          className: 'hr-platform-badge',
-          text: channelLabel(conversation.platform)
-        }));
+          className: `hr-platform-badge sg-platform-tag sg-platform-${String(conversation.platform)}`,
+          attrs: { title: platformLabel }
+        }, [
+          el('span', { className: 'sg-platform-mark', text: platformLabel.slice(0, 1) }),
+          el('span', { className: 'sg-platform-name', text: platformLabel })
+        ]));
       }
       if (tags.childNodes.length) top.append(tags);
       const timeLabel = hrConversationTimeLabel(conversation.last_message_at);
       if (timeLabel) top.append(el('span', { className: 'hr-conversation-time', text: timeLabel }));
-      const platformLabel = channelLabel(conversation.platform);
       const item = el('button', {
         className: `hr-conversation${active ? ' is-active' : ''}${unread ? ' is-unread' : ''}`,
         attrs: {
@@ -5224,8 +5251,9 @@ function renderHrThread() {
       dom.hrReplyBlockReason.textContent = '';
     }
     dom.hrDetailJob.append(el('span', { className: 'hr-job-empty', text: '未关联岗位' }));
-    dom.hrMessages.append(el('div', { className: 'hr-empty-block' }, [
-      el('p', { className: 'hr-empty', text: '从左侧选择一位 HR，查看完整对话。' })
+    dom.hrMessages.append(el('div', { className: 'hr-empty-block sg-empty' }, [
+      el('p', { className: 'hr-empty sg-empty-text', text: '从左侧选择一位 HR，查看完整对话。' }),
+      hrEmptyAction('刷新会话')
     ]));
     return;
   }
@@ -5260,9 +5288,9 @@ function renderHrThread() {
   if (!messages.length) {
     clear(dom.hrMessages);
     state.hrThreadRenderedMessages = [];
-    const empty = el('div', { className: 'hr-empty-block' });
+    const empty = el('div', { className: 'hr-empty-block sg-empty' });
     empty.append(el('p', {
-      className: 'hr-empty',
+      className: 'hr-empty sg-empty-text',
       text: state.hrThreadLoading ? '正在读取对话…' : '这个会话还没有消息。'
     }));
     if (!state.hrThreadLoading) {
