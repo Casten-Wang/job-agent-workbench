@@ -111,9 +111,16 @@ const OFFERPILOT_JOB_STATUS_LABELS = {
   pending: '待评分',
   scored: '已评分',
   filtered: '已过滤',
+  ready: '可投递',
+  approved: '已确认',
   greeted: '已生成招呼语',
   sent: '已发送',
   replied: '已回复',
+  resume_sent: '已发简历',
+  needs_resume: '待补简历',
+  follow_up_sent: '已跟进',
+  error: '发送失败',
+  skipped: '已跳过',
   rejected: '已拒绝',
   interview: '面试中',
   offer: 'Offer',
@@ -376,6 +383,7 @@ const dom = {
   queuePipelineStatus: document.getElementById('queue-pipeline-status'),
   queueDeliveryPanel: document.getElementById('queue-delivery-panel'),
   queueDeliverySummary: document.getElementById('queue-delivery-summary'),
+  queueDeliveryPlatform: document.getElementById('sg-queue-delivery-platform'),
   queueDeliveryList: document.getElementById('queue-delivery-list'),
   queueDeliveryRisk: document.getElementById('queue-delivery-risk'),
   queueDeliveryProgress: document.getElementById('queue-delivery-progress'),
@@ -420,6 +428,7 @@ const dom = {
   hrReplyConfirmPanel: document.getElementById('hr-reply-confirm-panel'),
   hrReplyDialog: document.getElementById('hr-reply-dialog'),
   hrReplyWho: document.getElementById('hr-reply-who'),
+  hrReplyPlatform: document.getElementById('sg-hr-reply-platform'),
   hrReplyModalText: document.getElementById('hr-reply-modal-text'),
   hrReplyModalProgress: document.getElementById('hr-reply-modal-progress'),
   hrReplyModalRisk: document.getElementById('hr-reply-modal-risk'),
@@ -576,6 +585,23 @@ function formatScore(value) {
   if (value === null || value === undefined || value === '') return '未评分';
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(1) : '未评分';
+}
+
+// 采集结果与审批队列共用：带分母显示，避免 4.0 与 49/100 混读。
+// 文档评分（>5）按 100 分制取整；旧的 5 分制保留 /5，不擅自换算。
+function formatJobScoreValue(value) {
+  if (value === null || value === undefined || value === '') return '待评分';
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return '待评分';
+  return number > 5 ? `${Math.round(number)}/100` : `${number}/5`;
+}
+
+// 招呼语来源：接口里的枚举值按中文显示，未知值原样保留。
+function greetingSourceLabel(value) {
+  const key = String(value || '');
+  if (key === 'generated') return '自动生成';
+  if (key === 'manual') return '手动';
+  return key;
 }
 
 function formatPercent(value) {
@@ -1066,11 +1092,11 @@ function renderTable(container, options) {
   const tbody = el('tbody');
   if (!options.rows || !options.rows.length) {
     const row = el('tr');
-    const cell = el('td', {
-      className: 'empty-cell',
-      text: options.emptyText || '暂无数据。'
-    });
+    const cell = el('td', { className: 'empty-cell' });
     cell.setAttribute('colspan', String(options.columns.length));
+    // 空状态需要带下一步按钮时传 emptyNode；纯文本仍走 emptyText。
+    if (options.emptyNode) cell.append(options.emptyNode);
+    else cell.textContent = options.emptyText || '暂无数据。';
     row.append(cell);
     tbody.append(row);
   } else {
@@ -2254,6 +2280,12 @@ function renderJobs(snapshot) {
       select.addEventListener('change', () => {
         const target = select.value;
         if (!target) return;
+        // 终态先确认；取消时把下拉还原到「更新状态…」。
+        if (IRREVERSIBLE_JOB_STATES.has(target)
+          && !window.confirm(`确定改为「${target}」吗？此状态不可恢复。`)) {
+          select.value = '';
+          return;
+        }
         transitionJob(job, target, select);
       });
       actions.append(select);
@@ -2269,7 +2301,11 @@ function renderJobs(snapshot) {
         'aria-label': `查看 ${String(job.company || '')} ${String(job.title || '')} 的标准字段与匹配结果`.trim()
       }
     });
-    dossierButton.addEventListener('click', () => openJobDossier(job));
+    dossierButton.addEventListener('click', () => {
+      // 关闭抽屉时把焦点还给打开它的按钮；程序触发的 click 不会自动聚焦。
+      dossierButton.focus({ preventScroll: true });
+      openJobDossier(job);
+    });
     actions.append(dossierButton);
 
     // 入队失败（未评分、必备条件不满足、已关闭、城市不符等）的岗位保留勾选，
@@ -2623,37 +2659,49 @@ function renderDossier(container, job) {
   dossierSections(job).forEach((section) => container.append(section));
 }
 
-function openJobDossier(job) {
+// 详情与核对改为右侧抽屉（CSS fixed）：不移动 DOM，不滚动整页；
+// 打开时把焦点放进抽屉，关闭时还给触发的按钮。
+function openJobDossier(job, trigger) {
   state.jobsDossierId = String(job.id);
   if (!dom.jobsDossier || !dom.jobsDossierBody) return;
+  state.jobsDossierTrigger = trigger || document.activeElement;
   dom.jobsDossier.hidden = false;
   renderDossier(dom.jobsDossierBody, job);
-  if (typeof dom.jobsDossier.scrollIntoView === 'function') {
-    dom.jobsDossier.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  dom.jobsDossier.setAttribute('tabindex', '-1');
+  dom.jobsDossier.focus({ preventScroll: true });
 }
 
 function closeJobDossier() {
+  const trigger = state.jobsDossierTrigger;
+  state.jobsDossierTrigger = null;
   state.jobsDossierId = null;
   if (dom.jobsDossier) dom.jobsDossier.hidden = true;
   clear(dom.jobsDossierBody);
-}
-
-function openQueueReview(snapshot, row) {
-  state.queueReviewId = String(row.id);
-  const job = queueReviewJob(snapshot, row.id) || row;
-  if (!dom.queueReview || !dom.queueReviewBody) return;
-  dom.queueReview.hidden = false;
-  renderDossier(dom.queueReviewBody, job);
-  if (typeof dom.queueReview.scrollIntoView === 'function') {
-    dom.queueReview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (trigger && typeof trigger.focus === 'function' && document.contains(trigger)) {
+    trigger.focus();
   }
 }
 
+function openQueueReview(snapshot, row, trigger) {
+  state.queueReviewId = String(row.id);
+  const job = queueReviewJob(snapshot, row.id) || row;
+  if (!dom.queueReview || !dom.queueReviewBody) return;
+  state.queueReviewTrigger = trigger || document.activeElement;
+  dom.queueReview.hidden = false;
+  renderDossier(dom.queueReviewBody, job);
+  dom.queueReview.setAttribute('tabindex', '-1');
+  dom.queueReview.focus({ preventScroll: true });
+}
+
 function closeQueueReview() {
+  const trigger = state.queueReviewTrigger;
+  state.queueReviewTrigger = null;
   state.queueReviewId = null;
   if (dom.queueReview) dom.queueReview.hidden = true;
   clear(dom.queueReviewBody);
+  if (trigger && typeof trigger.focus === 'function' && document.contains(trigger)) {
+    trigger.focus();
+  }
 }
 
 function syncJobsSelection(jobs) {
@@ -3668,11 +3716,14 @@ function renderOfferPilotJobs() {
       String(job.company || '—'),
       String(job.city || '—'),
       String(job.salary || '—'),
-      // 采集结果的评分都是 0–100 的文档匹配分；0 分也是有效评分，不能显示成「—」。
-      job.score === undefined || job.score === null || !Number.isFinite(Number(job.score))
-        ? '—'
-        : `${Math.round(Number(job.score))}/100`,
-      OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || String(job.status || '—')
+      // 采集结果的评分都是 0–100 的文档匹配分；0 分也是有效评分，不能显示成「—」或「待评分」。
+      el('span', {
+        className: 'sg-num',
+        text: job.score === undefined || job.score === null || job.score === '' || !Number.isFinite(Number(job.score))
+          ? '—'
+          : `${Math.round(Number(job.score))}/100`
+      }),
+      OFFERPILOT_JOB_STATUS_LABELS[String(job.status || '')] || '未知状态'
     ]),
     emptyText: state.offerpilotConnected ? '当前没有采集结果。启动一次采集后，这里会显示岗位。' : '采集组件还没准备好。'
   });
@@ -4132,6 +4183,9 @@ async function prepareJob(job, button) {
   }
 }
 
+// 岗位池里不可回到上一状态的目标：淘汰、已过滤、Offer（Offer 之后没有后继状态）。
+const IRREVERSIBLE_JOB_STATES = new Set(['淘汰', '已过滤', 'Offer']);
+
 async function transitionJob(job, target, select) {
   const data = await runAction(select, () => postAction('transition', {
     id: String(job.id),
@@ -4204,6 +4258,25 @@ function renderPipelineStatus() {
   dom.queuePipelineStatus.hidden = false;
 }
 
+function queueEmptyNode(text, actionLabel = '去岗位池挑选') {
+  const empty = el('div', { className: 'sg-empty' });
+  empty.append(el('p', { className: 'sg-empty-text', text }));
+  const action = el('button', {
+    className: 'button button-quiet button-small',
+    text: actionLabel,
+    attrs: { type: 'button' }
+  });
+  action.addEventListener('click', () => showView('jobs'));
+  empty.append(action);
+  return empty;
+}
+
+// 公司 / 岗位在审批表里单行省略，完整内容放在 title（规格 3.4）。
+function queueTextCell(value) {
+  const text = String(value || '—');
+  return el('span', { className: 'sg-ellipsis', text, attrs: { title: text } });
+}
+
 function renderQueue(snapshot) {
   const queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
   const pending = queue.filter((row) => row.status === 'pending');
@@ -4234,12 +4307,16 @@ function renderQueue(snapshot) {
       text: '核对',
       attrs: { type: 'button', 'aria-label': `核对 ${row.company || ''} ${row.title || ''} 的要求与证据` }
     });
-    reviewButton.addEventListener('click', () => openQueueReview(snapshot, row));
+    reviewButton.addEventListener('click', () => {
+      // 关闭抽屉时把焦点还给「核对」按钮。
+      reviewButton.focus({ preventScroll: true });
+      openQueueReview(snapshot, row);
+    });
     return [
       checkbox,
-      String(row.company || '—'),
-      String(row.title || '—'),
-      formatScore(row.score),
+      queueTextCell(row.company),
+      queueTextCell(row.title),
+      el('span', { className: 'sg-num', text: formatJobScoreValue(row.score) }),
       channelLabel(row.Source_Channel),
       formatDateTime(row.created_at),
       confidenceCell(row),
@@ -4251,6 +4328,7 @@ function renderQueue(snapshot) {
     columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断依据', '核对'],
     rows: pendingRows,
     emptyText: '待确认队列为空。到「岗位池」把想联系的岗位加入队列。',
+    emptyNode: queueEmptyNode('待确认队列为空。到「岗位池」把想联系的岗位加入队列。'),
     className: 'data-table-wide'
   });
 
@@ -4272,12 +4350,16 @@ function renderQueue(snapshot) {
       text: '核对',
       attrs: { type: 'button', 'aria-label': `核对已确认岗位 ${row.company || ''} ${row.title || ''} 的要求与证据` }
     });
-    reviewButton.addEventListener('click', () => openQueueReview(snapshot, row));
+    reviewButton.addEventListener('click', () => {
+      // 关闭抽屉时把焦点还给「核对」按钮。
+      reviewButton.focus({ preventScroll: true });
+      openQueueReview(snapshot, row);
+    });
     return [
       checkbox,
-      String(row.company || '—'),
-      String(row.title || '—'),
-      formatScore(row.score),
+      queueTextCell(row.company),
+      queueTextCell(row.title),
+      el('span', { className: 'sg-num', text: formatJobScoreValue(row.score) }),
       channelLabel(row.Source_Channel),
       greetingStatusBadge(row.greeting),
       deliveryStatusBadge(row.delivery),
@@ -4291,6 +4373,7 @@ function renderQueue(snapshot) {
     columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态', '核对'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。',
+    emptyNode: queueEmptyNode('还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。'),
     className: 'data-table-wide'
   });
   renderQueueGreetings(approved);
@@ -4376,7 +4459,7 @@ function renderQueueGreetings(approved) {
       text: String(greeting.greeting || '')
     }));
     const meta = [];
-    if (greeting.selection) meta.push(`来源：${greeting.selection}`);
+    if (greeting.selection) meta.push(`来源：${greetingSourceLabel(greeting.selection)}`);
     if (Array.isArray(greeting.style_issues) && greeting.style_issues.length) {
       meta.push(`表达提醒：${greeting.style_issues.join('；')}`);
     }
@@ -4427,11 +4510,16 @@ function updateQueueApprovedSelectionUI() {
       || selected > 10
       || Boolean(state.offerpilotTaskActive)
       || state.queueDeliveryOpen;
-    dom.queueSendGreetings.title = state.offerpilotTaskActive
-      ? '已有采集任务在运行；请先停止或等它结束'
-      : !greetingReady
-        ? '请先为所选岗位生成招呼语'
-        : '查看并发送所选岗位的招呼语';
+    // 禁用原因按真实原因给：未勾选 → 超过单批上限 → 无招呼语 → 发送中/任务运行。
+    dom.queueSendGreetings.title = selectedRows.length === 0
+      ? '请先勾选已确认岗位'
+      : selected > 10
+        ? `一次最多发送 10 条，当前已选 ${selected} 条`
+        : !greetingReady
+          ? '所选岗位还没有可发送的招呼语'
+          : state.offerpilotTaskActive || state.queueDeliveryOpen
+            ? '正在发送或已有任务在运行；请等它结束'
+            : '查看并发送所选岗位的招呼语';
   }
 }
 
@@ -4556,6 +4644,14 @@ function renderDeliveryModal(rows) {
       ? `本批 ${count} 条；预计 ${count - 1} 次间隔，约 ${count - 1}–${(count - 1) * 3} 分钟。请逐条核对招呼语后再发送。`
       : '本批 1 条；确认后立即开始。请核对招呼语后再发送。';
   }
+  if (dom.queueDeliveryPlatform) {
+    const platforms = Array.from(new Set(rows
+      .map((row) => (row.Source_Channel ? channelLabel(row.Source_Channel) : ''))
+      .filter(Boolean)));
+    dom.queueDeliveryPlatform.textContent = platforms.length
+      ? `平台：${platforms.join('、')}`
+      : '平台未知';
+  }
   clear(dom.queueDeliveryList);
   rows.forEach((row) => {
     const greeting = row.greeting || {};
@@ -4564,7 +4660,7 @@ function renderDeliveryModal(rows) {
     item.append(el('p', { className: 'queue-delivery-text', text: String(greeting.greeting || '') }));
     item.append(el('p', {
       className: 'queue-delivery-meta',
-      text: `来源：${greeting.selection || '未标注'}`
+      text: `来源：${greetingSourceLabel(greeting.selection) || '未标注'}`
     }));
     const evidence = greeting.evidence_check;
     if (evidence && Array.isArray(evidence.unsupported_claims) && evidence.unsupported_claims.length) {
@@ -5126,10 +5222,15 @@ function renderHrPlatformStatus(unavailable) {
   const rows = hrPlatformStatusRows();
   dom.hrPlatformStatus.hidden = !rows.length;
   rows.forEach((row) => {
+    // 读取失败但屏幕上仍有缓存时，写明「已显示缓存」；只有完全没有缓存才叫「未读取」。
+    const hasCache = Boolean(row.error) && (Number(row.count) || 0) > 0;
+    const cacheText = state.hrSyncing ? '已显示缓存，正在同步' : '已显示缓存';
     const node = el('div', { className: `hr-platform-row${row.error ? ' is-error' : ''}` });
+    // 缓存还在时这一格不算失败态，避免整条 chip 变红。
+    if (hasCache) node.classList.remove('is-error');
     const sourceLabel = row.source === 'api' ? '接口同步' : row.source === 'dom' ? '网页同步' : '';
     const detailText = row.error
-      ? row.error
+      ? (hasCache ? `${cacheText}；${row.error}` : row.error)
       : [
         `${row.count} 个会话`,
         row.unread ? `${row.unread} 未读` : '',
@@ -5144,7 +5245,7 @@ function renderHrPlatformStatus(unavailable) {
     ]));
     node.append(el('span', {
       className: 'hr-platform-row-detail',
-      text: row.error ? '未读取' : String(row.count)
+      text: row.error ? (hasCache ? cacheText : '未读取') : String(row.count)
     }));
     dom.hrPlatformStatus.append(node);
   });
@@ -5459,8 +5560,8 @@ function renderHrConversations() {
     if (unavailable) emptyText = '读不到 HR 会话。';
     else if (state.hrConversations.length) emptyText = '没有符合条件的会话。';
     else if (state.hrConversationsLoading) emptyText = '正在读取本机会话…';
-    const empty = el('div', { className: 'hr-empty-block' });
-    empty.append(el('p', { className: 'hr-empty', text: emptyText }));
+    const empty = el('div', { className: 'hr-empty-block sg-empty' });
+    empty.append(el('p', { className: 'hr-empty sg-empty-text', text: emptyText }));
     if (unavailable) {
       empty.append(el('p', { className: 'hr-empty-hint', text: '请先在本机 Chrome 登录各招聘平台，再重新读取。' }));
       empty.append(hrEmptyAction('重新读取会话'));
@@ -5493,17 +5594,20 @@ function renderHrConversations() {
       const top = el('span', { className: 'hr-conversation-top' });
       if (unread) top.append(el('span', { className: 'hr-unread-dot', attrs: { 'aria-hidden': 'true' } }));
       top.append(el('strong', { className: 'hr-conversation-hr', text: String(conversation.hr_name || 'HR') }));
+      const platformLabel = channelLabel(conversation.platform);
       const tags = el('span', { className: 'hr-conversation-tags' });
       if (conversation.platform) {
         tags.append(el('span', {
-          className: 'hr-platform-badge',
-          text: channelLabel(conversation.platform)
-        }));
+          className: `hr-platform-badge sg-platform-tag sg-platform-${String(conversation.platform)}`,
+          attrs: { title: platformLabel }
+        }, [
+          el('span', { className: 'sg-platform-mark', text: platformLabel.slice(0, 1) }),
+          el('span', { className: 'sg-platform-name', text: platformLabel })
+        ]));
       }
       if (tags.childNodes.length) top.append(tags);
       const timeLabel = hrConversationTimeLabel(conversation.last_message_at);
       if (timeLabel) top.append(el('span', { className: 'hr-conversation-time', text: timeLabel }));
-      const platformLabel = channelLabel(conversation.platform);
       const item = el('button', {
         className: `hr-conversation${active ? ' is-active' : ''}${unread ? ' is-unread' : ''}`,
         attrs: {
@@ -5589,6 +5693,21 @@ function renderHrJobCard(conversation) {
   dom.hrDetailJob.append(el('div', { className: 'hr-job-card' }, [body, jobButton]));
 }
 
+// 平台会把同一段系统提示重复塞进消息流；按消息 id 去重，没有 id 的按「文字 + 时间」。
+function dedupeHrMessages(messages) {
+  const seen = new Set();
+  return messages.filter((message) => {
+    if (!message) return false;
+    const id = message.mid || message.id || message.message_id || '';
+    const key = id
+      ? `id:${String(id)}`
+      : `text:${String(message.text || '')}\u0000${String(message.time || '')}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // 一条消息一个气泡；后台刷新时只追加新消息，已在屏幕上的气泡不动。
 function hrMessageNode(message, conversation, startOfGroup) {
   const sender = String((message && message.sender) || 'system');
@@ -5604,7 +5723,12 @@ function hrMessageNode(message, conversation, startOfGroup) {
     className: 'hr-message-meta',
     text: kind === 'hr' ? (stamp ? `${who}，${stamp}` : who) : (stamp || who)
   }));
-  bubble.append(el('p', { className: 'hr-message-text', text: String((message && message.text) || '') }));
+  const fullText = String((message && message.text) || '');
+  // 系统提示常是一大段平台原话；列表里只留摘要，完整内容放在 title。
+  const shortText = kind === 'system' ? truncate(fullText, 120) : fullText;
+  const textNode = el('p', { className: 'hr-message-text', text: shortText });
+  if (shortText !== fullText) textNode.title = fullText;
+  bubble.append(textNode);
   return bubble;
 }
 
@@ -5643,8 +5767,9 @@ function renderHrThread() {
       dom.hrReplyBlockReason.textContent = '';
     }
     dom.hrDetailJob.append(el('span', { className: 'hr-job-empty', text: '未关联岗位' }));
-    dom.hrMessages.append(el('div', { className: 'hr-empty-block' }, [
-      el('p', { className: 'hr-empty', text: '从左侧选择一位 HR，查看完整对话。' })
+    dom.hrMessages.append(el('div', { className: 'hr-empty-block sg-empty' }, [
+      el('p', { className: 'hr-empty sg-empty-text', text: '从左侧选择一位 HR，查看完整对话。' }),
+      hrEmptyAction('刷新会话')
     ]));
     return;
   }
@@ -5660,7 +5785,9 @@ function renderHrThread() {
     && String(state.hrThread.conversation.id) === key
     ? state.hrThread
     : null;
-  const messages = thread && Array.isArray(thread.messages) ? thread.messages : [];
+  const messages = thread && Array.isArray(thread.messages)
+    ? dedupeHrMessages(thread.messages)
+    : [];
   const signatures = messages.map((message) => JSON.stringify([
     String((message && message.sender) || 'system'),
     String((message && message.time) || ''),
@@ -5679,9 +5806,9 @@ function renderHrThread() {
   if (!messages.length) {
     clear(dom.hrMessages);
     state.hrThreadRenderedMessages = [];
-    const empty = el('div', { className: 'hr-empty-block' });
+    const empty = el('div', { className: 'hr-empty-block sg-empty' });
     empty.append(el('p', {
-      className: 'hr-empty',
+      className: 'hr-empty sg-empty-text',
       text: state.hrThreadLoading ? '正在读取对话…' : '这个会话还没有消息。'
     }));
     if (!state.hrThreadLoading) {
@@ -5947,11 +6074,19 @@ function openHrReplyModal(trigger) {
   const id = String(state.hrSelectedId || '');
   const text = String(state.hrDrafts[id] || '');
   if (!conversation || !state.hrThread.reply_allowed || !text.trim()) return;
-  dom.hrReplyWho.textContent = [
-    `${conversation.hr_name || 'HR'}${conversation.hr_title ? `（${conversation.hr_title}）` : ''}`,
-    conversation.company || '—',
-    conversation.title
-  ].filter(Boolean).join('，');
+  // 身份行：姓名 · 职位 · 公司。hr_title 在部分平台就是「hr / 招聘方」，
+  // 不再拼进括号重复；职位取会话对应的岗位名。
+  const identity = [
+    String(conversation.hr_name || 'HR').trim(),
+    String(conversation.title || '').trim(),
+    String(conversation.company || '').trim()
+  ].filter(Boolean).join(' · ');
+  dom.hrReplyWho.textContent = identity;
+  dom.hrReplyWho.title = identity;
+  if (dom.hrReplyPlatform) {
+    const platform = String(conversation.platform || '').trim();
+    dom.hrReplyPlatform.textContent = platform ? `平台：${channelLabel(platform)}` : '平台未知';
+  }
   dom.hrReplyModalText.textContent = text;
   dom.hrReplyModalRisk.checked = true;
   dom.hrReplyModalProgress.textContent = '';
@@ -8672,6 +8807,18 @@ function bindEvents() {
   if (dom.queueReviewClose) {
     dom.queueReviewClose.addEventListener('click', closeQueueReview);
   }
+  // 抽屉没有遮罩，Esc 关闭；弹窗打开时交给弹窗自己的 Esc 处理。
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (state.hrReplyModalOpen || state.queueDeliveryOpen) return;
+    if (dom.jobsDossier && !dom.jobsDossier.hidden) {
+      event.preventDefault();
+      closeJobDossier();
+    } else if (dom.queueReview && !dom.queueReview.hidden) {
+      event.preventDefault();
+      closeQueueReview();
+    }
+  });
 
   dom.jdForm.addEventListener('submit', async (event) => {
     event.preventDefault();

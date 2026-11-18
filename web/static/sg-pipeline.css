@@ -1,1 +1,725 @@
-/* 「信号」界面打磨层：sg-pipeline。规格见 web/SIGNAL-UI-SPEC.md。只写本文件负责的范围。 */
+/* 「信号」界面打磨层：sg-pipeline。规格见 web/SIGNAL-UI-SPEC.md。只写本文件负责的范围。
+ *
+ * 负责：岗位流水线 03 的四个页签
+ *   #view-collect / #view-jobs / #view-queue / #view-mail
+ * 规格条目：第 3 节 2（子页签）、4（表格）、5（徽标）、6（按钮）、7（空状态）；
+ *           第 4 节「岗位流水线」（采集双栏粘性卡、批量条吸底、回复页统一）。
+ * 约束：选择器统一以 body.offer-ui:not(#wa-theme-off) 开头；#view-jobs 只加样式，不改它的标记与脚本。
+ */
+
+/* ==========================================================================
+ * 3.2 流水线子页签：一条胶囊轨道，选中项墨底白字（深色下信号色）
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tabs {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 12px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background .2s var(--sg-soft), color .2s var(--sg-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab.is-active,
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab[aria-current="page"] {
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab.is-active,
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab[aria-current="page"] {
+  background: var(--sg);
+  color: var(--sg-ink);
+}
+
+/* ==========================================================================
+ * 3.4 表格：caption 只给读屏；表头无灰带、吸顶；行高 48；单行省略；横向滚动在 wrap 内
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .table-wrap {
+  position: relative;
+  overflow: auto;
+  border-radius: 14px;
+  background: var(--surface);
+  scrollbar-gutter: stable;
+}
+
+/* 右侧渐隐：提示还有更多列，横向滚动仍只在 wrap 内部 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .table-wrap {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), rgba(0, 0, 0, .45));
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), rgba(0, 0, 0, .45));
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table tbody tr {
+  height: 48px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table td {
+  /* 行高交给 tr 的 48px 下限；徽标行内容约 38 + 上下各 5 = 48 */
+  padding: 5px 12px;
+  border-bottom: .5px solid var(--line);
+  font-size: 13.5px;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+/* 行内控件按中线对齐，避免基线把行高撑大 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table td :is(.badge, .button, select, input) {
+  vertical-align: middle;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table tbody tr:hover {
+  background: var(--accent-soft);
+}
+
+/* 选中行：左侧 3px 信号色条 */
+body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) .data-table tbody tr:has(input[type="checkbox"]:checked) td:first-child {
+  box-shadow: inset 3px 0 0 #9BC21A;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) .data-table tbody tr:has(input[type="checkbox"]:checked) td:first-child {
+  box-shadow: inset 3px 0 0 var(--sg);
+}
+
+/* 表格里的操作控件不换行：CJK 按钮在窄列里会一个字一行，把行高撑到 50+ */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table .button,
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table select {
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .data-table .button-small {
+  padding: 4px 10px;
+  line-height: 1.35;
+}
+
+/* 数字列：右对齐、窄体、等宽数字 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-num {
+  display: inline-block;
+  min-width: 2.6em;
+  white-space: nowrap;
+  font-family: var(--sg-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .data-table :is(th, td):nth-child(4) {
+  text-align: right;
+}
+
+/* 公司 / 岗位：单行省略，完整内容用 title 展示 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-company,
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-title,
+body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs .sg-ellipsis,
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-ellipsis {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+/* 审批表：公司 / 岗位两列给上限宽度，才能真的出现省略号；渠道是平台名，不换行 */
+body.offer-ui:not(#wa-theme-off) #view-queue .data-table td:nth-child(2) .sg-ellipsis {
+  max-width: 9em;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .data-table td:nth-child(3) .sg-ellipsis {
+  max-width: 14em;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .data-table td:nth-child(5) {
+  white-space: nowrap;
+}
+
+/* 岗位池：动作列改为单行，表格加宽后交给 wrap 横向滚动，行高回到 48 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table {
+  min-width: 1520px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13) {
+  width: 440px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td {
+  padding: 5px 10px;
+  vertical-align: middle;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions .button,
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions select {
+  flex: none;
+  width: auto;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-state {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+/* 岗位池与审批队列的表格较高：内部滚动，表头才会真正吸顶 */
+body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) .table-wrap {
+  max-height: min(72dvh, 760px);
+}
+
+/* 空单元格 / 空状态 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .empty-cell {
+  padding: 18px 14px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* ==========================================================================
+ * 3.5 徽标：高 22、胶囊、不换行；平台标 = 14px 圆角方块首字 + 平台名
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-good {
+  background: var(--sg);
+  color: var(--sg-ink);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-neutral {
+  background: transparent;
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 .5px var(--line);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .badge-bad {
+  background: var(--bad-bg);
+  color: var(--bad);
+  box-shadow: none;
+}
+
+/* 岗位池里三组徽标原本是纵向堆叠，保持堆叠但不再换行 */
+body.offer-ui:not(#wa-theme-off) #view-jobs :is(.jobs-risk, .jobs-hard-filter, .jobs-approval) .badge {
+  white-space: nowrap;
+}
+
+/* 平台标 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-badge.sg-platform-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px 0 3px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 .5px var(--line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
+  background: var(--sg);
+  color: var(--sg-ink);
+}
+
+/* ==========================================================================
+ * 3.6 按钮：胶囊；禁用透明度 .4 + 可见原因
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .button {
+  border-radius: 999px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-disabled-reason {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-disabled-reason[hidden] {
+  display: none;
+}
+
+/* 删除只用危险色文字按钮（岗位池的「删除所选」） */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-delete-button {
+  background: transparent;
+  color: var(--bad);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-delete-button:hover:not(:disabled) {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+/* ==========================================================================
+ * 3.7 空状态：一句话 + 下一步按钮
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 2px;
+  text-align: left;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-empty-text {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .sg-empty .button {
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+ * 第 4 节 · 采集：左表单，右粘性「启动前检查」卡（检查项 + 主按钮 + 禁用原因）
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-collect-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 324px;
+  gap: 16px;
+  align-items: start;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-collect-main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-collect-rail {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card {
+  display: flex;
+  flex-direction: column;
+  /* 留出页头与页签的高度：卡片底部的主按钮在首屏内可见，检查项在卡内滚动 */
+  max-height: calc(100dvh - 300px);
+  min-height: 320px;
+  padding: 18px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card .panel-head {
+  margin-bottom: 8px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card .panel-head h4 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-checks {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  margin: 0 0 4px;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 9px 11px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body p {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body .hint {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .collect-checks .notice {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: .5px solid var(--line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .checkbox-label {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions #offerpilot-start {
+  flex: 1 1 auto;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .sg-disabled-reason {
+  margin: 0;
+}
+
+/* ==========================================================================
+ * 第 4 节 · 筛选 / 通过：批量操作条有选中时吸附在视口底部
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-bulk-bar,
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar {
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 .5px var(--line);
+  transition: box-shadow .2s var(--sg-soft);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-count {
+  margin-right: auto;
+  color: var(--ink-2);
+}
+
+/* 有选中时：条吸底并浮起 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-bulk-bar:has(#jobs-bulk-enqueue:not(:disabled)),
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar:has(.button:not(:disabled)) {
+  position: sticky;
+  bottom: 16px;
+  z-index: 6;
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, .18), inset 0 0 0 .5px var(--line);
+}
+
+/* 禁用原因只在按钮不可用时出现，避免长期占位 */
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar .sg-disabled-reason {
+  display: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-bar:has(.button:disabled) .sg-disabled-reason {
+  display: inline;
+  margin: 0;
+}
+
+/* ==========================================================================
+ * 第 4 节 · 回复：沿用现有两栏，统一徽标、空状态与发送框
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation {
+  border-radius: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 #9BC21A;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {
+  box-shadow: inset 3px 0 0 var(--sg);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer {
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 .5px var(--line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer textarea {
+  border-radius: 12px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer .button {
+  border-radius: 999px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty-block.sg-empty {
+  align-items: flex-start;
+  padding: 18px 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty-block.sg-empty .button {
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+ * 岗位池横向溢出：收窄城市 / 薪资 / 来源平台，动作列吸在右侧始终可见
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table :is(th, td):nth-child(4) {
+  width: 84px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table :is(th, td):nth-child(5) {
+  width: 92px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table :is(th, td):nth-child(6) {
+  width: 88px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs :is(.jobs-city, .jobs-salary, .jobs-platform) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+/* 动作列固定右侧：横向滚动时按钮和状态下拉不会滑出视口 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13),
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(13) {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13) {
+  z-index: 3;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(13) {
+  z-index: 1;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table tbody tr:hover td:nth-child(13) {
+  background: var(--accent-soft);
+}
+
+/* 吸右的动作列不需要右侧渐隐，否则按钮会被压暗 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .table-wrap {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* ==========================================================================
+ * 岗位详情 / 人工核对：从页面下方跳到右侧抽屉，不移动 DOM、不加遮罩
+ * ========================================================================== */
+/* 视图入场动画会给 .view 留下 transform，position:fixed 就会相对视图而不是视口定位。
+ * 这两个视图改用不保留终态的入场动画，抽屉才能贴住视口四边。 */
+body.offer-ui:not(#wa-theme-off) .views > :is(#view-jobs, #view-queue) {
+  animation-fill-mode: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#jobs-dossier, #queue-review) {
+  /* 抽屉本身就是 .panel，取消面板入场动画，避免自身也被 transform 定位 */
+  animation: none;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  width: min(520px, 92vw);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 20px 20px 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: 0 0 40px rgba(0, 0, 0, .18);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#jobs-dossier, #queue-review)[hidden] {
+  display: none !important;
+}
+
+/* ==========================================================================
+ * 弹窗补一行平台；系统消息单独一行居中
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(.sg-queue-delivery-platform, .sg-hr-reply-platform) {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-system {
+  align-self: stretch;
+  max-width: 100%;
+  text-align: center;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-system .hr-message-text {
+  text-align: center;
+}
+
+/* 采集结果列表：超过 560px 在内部滚动，表头继续吸顶 */
+body.offer-ui:not(#wa-theme-off) #view-collect #offerpilot-jobs-table .table-wrap {
+  max-height: 560px;
+}
+
+/* 薪资 / 状态不拆字换行，行高保持 48 */
+body.offer-ui:not(#wa-theme-off) #view-collect #offerpilot-jobs-table .data-table :is(th, td):nth-child(4),
+body.offer-ui:not(#wa-theme-off) #view-collect #offerpilot-jobs-table .data-table :is(th, td):nth-child(6) {
+  white-space: nowrap;
+}
+
+/* 窄桌面：双栏收成单栏，粘性卡取消，避免出现横向溢出 */
+@media (max-width: 1120px) {
+  body.offer-ui:not(#wa-theme-off) #view-collect .sg-collect-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.offer-ui:not(#wa-theme-off) #view-collect .sg-collect-rail {
+    position: static;
+  }
+
+  body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card {
+    max-height: none;
+  }
+
+  body.offer-ui:not(#wa-theme-off) #view-collect .collect-checks {
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .button,
+  body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tab {
+    transition: none !important;
+  }
+}
