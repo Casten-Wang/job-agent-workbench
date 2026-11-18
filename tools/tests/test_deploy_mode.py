@@ -52,6 +52,16 @@ class PureLogicTests(unittest.TestCase):
         self.assertFalse(deploy_mode.same_origin("", None))
         self.assertFalse(deploy_mode.same_origin("demo.example.com", "javascript:alert(1)"))
 
+    def test_proxy_rewritten_host_is_accepted_for_modelscope_and_forwarded_host(self):
+        # 魔搭网关把 Host 改成内部地址，Origin 仍是创空间域名。
+        self.assertTrue(deploy_mode.same_origin("10.0.0.8:7860", "https://castenwang-offerpilot.ms.show"))
+        self.assertTrue(deploy_mode.same_origin("10.0.0.8:7860", "https://www.modelscope.cn"))
+        self.assertTrue(deploy_mode.same_origin("10.0.0.8:7860", "https://my.site", "my.site"))
+        self.assertFalse(deploy_mode.same_origin("10.0.0.8:7860", "https://evil.ms.show.attacker.com"))
+        self.assertFalse(deploy_mode.same_origin("10.0.0.8:7860", "https://notms.show"))
+        with patch.dict(os.environ, {"OFFERPILOT_ALLOWED_ORIGINS": ".example.org"}):
+            self.assertTrue(deploy_mode.same_origin("10.0.0.8:7860", "https://a.example.org"))
+
     def test_rate_limiter_caps_per_client_and_globally_then_resets(self):
         now = [0.0]
         limiter = deploy_mode.RateLimiter(per_client=2, total=3, window=10, clock=lambda: now[0])

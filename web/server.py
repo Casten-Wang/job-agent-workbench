@@ -90,7 +90,7 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         if not raw_host:
             return False
         if deploy_mode.enabled():
-            return deploy_mode.same_origin(raw_host, self.headers.get("Origin"))
+            return deploy_mode.same_origin(raw_host, self.headers.get("Origin"), self.headers.get("X-Forwarded-Host"))
         if raw_host.startswith("["):
             # Bracketed IPv6, optionally followed by :port.
             end = raw_host.find("]")

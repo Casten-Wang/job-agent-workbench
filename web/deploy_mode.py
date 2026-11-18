@@ -75,8 +75,19 @@ def listen_port(default: int = 7860) -> int:
     return int(raw) if raw.isdigit() and 0 < int(raw) < 65536 else default
 
 
-def same_origin(host_header: str, origin: str | None) -> bool:
-    """展示版不限定域名，但跨站请求（Origin 与 Host 不一致）一律拒绝。"""
+# 反向代理（魔搭网关等）会改写 Host，所以同源检查还要认 X-Forwarded-Host，
+# 并默认放行魔搭自己的域名；其他部署平台用 OFFERPILOT_ALLOWED_ORIGINS（逗号分隔的域名后缀）追加。
+ENV_ALLOWED_ORIGINS = "OFFERPILOT_ALLOWED_ORIGINS"
+DEFAULT_ALLOWED_SUFFIXES = (".ms.show", ".modelscope.cn", ".modelscope.ai")
+
+
+def _allowed_suffixes() -> tuple[str, ...]:
+    extra = tuple(item.strip().lower() for item in os.environ.get(ENV_ALLOWED_ORIGINS, "").split(",") if item.strip())
+    return DEFAULT_ALLOWED_SUFFIXES + extra
+
+
+def same_origin(host_header: str, origin: str | None, forwarded_host: str | None = None) -> bool:
+    """展示版不限定域名，但跨站请求一律拒绝：Origin 必须等于 Host / X-Forwarded-Host，或属于放行的域名后缀。"""
     host = (host_header or "").strip().lower()
     if not host:
         return False
@@ -85,7 +96,12 @@ def same_origin(host_header: str, origin: str | None) -> bool:
     parsed = urllib.parse.urlsplit(origin)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return False
-    return parsed.netloc.lower() == host
+    netloc = parsed.netloc.lower()
+    hosts = {host, (forwarded_host or "").split(",")[0].strip().lower()} - {""}
+    if netloc in hosts:
+        return True
+    name = (parsed.hostname or "").lower()
+    return any(name == suffix.lstrip(".") or name.endswith(suffix) for suffix in _allowed_suffixes())
 
 
 def frame_ancestors() -> str:
