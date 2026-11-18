@@ -361,5 +361,45 @@ process.stdout.write(JSON.stringify({
                 self.assertIn(marker, block)
 
 
+class ReadmeRunStepsTests(unittest.TestCase):
+    """README 里的安装与启动步骤要和仓库里真实存在的文件、命令一致。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.readme = _read(PROJECT_ROOT / "README.md")
+
+    def test_commands_point_at_files_that_exist(self):
+        for command in (
+            "python3 -m venv .venv",
+            "-r requirements-offerpilot.txt -r interview_agent/requirements.lock.txt",
+            "tools/run_career_demo.py --engine-root .",
+            "./run_web.sh",
+            "sh tools/run_tests.sh",
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, self.readme)
+        for path in (
+            "requirements-offerpilot.txt",
+            "interview_agent/requirements.lock.txt",
+            "tools/run_career_demo.py",
+            "run_web.sh",
+            "tools/run_tests.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue((PROJECT_ROOT / path).is_file())
+
+    def test_old_launch_instructions_are_gone(self):
+        self.assertNotIn("--key-stdin", self.readme)
+        self.assertNotIn("<引擎目录>", self.readme)
+
+    def test_platform_table_matches_the_collector_capabilities(self):
+        caps = _read(PROJECT_ROOT / "vendor" / "offerpilot" / "src" / "offerpilot" / "collection" / "capabilities.py")
+        self.assertIn('"boss": frozenset({"collect", "score", "greet", "deliver", "monitor"})', caps)
+        for platform in ("zhilian", "51job", "liepin"):
+            self.assertIn(f'"{platform}": frozenset({{"collect", "score", "greet"}})', caps)
+        for label in ("Boss直聘", "智联招聘", "前程无忧", "猎聘"):
+            self.assertIn(label, self.readme)
+
+
 if __name__ == "__main__":
     unittest.main()

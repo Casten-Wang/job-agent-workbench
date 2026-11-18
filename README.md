@@ -36,21 +36,80 @@
 
 ## 运行
 
-当前优先完成 **GitHub 授权 → 选择项目 → 确认经历 → 生成与预览简历 → 保存版本并导出**。入口为「05 定制简历」中的“从真实经历到定制简历”，不要求参加面试；「06 模拟面试」页面原有的文字面试、题单与复盘保持不变，并追加个人项目正式面试面板。首次配置与接口见 [个人项目接入说明](web/PERSONAL-CAREER-API.md)。
+### 环境要求
 
-启动既有 Python 引擎时，运行 `tools/run_career_demo.py --engine-root <引擎目录> --key-stdin`。公开项目核验与 `/api/resume-agent/*`、`/api/interview-agent/*` 接口保留；详见 [保留接口说明](web/CAREER-AGENT-API.md)。
+- Python 3.11 及以上（开发机为 3.14），macOS 或 Linux 的 `sh`。
+- Google Chrome：采集岗位与读取 HR 会话都通过你本机已登录的 Chrome 完成，不会另起浏览器。
+- 一个大模型服务的 API Key（Claude、DeepSeek、豆包或兼容接口）：评分、招呼语和对话助理需要；只看岗位池、个人资料等页面不需要。Key 只在网页「设置 › AI 接口设置」里填写，保存在本机被忽略的目录，不写进仓库、命令行或环境变量。
 
-运行需要 Python 3（建议 3.11+）。
+### 安装
+
+在仓库根目录执行，只需一次。
+
+```bash
+python3 -m venv .venv
+```
+
+```bash
+.venv/bin/python -m pip install -r requirements-offerpilot.txt -r interview_agent/requirements.lock.txt
+```
+
+第一个依赖文件是工作台与内嵌岗位自动化组件；第二个是对话助理、个人项目与模拟面试引擎。只想用工作台、不用对话助理时，可以只装第一个。
+
+### 启动
+
+**完整启动（推荐）**：工作台加两个本机引擎，对话助理、个人项目、模拟面试都可用。
+
+```bash
+NO_PROXY=127.0.0.1,localhost .venv/bin/python -B tools/run_career_demo.py --engine-root .
+```
+
+终端出现 `OfferPilot: http://127.0.0.1:8766/` 即启动完成，浏览器打开该地址。按 `Ctrl+C` 停止全部服务。会占用本机 8766（工作台）、18747（公开样例引擎）、18748（个人引擎）三个端口，只监听 `127.0.0.1`。
+
+注意：这里不要加 `-I`，启动器需要把 `tools/` 加入模块搜索路径。没有模型 Key 时可加 `--knowledge-only`，只启动工作台和离线项目知识库。
+
+**只启动工作台**：不含对话助理，对应的 `/api/workbench-agent/*`、`/api/career-user/*` 会返回 503（提示先启动面试服务），其余页面正常。
+
+```bash
+./run_web.sh
+```
+
+`run_web.sh` 在没有 `.venv` 时会自动创建并安装工作台依赖。
+
+Windows 下的 `run_career_demo.ps1` 是旧启动方式，默认在上级目录找 `.venv-interview`；其他系统请用上面的命令。
+
+### 首次使用
+
+1. 打开 <http://127.0.0.1:8766/>，进入「08 设置 › AI 接口设置」，选服务商、填模型名和 API Key 并保存，再点「测试连接」。
+2. 在「04 个人资料」填写或导入简历；必填项缺失时，采集和完整流程都无法启动。
+3. 采集前先在本机 Chrome 里开启调试端口，并在这个 Chrome 里登录要用的招聘平台。macOS 示例（新版 Chrome 要求同时指定独立的数据目录）：
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.offerpilot-chrome"
+```
+
+4. 进入「03 岗位流水线 › 1 采集」，选任务类型和平台，点「检查环境」，全部通过后再开始。检查项里会明确写出缺什么。
+
+### 采集支持的平台
+
+| 平台 | 采集岗位 | 评分与招呼语 | 投递 | 监控回复 |
+|---|---|---|---|---|
+| Boss直聘 | 支持 | 支持 | 支持 | 支持 |
+| 智联招聘 | 支持（需先在 Chrome 打开智联搜索页） | 支持 | 暂未开放 | 暂未开放 |
+| 前程无忧 | 支持 | 支持 | 暂未开放 | 暂未开放 |
+| 猎聘 | 支持 | 支持 | 暂未开放 | 暂未开放 |
+
+- 采集页的「采集平台」在「仅采集」下可选四个平台；「完整流程」会进入投递，所以锁定为 Boss直聘。
+- 「岗位流水线 › 4 回复」页的 HR 会话读取覆盖 BOSS、智联、猎聘，每次回复都要在确认框里确认后才会发出。
+- 能力以内嵌组件 `vendor/offerpilot/src/offerpilot/collection/capabilities.py` 为准；上表没写「支持」的项目前不会执行。
+
+### 测试
 
 ```bash
 sh tools/run_tests.sh
 ```
 
-启动本机工作台：
-
-```bash
-./run_web.sh
-```
+脚本优先使用 `.venv`；测试只用虚构数据，不读取本机的 `web/data/`，在没有任何本机数据的全新克隆里也应全部通过。
 
 命令行工具示例：
 
@@ -159,4 +218,4 @@ python3 -I -B tools/upcv_adapter.py --print-config
 
 「02 对话助理」按求职目标保存会话（队友云端版的“流程总览”页签暂未接入）。Agent 可读取已有岗位与专业资料，推荐岗位，基于已确认材料生成、修改简历和招呼语草稿，展示差异与来源。修改确认事实或保存正式版本前需要核对具体结果；草稿修改使旧确认失效。招呼语目前提供复制并转到原发送复核，不会同步到发送器或自动发送。
 
-沿用 `run_career_demo.ps1` 启动，更新后需重启本机工作台和 Python 引擎。接口、停止/恢复、数据边界及回退开关见 [全局 Agent 接口](web/WORKBENCH-AGENT-API.md)。现有 `/api/state` 的 27 个顶层字段、业务页面和发送保护保持兼容。
+启动方式见上文「运行 › 启动」，更新后需重启本机工作台和 Python 引擎。接口、停止/恢复、数据边界及回退开关见 [全局 Agent 接口](web/WORKBENCH-AGENT-API.md)。现有 `/api/state` 的 27 个顶层字段、业务页面和发送保护保持兼容。
