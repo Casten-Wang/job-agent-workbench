@@ -3294,6 +3294,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     hard_filter_blocked: list[dict[str, Any]] = []
     mandatory_blocked: list[dict[str, Any]] = []
     closed_blocked: list[dict[str, Any]] = []
+    zero_score_held: list[dict[str, Any]] = []
     incomplete: list[dict[str, Any]] = []
     unscored: list[str] = []
     risk_map = _job_risk_map(list(jobs.values()))
@@ -3355,6 +3356,12 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         if not_recommended and not allow_low:
             continue
+        # 文档评分为 0：每个已知维度都不匹配。不自动通过，和必备条件不满足一样只能手动加入。
+        if not not_recommended and score is not None and float(score) <= 0:
+            not_recommended = "文档评分为 0，各项都不匹配"
+            zero_score_held.append({"id": job_id, "reason": not_recommended})
+            if not allow_low:
+                continue
         if not_recommended:
             manual_only.add(job_id)
             continue
@@ -3421,6 +3428,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     result["hard_filter_blocked"] = hard_filter_blocked
     result["mandatory_blocked"] = mandatory_blocked
     result["closed_blocked"] = closed_blocked
+    result["zero_score_held"] = zero_score_held
     result["incomplete"] = incomplete
     result["unscored"] = unscored
     result["recent_duplicates"] = recent_duplicates
@@ -3455,6 +3463,8 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if incomplete:
         message += f"；{len(incomplete)} 条缺少学历或经验字段，已放行并提示，请人工核对"
+    if zero_score_held and not allow_low:
+        message += f"；{len(zero_score_held)} 条文档评分为 0，未自动通过，需要时请点「手动加入」"
     if unscored:
         message += f"；{len(unscored)} 条未评分岗位未入队，需要你点「手动加入」"
     if recent_duplicates:

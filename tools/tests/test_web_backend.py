@@ -1153,6 +1153,23 @@ class ApprovalGateTests(SeededStoreTestCase):
         })
         store.set_jobs(rows)
 
+    def test_zero_document_score_is_held_for_manual_add(self):
+        self._add_imported_job("zero-score-demo-job", score=0, score_raw=0, score_coverage=0.5)
+        held = backend.enqueue({"mode": "user", "ids": ["zero-score-demo-job"]})
+        self.assertEqual(held["accepted"], [])
+        self.assertEqual(held["approved"], [])
+        self.assertEqual(held["zero_score_held"][0]["id"], "zero-score-demo-job")
+        self.assertIn("文档评分为 0", held["message"])
+        self.assertFalse(any(row["id"] == "zero-score-demo-job" for row in backend.get_store("user").queue()))
+
+        manual = backend.enqueue({
+            "mode": "user",
+            "ids": ["zero-score-demo-job"],
+            "allow_low_score": True,
+            "override_reason": "值得沟通，人工判断",
+        })
+        self.assertIn("zero-score-demo-job", manual["manual"])
+
     def test_unsatisfied_mandatory_condition_blocks_automatic_enqueue(self):
         self._add_imported_job(
             "mandatory-demo-job",

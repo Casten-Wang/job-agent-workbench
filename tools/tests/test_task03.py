@@ -172,6 +172,22 @@ class HardFilterTests(unittest.TestCase):
             codes(record["hard_filter"]["reasons"]),
         )
 
+    def test_negated_excluded_terms_do_not_reject(self) -> None:
+        for text in ("本岗位非外包，正式编制。", "无需驻场，双休。", "不接受单休安排。"):
+            record = parse(description=f"测试数据：{text}")
+            self.assertNotIn(
+                CONFIG["reason_codes"]["excluded_term"],
+                codes(record["hard_filter"]["reasons"]),
+                text,
+            )
+
+    def test_term_still_rejects_when_one_mention_is_not_negated(self) -> None:
+        record = parse(description="测试数据：非外包岗位，但项目期间需要驻场，部分团队为外包。")
+        self.assertIn(
+            CONFIG["reason_codes"]["excluded_term"],
+            codes(record["hard_filter"]["reasons"]),
+        )
+
     def test_salary_below_min_is_rejected_and_supported_formats(self) -> None:
         below = parse(salary="10k-14k")
         self.assertEqual(below["hard_filter"]["status"], "reject")

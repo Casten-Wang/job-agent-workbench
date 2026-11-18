@@ -315,6 +315,23 @@ def _has_explicit_salary_unit(
     return bool(re.search(r"元|/月|薪|工资|salary", text, re.IGNORECASE))
 
 
+# 紧挨在排除词前面的否定说法：「非外包」「无需驻场」「不接受单休」「拒绝外包」。
+_NEGATION_PREFIXES = ("非", "无", "无需", "不", "不是", "不接受", "不需要", "没有", "拒绝", "杜绝")
+_NEGATION_WINDOW = max(len(prefix) for prefix in _NEGATION_PREFIXES)
+
+
+def _has_unnegated_term(text: str, term: str) -> bool:
+    """True when ``term`` occurs at least once without a negation right before it."""
+
+    start = text.find(term)
+    while start != -1:
+        before = text[max(0, start - _NEGATION_WINDOW):start]
+        if not any(before.endswith(prefix) for prefix in _NEGATION_PREFIXES):
+            return True
+        start = text.find(term, start + 1)
+    return False
+
+
 def _searchable_text(fields: dict[str, Any]) -> str:
     parts = []
     for key in ("company", "title", "city", "source_channel", "contact", "raw_text"):
@@ -432,7 +449,7 @@ def apply_hard_filters(
     searchable = _searchable_text(fields)
     for term in cfg["excluded_terms"]:
         term_text = _base_text(term).casefold()
-        if term_text and term_text in searchable:
+        if term_text and _has_unnegated_term(searchable, term_text):
             reject(
                 reason_codes["excluded_term"],
                 f"命中硬性排除词：{term}",

@@ -228,9 +228,10 @@ class ApprovalMinResidueTests(unittest.TestCase):
         result = subprocess.run(
             ["node", "-e", script], capture_output=True, text=True, timeout=20, check=True
         )
+        # 第 11 项：文档评分为 0（覆盖率 > 0）不自动通过，需要手动加入。
         self.assertEqual(
             json.loads(result.stdout),
-            [True, True, True, True, True, True, False, False, True, True, False, True, True],
+            [True, True, True, True, True, True, False, False, True, True, True, True, True],
         )
 
 

@@ -1956,6 +1956,8 @@ function jobHasDocumentScore(job) {
 function jobNeedsManualEnqueue(job) {
   if (!job) return true;
   if (job.mandatory_status === 'unsatisfied' || job.hiring_status === 'closed') return true;
+  // 文档评分为 0 不自动通过（与后端 enqueue 的 zero_score_held 一致）。
+  if (jobHasDocumentScore(job) && Number(job.score) <= 0) return true;
   return !jobHasDocumentScore(job);
 }
 
