@@ -744,6 +744,22 @@ def _active_task(server: Any) -> dict[str, Any] | None:
     return active if isinstance(active, dict) else None
 
 
+def _background_task_running(server: Any) -> bool:
+    """Any task still holding the browser, including one asked to stop."""
+    try:
+        status = server.task_runner.status() or {}
+    except Exception:
+        return False
+    if not isinstance(status, dict):
+        return False
+    if isinstance(status.get("active"), dict):
+        return True
+    for task in status.get("tasks") or []:
+        if isinstance(task, dict) and task.get("status") in {"running", "stopping"}:
+            return True
+    return False
+
+
 def _busy_preflight(summary: dict[str, Any], active: dict[str, Any]) -> dict[str, Any]:
     label = str(active.get("label") or active.get("mode") or "当前任务")
     message = f"任务「{label}」正在使用浏览器"
@@ -1478,7 +1494,69 @@ def _hr_stored_message(row: dict[str, Any]) -> dict[str, Any]:
     mid = str(row.get("mid") or "")[:64]
     if mid:
         message["mid"] = mid
+    if row.get("local"):
+        message["local"] = True
     return message
+
+
+_LOCAL_ECHO_WINDOW_SECONDS = 600
+
+
+def _hr_message_datetime(value: Any) -> "_dt.datetime | None":
+    """Parse the time labels the platforms and the local echo use."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if re.fullmatch(r"\d{10,13}", text):
+        stamp = int(text)
+        try:
+            return _dt.datetime.fromtimestamp(stamp / 1000 if stamp > 10**12 else stamp)
+        except (OverflowError, OSError, ValueError):
+            return None
+    year = _dt.datetime.now().year
+    candidates = [
+        (text, fmt) for fmt in (
+            "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+        )
+    ]
+    # The platforms label messages ``MM-DD HH:MM`` without a year; add the
+    # current year explicitly instead of relying on strptime's default.
+    candidates.extend(
+        (f"{year}-{text}", "%Y-" + fmt) for fmt in ("%m-%d %H:%M:%S", "%m-%d %H:%M")
+    )
+    for value, fmt in candidates:
+        try:
+            moment = _dt.datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+        if moment.tzinfo is not None:
+            moment = moment.astimezone().replace(tzinfo=None)
+        return moment
+    match = re.fullmatch(r"(\d{1,2}):(\d{2})", text)
+    if match:
+        return _dt.datetime.now().replace(
+            hour=int(match.group(1)), minute=int(match.group(2)), second=0, microsecond=0,
+        )
+    return None
+
+
+def _hr_echoes_local(
+    local: dict[str, Any], message: dict[str, Any], now: "_dt.datetime",
+) -> bool:
+    """Whether a platform message is the same reply the local echo recorded."""
+    if local.get("sender") != "me" or message.get("sender") != "me":
+        return False
+    if local.get("text") != message.get("text"):
+        return False
+    local_at = _hr_message_datetime(local.get("time"))
+    fresh_at = _hr_message_datetime(message.get("time"))
+    if local_at is not None and fresh_at is not None:
+        return abs((fresh_at - local_at).total_seconds()) <= _LOCAL_ECHO_WINDOW_SECONDS
+    # A page read that exposes no time at all: the echo is recent by
+    # construction, so compare it with the moment of this read instead.
+    stamp = fresh_at or local_at
+    return stamp is not None and abs((now - stamp).total_seconds()) <= _LOCAL_ECHO_WINDOW_SECONDS
 
 
 def _hr_merge_messages(
@@ -1488,7 +1566,8 @@ def _hr_merge_messages(
 
     Counts occurrences rather than a plain set: an identical sentence sent twice
     is kept twice, while re-reading the same page adds nothing.  ``time`` is
-    part of the key, and is empty when the page does not expose it.
+    part of the key, and is empty when the page does not expose it.  A locally
+    recorded reply is removed once the platform echoes it back.
     """
     merged: list[dict[str, Any]] = []
     for row in previous:
@@ -1502,14 +1581,27 @@ def _hr_merge_messages(
         if str(message.get("mid") or "").isdigit()
     ]
     max_prior_mid = max(prior_mids) if prior_mids else None
-    prior = Counter((m["sender"], m["text"], m["time"]) for m in merged)
+    # Local echoes do not count as already-shown copies: when the platform
+    # echo arrives, it replaces the local one rather than being deduplicated
+    # away, so the message never disappears between the two.
+    prior = Counter(
+        (m["sender"], m["text"], m["time"]) for m in merged if not m.get("local")
+    )
     seen: Counter = Counter()
+    now = _dt.datetime.now()
+    echoed_locals: set[int] = set()
     for row in fresh:
         if not isinstance(row, dict):
             continue
         message = _hr_stored_message(row)
         if not message["text"]:
             continue
+        for index, stored in enumerate(merged):
+            if index in echoed_locals or not stored.get("local"):
+                continue
+            if _hr_echoes_local(stored, message, now):
+                echoed_locals.add(index)
+                break
         mid = str(message.get("mid") or "")
         if max_prior_mid is not None and mid.isdigit():
             # The interface gives every message a monotonic id; anything at or
@@ -1523,6 +1615,8 @@ def _hr_merge_messages(
         if seen[key] <= prior[key]:
             continue
         merged.append(message)
+    for index in sorted(echoed_locals, reverse=True):
+        del merged[index]
     return merged[-HR_STORED_MESSAGES_MAX:]
 
 
@@ -1577,20 +1671,22 @@ def _remember_conversations(
 
     ``platform`` set: a single-platform read.  Only that platform's entries are
     replaced and only its listing time is refreshed; every other platform keeps
-    its entries and expiry.  ``platform`` unset: the aggregate path, which
-    replaces the whole cache with the union it just read (unchanged behavior).
+    its entries and expiry.  ``platform`` unset: the aggregate path, merged the
+    same way per platform — the platforms present in ``items`` are replaced,
+    and a platform missing from this read keeps its entries and expiry.
     """
     global _conversation_listed_at
     now = time.monotonic()
     with _conversation_cache_lock:
         if platform is None:
-            _conversation_cache.clear()
-            _conversation_listed_at_by_platform.clear()
+            for name in {str(item.get("platform") or "") for item in items} - {""}:
+                for stale_id in [key for key, value in _conversation_cache.items()
+                                 if value.get("platform") == name]:
+                    del _conversation_cache[stale_id]
+                _conversation_listed_at_by_platform[name] = now
             for item in items:
                 _conversation_cache[item["id"]] = dict(item)
             _conversation_listed_at = now
-            for name in {str(item.get("platform") or "") for item in items} - {""}:
-                _conversation_listed_at_by_platform[name] = now
             return
         for stale_id in [key for key, value in _conversation_cache.items()
                          if value.get("platform") == platform]:
@@ -1856,10 +1952,51 @@ def _boss_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return mapped
 
 
+def _platform_conversation_key(row: dict[str, Any], platform: str) -> str:
+    """The platform's own conversation key, when the listing exposes one."""
+    if platform == "boss":
+        params = row.get("_boss_params")
+        return str((params or {}).get("group_id") or "").strip() if isinstance(params, dict) else ""
+    if platform == "zhilian":
+        params = row.get("_zhilian_params")
+        return str((params or {}).get("peer_id") or "").strip() if isinstance(params, dict) else ""
+    if platform == "liepin":
+        params = row.get("_liepin_params")
+        return str((params or {}).get("opposite_im_id") or "").strip() if isinstance(params, dict) else ""
+    return ""
+
+
+def _mark_ambiguous_conversation_ids(
+    items: list[dict[str, Any]], rows: list[dict[str, Any]], platform: str,
+) -> None:
+    """Give colliding rows distinct ids and flag them as ambiguous.
+
+    Existing ids stay untouched unless the same listing produced the same id
+    for two rows, so stored data keeps working.  Colliding rows fall back to
+    the platform's own conversation key (or their position in the list when
+    the listing has no key), and a reply to them is refused instead of
+    guessing which same-name HR is meant.
+    """
+    counts = Counter(str(item.get("id") or "") for item in items)
+    for index, item in enumerate(items):
+        if counts[str(item.get("id") or "")] < 2:
+            continue
+        row = rows[index] if index < len(rows) and isinstance(rows[index], dict) else {}
+        key = _platform_conversation_key(row, platform) or str(index)
+        item["id"] = _conversation_id(
+            item.get("company"),
+            item.get("hr_name"),
+            str(item.get("hr_title") or "") + "\x1f" + key,
+            platform,
+        )
+        item["ambiguous"] = True
+
+
 def _boss_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = False) -> list[dict[str, Any]]:
     """Build the workbench's read-only conversation items for BOSS."""
     jobs = _store_jobs()
     items: list[dict[str, Any]] = []
+    used_rows: list[dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -1867,9 +2004,8 @@ def _boss_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = 
         hr_name = str(row.get("hr_name") or "").strip()
         hr_title = str(row.get("hr_title") or "").strip()
         job = _match_conversation_job(row, jobs)
-        conversation_id = _conversation_id(company, hr_name, hr_title)
         items.append({
-            "id": conversation_id,
+            "id": _conversation_id(company, hr_name, hr_title),
             "platform": "boss",
             "company": company,
             "title": str((job or {}).get("title") or hr_title),
@@ -1883,9 +2019,13 @@ def _boss_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = 
             "has_reply": bool(row.get("has_reply")),
             "job_id": str((job or {}).get("id") or "") or None,
         })
-        params = row.get("_boss_params")
-        if with_params and isinstance(params, dict) and params.get("boss_id"):
-            _boss_history_params[conversation_id] = dict(params)
+        used_rows.append(row)
+    _mark_ambiguous_conversation_ids(items, used_rows, "boss")
+    if with_params:
+        for item, row in zip(items, used_rows):
+            params = row.get("_boss_params")
+            if isinstance(params, dict) and params.get("boss_id"):
+                _boss_history_params[item["id"]] = dict(params)
     return items
 
 
@@ -2118,14 +2258,16 @@ def _zhilian_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _zhilian_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = False) -> list[dict[str, Any]]:
     jobs = _store_jobs()
     items: list[dict[str, Any]] = []
+    used_rows: list[dict[str, Any]] = []
     for row in rows:
+        if not isinstance(row, dict):
+            continue
         company = str(row.get("company") or "").strip()
         hr_name = str(row.get("hr_name") or "").strip()
         hr_title = str(row.get("hr_title") or "").strip()
         job = _match_conversation_job(row, jobs)
-        conversation_id = _conversation_id(company, hr_name, hr_title, "zhilian")
         items.append({
-            "id": conversation_id,
+            "id": _conversation_id(company, hr_name, hr_title, "zhilian"),
             "platform": "zhilian",
             "company": company,
             "title": str((job or {}).get("title") or hr_title),
@@ -2139,9 +2281,13 @@ def _zhilian_conversation_items(rows: list[dict[str, Any]], *, with_params: bool
             "has_reply": bool(row.get("has_reply")),
             "job_id": str((job or {}).get("id") or "") or None,
         })
-        params = row.get("_zhilian_params")
-        if with_params and isinstance(params, dict) and params.get("peer_id"):
-            _zhilian_history_params[conversation_id] = dict(params)
+        used_rows.append(row)
+    _mark_ambiguous_conversation_ids(items, used_rows, "zhilian")
+    if with_params:
+        for item, row in zip(items, used_rows):
+            params = row.get("_zhilian_params")
+            if isinstance(params, dict) and params.get("peer_id"):
+                _zhilian_history_params[item["id"]] = dict(params)
     return items
 
 
@@ -2375,14 +2521,16 @@ def _liepin_rows_from_api(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _liepin_conversation_items(rows: list[dict[str, Any]], *, with_params: bool = False) -> list[dict[str, Any]]:
     jobs = _store_jobs()
     items: list[dict[str, Any]] = []
+    used_rows: list[dict[str, Any]] = []
     for row in rows:
+        if not isinstance(row, dict):
+            continue
         company = str(row.get("company") or "").strip()
         hr_name = str(row.get("hr_name") or "").strip()
         hr_title = str(row.get("hr_title") or "").strip()
         job = _match_conversation_job(row, jobs)
-        conversation_id = _conversation_id(company, hr_name, hr_title, "liepin")
         items.append({
-            "id": conversation_id,
+            "id": _conversation_id(company, hr_name, hr_title, "liepin"),
             "platform": "liepin",
             "company": company,
             "title": str((job or {}).get("title") or hr_title),
@@ -2396,9 +2544,13 @@ def _liepin_conversation_items(rows: list[dict[str, Any]], *, with_params: bool 
             "has_reply": bool(row.get("has_reply")),
             "job_id": str((job or {}).get("id") or "") or None,
         })
-        params = row.get("_liepin_params")
-        if with_params and isinstance(params, dict) and params.get("opposite_im_id"):
-            _liepin_history_params[conversation_id] = dict(params)
+        used_rows.append(row)
+    _mark_ambiguous_conversation_ids(items, used_rows, "liepin")
+    if with_params:
+        for item, row in zip(items, used_rows):
+            params = row.get("_liepin_params")
+            if isinstance(params, dict) and params.get("opposite_im_id"):
+                _liepin_history_params[item["id"]] = dict(params)
     return items
 
 
@@ -2608,11 +2760,12 @@ def _refresh_platform_store(
         ][:HR_THREAD_OPENS_PER_REFRESH]
         allow_dom = False
     else:
-        # No interface ids: prefetch at most a few unread conversations; the
-        # rest are read when the user opens them.
+        # No interface ids: the background refresh never reads message bodies
+        # from the DOM.  It only lists conversations; a body is fetched through
+        # the interface when the user opens that conversation.
         unread = [row for row in items if _unread_count(row) > 0 and not _body_is_current(row)]
         candidates = unread[:HR_DOM_THREAD_OPENS_PER_REFRESH]
-        allow_dom = True
+        allow_dom = False
     # Unread first; the sort is stable, so the platform's own list order holds otherwise.
     candidates.sort(key=lambda row: 0 if row.get("unread") else 1)
     fresh_by_key: dict[str, list[dict[str, Any]]] = {}
@@ -2767,6 +2920,8 @@ def _stored_thread_messages(row: dict[str, Any], platform: str) -> list[dict[str
         mid = str(stored.get("mid") or "")[:64]
         if mid:
             message["mid"] = mid
+        if stored.get("local"):
+            message["local"] = True
         messages.append(message)
     return messages
 
@@ -2813,6 +2968,34 @@ def _stored_body_for(entry: dict[str, Any], platform: str) -> dict[str, Any] | N
     return record
 
 
+_HR_METADATA_FIELDS = (
+    "platform", "id", "company", "title", "hr_name", "hr_title", "job_id",
+    "last_message", "last_message_at", "unread", "unread_count",
+    "last_direction", "has_reply", "source", "signature", "body_read",
+)
+
+
+def _hr_record_with_current_metadata(
+    record: dict[str, Any], entry: dict[str, Any], platform: str,
+) -> dict[str, Any]:
+    """Identity and listing fields to keep when only a body field changes.
+
+    A live read or a failed read must not resurrect an older listing snapshot:
+    ``record`` has just been re-read inside the lock and wins over the caller's
+    ``entry``.  Only ``messages``/``body_signature``/``fetched_at``/``stale``/
+    ``error`` may be overwritten by those callers.
+    """
+    row = {**entry, "platform": platform}
+    for field in _HR_METADATA_FIELDS:
+        value = record.get(field)
+        if field not in record or value is None:
+            continue
+        if field in {"platform", "id"} and not str(value).strip():
+            continue
+        row[field] = value
+    return row
+
+
 def _merge_live_thread(
     entry: dict[str, Any],
     platform: str,
@@ -2822,20 +3005,26 @@ def _merge_live_thread(
     """Merge a live read into the stored body and persist it (best effort).
 
     Old messages are kept; the live read only adds ones not already stored.
+    The listing metadata comes from the record re-read under the lock, so a
+    slow read never overwrites a newer listing with the snapshot it started
+    from.
     """
-    row = {**entry, "platform": platform}
-    key = _hr_store_key(row)
+    key = _hr_store_key({**entry, "platform": platform})
     with _hr_store_lock:
         store = _load_hr_store()
         record = store.get(key) or {}
+        current = _hr_record_with_current_metadata(record, entry, platform)
         merged = _hr_merge_messages(record.get("messages") or [], messages)
         store[key] = _hr_store_record(
-            row,
+            current,
             messages=merged,
-            signature=signature or str(record.get("signature") or ""),
+            signature=current.get("signature"),
             body_signature=signature or _stored_body_signature(record),
             fetched_at=_hr_now(),
+            stale=False,
+            error=None,
             body_read=True,
+            source=current.get("source"),
         )
         try:
             _save_hr_store(store)
@@ -2870,6 +3059,7 @@ def _conversation_items(platform: str, rows: list[Any]) -> list[dict[str, Any]]:
     """Map platform rows into the same read-only shape BOSS already returns."""
     jobs = _store_jobs()
     items: list[dict[str, Any]] = []
+    used_rows: list[dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -2892,6 +3082,8 @@ def _conversation_items(platform: str, rows: list[Any]) -> list[dict[str, Any]]:
             "has_reply": bool(row.get("has_reply")),
             "job_id": str((job or {}).get("id") or "") or None,
         })
+        used_rows.append(row)
+    _mark_ambiguous_conversation_ids(items, used_rows, platform)
     return items
 
 
@@ -3857,15 +4049,17 @@ def _stale_or_error(
         store = _load_hr_store()
         record = store.get(key) or {}
         if record.get("messages"):
+            current = _hr_record_with_current_metadata(record, entry, platform)
             store[key] = _hr_store_record(
-                {**entry, "platform": platform},
+                current,
                 messages=record.get("messages") or [],
-                signature=record.get("signature"),
+                signature=current.get("signature"),
                 body_signature=_stored_body_signature(record),
                 fetched_at=record.get("fetched_at"),
                 stale=True,
                 error=str(reason),
                 body_read=bool(record.get("body_read")),
+                source=current.get("source"),
             )
             try:
                 _save_hr_store(store)
@@ -4197,6 +4391,61 @@ def _get_boss_thread(
     }
 
 
+def _record_local_reply(entry: dict[str, Any], text: str) -> dict[str, Any]:
+    """Show a just-sent reply before the next platform read catches up.
+
+    The message is flagged ``local`` and merged into the cached listing too.
+    The next platform read drops it once the platform echoes the same text
+    back (``_hr_merge_messages``), so it never becomes a lasting duplicate.
+    """
+    message = {
+        "sender": "me",
+        "text": _redact_contacts(text)[:HR_MESSAGE_MAX_CHARS],
+        "time": _dt.datetime.now().strftime("%m-%d %H:%M"),
+        "local": True,
+    }
+    row = {**entry, "platform": str(entry.get("platform") or "boss")}
+    key = _hr_store_key(row)
+    with _hr_store_lock:
+        store = _load_hr_store()
+        record = dict(store.get(key) or {})
+        messages = [
+            dict(item) for item in record.get("messages") or [] if isinstance(item, dict)
+        ]
+        messages = [*messages, message][-HR_STORED_MESSAGES_MAX:]
+        if record:
+            record["messages"] = messages
+            record["last_message"] = message["text"][:200]
+            record["last_message_at"] = message["time"]
+            record["last_direction"] = "me"
+        else:
+            record = _hr_store_record(
+                {
+                    **row,
+                    "last_message": message["text"],
+                    "last_message_at": message["time"],
+                    "last_direction": "me",
+                },
+                messages=messages,
+                signature=_hr_signature(row),
+                fetched_at=None,
+                body_read=False,
+                source=entry.get("source"),
+            )
+        store[key] = record
+        try:
+            _save_hr_store(store)
+        except OSError:
+            pass
+    with _conversation_cache_lock:
+        cached = _conversation_cache.get(str(entry.get("id") or ""))
+        if cached is not None:
+            cached["last_message"] = message["text"][:200]
+            cached["last_message_at"] = message["time"]
+            cached["last_direction"] = "me"
+    return dict(message)
+
+
 def send_reply(
     conversation_id: Any,
     text: Any,
@@ -4207,9 +4456,10 @@ def send_reply(
     """Send exactly one HR reply after every guard passes.
 
     Guards run in a fixed order: text, confirmation phrase, risk
-    acknowledgement, any-hour sending, stop request, risk locks, and finally the
-    conversation must come from the most recent list (10 minutes).  No other
-    function in this module or in the workbench calls ``_send_message_in_chat``.
+    acknowledgement, stop request, risk locks, a running background task, and
+    finally the conversation must come from the most recent list (10 minutes)
+    and carry enough identity to be located unambiguously.  No other function
+    in this module or in the workbench calls ``_send_message_in_chat``.
     """
     cleaned = str(text or "").strip()
     if not cleaned:
@@ -4228,15 +4478,22 @@ def send_reply(
     lock_reason = _risk_lock_reason(server, config)
     if lock_reason:
         raise ValueError(lock_reason)
+    if _background_task_running(server):
+        raise ValueError("后台任务运行中，结束后再发送回复")
     entry = _cached_conversation(conversation_id)
     if str(entry.get("platform") or "boss") != "boss":
         raise ValueError("当前只支持在 BOSS 直聘发送回复；其他平台为只读")
+    if not str(entry.get("hr_name") or "").strip():
+        raise ValueError("该会话缺少 HR 姓名，无法安全定位，请到平台发送")
+    if entry.get("ambiguous"):
+        raise ValueError("同一公司有同名 HR，无法安全定位，请到平台发送")
 
     monitor = _monitor()
     target_id = monitor._open_conversation_from_chat_list(
         {"hr_name": entry.get("hr_name") or "", "company": entry.get("company") or ""},
         config,
         background=True,
+        allow_company_only=False,
     )
     if not target_id:
         raise OfferPilotUnavailable("无法打开该会话，请重新读取会话列表")
@@ -4246,9 +4503,11 @@ def send_reply(
         monitor.close_tab(target_id)
     if not sent:
         raise ValueError("发送未被平台确认，请到 BOSS 页面核实后再试")
+    message = _record_local_reply(entry, cleaned)
     return {
         "ok": True,
         "conversation_id": entry["id"],
         "company": entry.get("company") or "",
         "chars": len(cleaned),
+        "message": message,
     }

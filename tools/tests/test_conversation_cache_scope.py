@@ -5,8 +5,8 @@ Regression contract (no browser, no network, nothing sent):
 
 - reading one platform's list replaces only that platform's cached entries;
   conversations from the other platforms stay resolvable for their own TTL;
-- the ``platform=all`` aggregate still replaces the whole cache, so a platform
-  missing from a later aggregate is dropped;
+- the ``platform=all`` aggregate merges per platform too: a platform missing
+  from a later aggregate keeps its entries and its listing time;
 - 51job reports the fixed WeChat-QR wording with ``available: false`` and no
   page is opened;
 - a Liepin list result says which drawer branch ran and how many row nodes the
@@ -235,18 +235,20 @@ class ConversationCacheScopeTests(_ChatReadCase):
             with self.assertRaises(ValueError):
                 runtime._cached_conversation(zhilian_id)
 
-    def test_aggregate_still_replaces_the_whole_cache(self):
+    def test_aggregate_keeps_platforms_missing_from_this_read(self):
         runtime.list_conversations("all")
         zhilian_id = self._ids(runtime.list_conversations("all"))["zhilian"]
 
-        # The next aggregate cannot read Zhilian: its old rows are dropped, as
-        # the aggregate path still replaces the whole cache.
+        # The next aggregate cannot read Zhilian: this read returns no Zhilian
+        # rows, so that platform keeps its cached entries instead of losing
+        # them merely because it failed in an aggregate read.
         self.fake.zhilian_down = True
         aggregate = runtime.list_conversations("all")
         self.assertNotIn("zhilian", self._ids(aggregate))
         self.assertIn("zhilian", aggregate.get("errors", {}))
-        with self.assertRaises(ValueError):
-            runtime._cached_conversation(zhilian_id)
+        self.assertEqual(
+            runtime._cached_conversation(zhilian_id)["platform"], "zhilian",
+        )
 
 
 class Chat51JobWordingTests(_ChatReadCase):

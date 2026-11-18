@@ -1093,7 +1093,7 @@ class ZhilianCollector:
                     continue
 
         tmp_url = SEARCH_URL.format(city_code=quote(code or "530"))
-        host_target = self.browser.new_tab(tmp_url, background=False)
+        host_target = self.browser.new_tab(tmp_url, background=True)
         if not host_target:
             raise CollectionBlockedError("rate_limit", "无法打开智联页面作为 API 宿主")
         self.sleep(5)

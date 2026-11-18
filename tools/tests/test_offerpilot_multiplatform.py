@@ -245,9 +245,9 @@ class PlatformChatTests(unittest.TestCase):
                     risk_acknowledged=True,
                 )
         self.assertIn("BOSS", str(ctx.exception))
-        # The listing opened the list tab plus one refresh read per listed
-        # conversation; refusing the reply must not open anything further.
-        self.assertEqual(self.fake.opened, 2)
+        # The listing opens the list tab but reads no conversation body, so
+        # refusing the reply leaves the page count unchanged.
+        self.assertEqual(self.fake.opened, 1)
 
 
 class LiepinParserContractTests(unittest.TestCase):

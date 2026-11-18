@@ -982,8 +982,14 @@ def _open_conversation_from_chat_list(
     config: dict,
     *,
     background: bool = True,
+    allow_company_only: bool = True,
 ) -> str | None:
-    """Open conversation from chat list. Matches by name+company, then company-only fallback."""
+    """Open conversation from chat list. Matches by name+company, then company-only fallback.
+
+    ``allow_company_only=False`` is used before sending a reply: a company-only
+    hit may be a different HR at the same company, so it is not good enough.
+    Two exact (name+company) hits are equally unsafe and fail as ``ambiguous``.
+    """
     if stop_requested(config):
         return None
     monitor_cfg = config.get("monitor", {})
@@ -1009,11 +1015,17 @@ def _open_conversation_from_chat_list(
     hr_name = (job.get("hr_name") or "").strip()
     company = (job.get("company") or "").strip()
 
-    # Build JS that tries: 1) exact hr_name+company match, 2) company-only match
+    # Build JS that collects every exact hr_name+company match before deciding.
+    # The company-only fallback is kept only for callers that allow it.
     js_click_chat = f"""
     (async () => {{
         const items = document.querySelectorAll('li[role=listitem]');
+        const exactMatches = [];
         let companyOnlyMatch = null;
+
+        const hrName = {json.dumps(hr_name, ensure_ascii=False)};
+        const targetComp = {json.dumps(company, ensure_ascii=False)};
+        const allowCompanyOnly = {json.dumps(bool(allow_company_only))};
 
         for (const item of items) {{
             const nameEl = item.querySelector('.name-text');
@@ -1022,25 +1034,12 @@ def _open_conversation_from_chat_list(
             const name = (nameEl ? nameEl.textContent : '').trim();
             const comp = spans.length >= 2 ? spans[1].textContent.trim() : '';
 
-            const hrName = {json.dumps(hr_name, ensure_ascii=False)};
-            const targetComp = {json.dumps(company, ensure_ascii=False)};
             const sameCompany = !!comp && !!targetComp
                 && (comp.includes(targetComp) || targetComp.includes(comp));
 
             // Exact match: HR name + company
             if (hrName && name === hrName && (sameCompany || !targetComp)) {{
-                const fc = item.querySelector('.friend-content') || item;
-                const rect = fc.getBoundingClientRect();
-                const x = rect.x + rect.width / 2;
-                const y = rect.y + rect.height / 2;
-                for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {{
-                    fc.dispatchEvent(new PointerEvent(type, {{
-                        bubbles: true, cancelable: true, composed: true,
-                        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse'
-                    }}));
-                }}
-                await new Promise(r => setTimeout(r, 2000));
-                return JSON.stringify({{success: true, match: 'exact'}});
+                exactMatches.push(item);
             }}
 
             // Company-only match (save first match as fallback)
@@ -1049,23 +1048,31 @@ def _open_conversation_from_chat_list(
             }}
         }}
 
-        // Fallback: company-only match (when hr_name is empty or not found)
-        if (companyOnlyMatch) {{
-            const fc = companyOnlyMatch.querySelector('.friend-content') || companyOnlyMatch;
-            const rect = fc.getBoundingClientRect();
-            const x = rect.x + rect.width / 2;
-            const y = rect.y + rect.height / 2;
-            for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {{
-                fc.dispatchEvent(new PointerEvent(type, {{
-                    bubbles: true, cancelable: true, composed: true,
-                    clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse'
-                }}));
-            }}
-            await new Promise(r => setTimeout(r, 2000));
-            return JSON.stringify({{success: true, match: 'company_only'}});
+        if (exactMatches.length >= 2 && !allowCompanyOnly) {{
+            return JSON.stringify({{success: false, error: 'ambiguous', total: items.length}});
         }}
 
-        return JSON.stringify({{success: false, error: 'conversation_not_found', total: items.length}});
+        const target = exactMatches.length ? exactMatches[0]
+            : (allowCompanyOnly ? companyOnlyMatch : null);
+        if (!target) {{
+            return JSON.stringify({{success: false, error: 'conversation_not_found', total: items.length}});
+        }}
+
+        const fc = target.querySelector('.friend-content') || target;
+        const rect = fc.getBoundingClientRect();
+        const x = rect.x + rect.width / 2;
+        const y = rect.y + rect.height / 2;
+        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {{
+            fc.dispatchEvent(new PointerEvent(type, {{
+                bubbles: true, cancelable: true, composed: true,
+                clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse'
+            }}));
+        }}
+        await new Promise(r => setTimeout(r, 2000));
+        return JSON.stringify({{
+            success: true,
+            match: exactMatches.length ? 'exact' : 'company_only'
+        }});
     }})()
     """
 

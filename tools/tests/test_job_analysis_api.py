@@ -120,7 +120,7 @@ class SnapshotScopeTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def test_snapshot_jobs_do_not_gain_analysis_keys_and_disk_is_untouched(self) -> None:
+    def test_snapshot_jobs_carry_analysis_keys_and_disk_is_untouched(self) -> None:
         store = backend.get_store("user")
         store.set_jobs([
             {
@@ -142,8 +142,10 @@ class SnapshotScopeTests(unittest.TestCase):
         before = (self.root / "data" / "user" / "jobs.json").read_bytes()
         with patch.object(backend, "get_offerpilot_state", return_value={"ok": False}):
             state = backend.snapshot("user")
+        # 契约改为只增不减：快照里的岗位带上只读派生的 standard/match/dossier/traceability，
+        # 详情与核对面板才有数据可读；派生只发生在内存里，磁盘上的 jobs.json 不能被改写。
         for key in ANALYSIS_KEYS:
-            self.assertNotIn(key, state["jobs"][0])
+            self.assertIn(key, state["jobs"][0])
         self.assertEqual((self.root / "data" / "user" / "jobs.json").read_bytes(), before)
 
 

@@ -4238,7 +4238,8 @@ const DELIVERY_STATUS_META = {
   sent: ['已发送', 'good', '✓'],
   failed: ['失败', 'bad', '!'],
   deferred: ['延后', 'warn', '…'],
-  blocked: ['已阻止', 'bad', '!']
+  blocked: ['已阻止', 'bad', '!'],
+  unknown: ['待核实', 'warn', '?']
 };
 
 function deliveryStatusBadge(delivery) {
@@ -4344,7 +4345,8 @@ function deliveryProgressText(snapshot) {
       if (status === 'starting' || status === 'sending') {
         return `发送中：已成功 ${batch.sent || 0} 条，剩余在队列中；关闭弹窗后可在结果区查看。`;
       }
-      return `已提交：${batch.sent || 0} 成功，${batch.failed || 0} 失败，${batch.deferred || 0} 延后。关闭弹窗后可在结果区查看。`;
+      const unknownText = batch.unknown ? `，${batch.unknown} 条读不到状态需到平台核实` : '';
+      return `已提交：${batch.sent || 0} 成功，${batch.failed || 0} 失败，${batch.deferred || 0} 延后${unknownText}。关闭弹窗后可在结果区查看。`;
     }
     return '已提交发送，正在后台执行；关闭弹窗后可在结果区查看。';
   }
@@ -4474,7 +4476,8 @@ function renderDeliveryResults(snapshot) {
     sending: '发送中',
     completed: '发送完成',
     partial: '部分发送（有未发出的岗位，见下）',
-    failed: '发送未完成'
+    failed: '发送未完成',
+    unknown: '状态待核实（读不到平台发送状态，请到平台确认）'
   };
   const sent = Number(batch.sent) || 0;
   const failed = Number(batch.failed) || 0;
@@ -4483,6 +4486,7 @@ function renderDeliveryResults(snapshot) {
   }));
   if (batch.deferred) head.append(badge(`${batch.deferred} 条延后`, 'warn', '…'));
   if (batch.blocked) head.append(badge(`${batch.blocked} 条被阻止`, 'bad', '!'));
+  if (batch.unknown) head.append(badge(`${batch.unknown} 条待核实`, 'warn', '?'));
   card.append(head);
   if (status === 'sending' || status === 'starting') {
     const active = snapshot.pipeline.offerpilot && snapshot.pipeline.offerpilot.task;
@@ -5048,11 +5052,14 @@ async function hrPollTick() {
   try {
     await hrLoadSummary();
     if (!hrOnMailView()) return;
-    if (state.hrSyncSupported !== false) {
-      await hrTriggerSync();
-    } else {
-      await loadHrConversations({ quiet: true, refreshThread: true });
-    }
+    // 每次轮询只读本地摘要与本地缓存；平台同步最多每 5 分钟触发一次。
+    await loadHrConversations({ quiet: true, refreshThread: true });
+    if (state.hrSyncSupported === false) return;
+    const now = Date.now();
+    const platformSyncEvery = HR_POLL_INTERVAL * 5;
+    if (now - (hrPollTick.lastPlatformSyncAt || 0) < platformSyncEvery) return;
+    hrPollTick.lastPlatformSyncAt = now;
+    await hrTriggerSync();
   } finally {
     state.hrPollBusy = false;
   }

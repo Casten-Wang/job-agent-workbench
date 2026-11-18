@@ -408,16 +408,16 @@ class LiepinEntryTests(_LiepinFixtureCase):
         self.assertTrue(listing["ok"])
         self.assertTrue(listing["available"])
         self.assertEqual(listing["platform"], "liepin")
-        # One list page, plus a body read only for the unread conversation
-        # (the incremental refresh); the other one is left for the user to open.
+        # The listing refresh opens only the list page and reads no body; a
+        # conversation's body is fetched when the user opens it.
         self.assertEqual(self.fake.urls[0], WWW_URL)
         self.assertEqual(set(self.fake.urls), {WWW_URL})
         unread = sum(1 for row in listing["conversations"] if row["unread"])
         self.assertEqual(unread, 1)
-        self.assertEqual(len(self.fake.urls), 1 + unread)
+        self.assertEqual(len(self.fake.urls), 1)
         self.assertIn(offerpilot_runtime.JS_LIEPIN_ENSURE_DRAWER_WWW, self.fake.scripts)
         self.assertNotIn(offerpilot_runtime.JS_LIEPIN_ENSURE_DRAWER, self.fake.scripts)
-        self.assertEqual(self.fake.closed, ["tab-liepin"] * (1 + unread))
+        self.assertEqual(self.fake.closed, ["tab-liepin"])
 
     def test_list_liepin_conversations_is_the_same_reader_as_the_generic_one(self):
         named = offerpilot_runtime.list_liepin_conversations()

@@ -174,7 +174,7 @@ class _FakePage:
     def _monitor_safety_guard(self, config):
         return MagicMock(limit=3, consecutive_page_failures=0)
 
-    def _open_conversation_from_chat_list(self, job, config, *, background=True):
+    def _open_conversation_from_chat_list(self, job, config, *, background=True, allow_company_only=True):
         return "thread-tab"
 
     def _send_message_in_chat(self, target_id, message, config=None):

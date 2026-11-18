@@ -25,6 +25,12 @@ MODE_LABELS = {
 TERMINAL_STATUSES = {"completed", "failed", "stopped"}
 ACTIVE_STATUSES = {"running", "stopping"}
 
+# Finished tasks kept for the UI; running/stopping ones are never pruned.  A
+# "stopping" task that has not ended after this long is declared failed so it
+# stops holding the browser admission lock forever.
+TASKS_KEPT = 20
+STOP_TIMEOUT_SECONDS = 90
+
 
 class TaskAlreadyRunningError(RuntimeError):
     """Raised when a mutually exclusive workbench task is already active."""
@@ -42,6 +48,7 @@ class WorkbenchTask:
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     deadline_at: str | None = None
     stop_reason: str | None = None
+    stop_requested_at: str | None = None
     stop_requested: Event = field(default_factory=Event, repr=False)
     metrics: dict[str, int] = field(default_factory=dict)
     progress: dict[str, Any] = field(default_factory=dict)
@@ -59,6 +66,7 @@ class WorkbenchTask:
             "updated_at": self.updated_at,
             "deadline_at": self.deadline_at,
             "stop_reason": self.stop_reason,
+            "stop_requested_at": self.stop_requested_at,
             "stop_requested": self.stop_requested.is_set(),
             "metrics": dict(self.metrics),
             "progress": dict(self.progress),
@@ -106,6 +114,7 @@ class WorkbenchTaskRunner:
             raise ValueError(f"Unsupported workbench mode: {mode}")
 
         with self._lock:
+            self._expire_stopping_locked()
             active = self._active_task_locked()
             if active:
                 raise TaskAlreadyRunningError(
@@ -126,6 +135,7 @@ class WorkbenchTaskRunner:
 
     def status(self) -> dict:
         with self._lock:
+            self._expire_stopping_locked()
             active = self._active_task_locked()
             tasks = [task.snapshot() for task in self._tasks.values()]
             return {
@@ -150,9 +160,10 @@ class WorkbenchTaskRunner:
             task.stop_requested.set()
             task.status = "stopping"
             task.stop_reason = reason
+            task.stop_requested_at = datetime.now().isoformat(timespec="seconds")
             if reason and (not task.logs or task.logs[-1] != reason):
                 task.logs.append(reason)
-            task.updated_at = datetime.now().isoformat(timespec="seconds")
+            task.updated_at = task.stop_requested_at
             confirmation_event = task.context.get("confirmation_event")
             if isinstance(confirmation_event, Event):
                 confirmation_event.set()
@@ -178,6 +189,8 @@ class WorkbenchTaskRunner:
                 else:
                     task.status = "completed"
                 task.updated_at = datetime.now().isoformat(timespec="seconds")
+                self._threads.pop(task.id, None)
+                self._prune_locked()
         except Exception as exc:
             with self._lock:
                 if task.stop_requested.is_set():
@@ -187,6 +200,34 @@ class WorkbenchTaskRunner:
                     task.status = "failed"
                     task.error = str(exc)
                 task.updated_at = datetime.now().isoformat(timespec="seconds")
+                self._threads.pop(task.id, None)
+                self._prune_locked()
+
+    def _expire_stopping_locked(self) -> None:
+        """Fail a stop that never finished, releasing the admission lock."""
+        now = datetime.now()
+        for task in self._tasks.values():
+            if task.status != "stopping" or not task.stop_requested_at:
+                continue
+            try:
+                requested = datetime.fromisoformat(task.stop_requested_at)
+            except ValueError:
+                continue
+            if (now - requested).total_seconds() < STOP_TIMEOUT_SECONDS:
+                continue
+            task.status = "failed"
+            task.stop_reason = "stop_timeout"
+            task.error = task.error or "停止超时，后台线程未在 90 秒内结束"
+            task.updated_at = now.isoformat(timespec="seconds")
+            self._threads.pop(task.id, None)
+        self._prune_locked()
+
+    def _prune_locked(self) -> None:
+        """Keep the latest ``TASKS_KEPT`` finished tasks; never drop an active one."""
+        ended = [task for task in self._tasks.values() if task.status in TERMINAL_STATUSES]
+        for task in ended[:max(len(ended) - TASKS_KEPT, 0)]:
+            self._tasks.pop(task.id, None)
+            self._threads.pop(task.id, None)
 
     def _active_task_locked(self) -> WorkbenchTask | None:
         for task in self._tasks.values():

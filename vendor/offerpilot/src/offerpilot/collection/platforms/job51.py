@@ -706,7 +706,7 @@ class Job51Collector:
                     continue
 
         tmp_url = SEARCH_URL.format(area=code, keyword=quote(keyword))
-        host_target = self.browser.new_tab(tmp_url, background=False)
+        host_target = self.browser.new_tab(tmp_url, background=True)
         if not host_target:
             raise CollectionBlockedError("rate_limit", "无法打开 51job 页面作为 API 宿主")
         self.sleep(5)  # 等宿主页加载出 cookie

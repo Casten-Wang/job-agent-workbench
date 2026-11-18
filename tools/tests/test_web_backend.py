@@ -1644,6 +1644,36 @@ class GreetingEvidenceCheckTests(SeededStoreTestCase):
         self.assertEqual(row["greeting"]["greeting"], greeting["greeting"])
 
 
+class JobAnalysisInSnapshotTests(SeededStoreTestCase):
+    """详情/核对面板读 standard、match、dossier、traceability，快照必须带上。"""
+
+    def test_every_snapshot_job_carries_the_analysis_keys(self):
+        snapshot = backend.snapshot("user")
+        self.assertGreater(len(snapshot["jobs"]), 0)
+        for job in snapshot["jobs"]:
+            with self.subTest(job=job["id"]):
+                for key in ("standard", "match", "dossier", "traceability"):
+                    self.assertIn(key, job)
+                self.assertIsInstance(job["standard"], dict)
+                self.assertIsInstance(job["match"], dict)
+                self.assertIn("fit_score", job["match"])
+                self.assertIsInstance(job["traceability"], list)
+
+    def test_standard_reads_the_posting_fields_of_the_job(self):
+        store = backend.get_store("user")
+        jobs = store.jobs()
+        jobs[0]["city"] = "虚构市"
+        jobs[0]["title"] = "示例产品经理"
+        store.set_jobs(jobs)
+        snapshot = backend.snapshot("user")
+        row = next(item for item in snapshot["jobs"] if item["id"] == jobs[0]["id"])
+        self.assertEqual(row["standard"]["title"], "示例产品经理")
+        self.assertEqual(row["standard"]["location"], "虚构市")
+
+    def test_top_level_keys_stay_at_27(self):
+        self.assertEqual(len(backend.snapshot("user")), 27)
+
+
 class MaterialsContractTests(SeededStoreTestCase):
     """``materials`` is additive on jobs[], queue[].greeting and get_greetings."""
 
@@ -4061,6 +4091,292 @@ class CollectLimitTests(SeededStoreTestCase):
             backend.import_offerpilot_jobs({"mode": "user", "ids": ids})
         with self.assertRaises(backend.ApiError):
             backend.run_offerpilot_pipeline({"mode": "user", "ids": ids})
+
+
+class DeliverySyncUnreadableTests(unittest.TestCase):
+    """A status read failure must never be guessed into sent/failed."""
+
+    class _Store:
+        def __init__(self, deliveries):
+            self._deliveries = deliveries
+            self.events = []
+            self.saved = 0
+
+        def deliveries(self):
+            return self._deliveries
+
+        def set_deliveries(self, rows):
+            self._deliveries = rows
+            self.saved += 1
+
+        def append_pipeline_event(self, event):
+            self.events.append(event)
+
+    @staticmethod
+    def _server(tasks):
+        runner = MagicMock()
+        runner.status.return_value = {"active": None, "last_task": None, "tasks": tasks}
+        server = MagicMock()
+        server.task_runner = runner
+        return server
+
+    @staticmethod
+    def _batch(status="sending"):
+        return [{
+            "batch_id": "dlv-unreadable",
+            "task_id": "task-1",
+            "status": status,
+            "requested": 1,
+            "items": [{
+                "job_id": "job-1", "offerpilot_id": "v1", "company": "A", "title": "甲",
+                "status": "sending", "finished_at": None,
+            }],
+        }]
+
+    def _sync(self, store, boss_state=None):
+        return backend._sync_deliveries(
+            store,
+            boss_state or {"task": None, "last_task": {"id": "task-1", "stop_reason": ""}},
+        )
+
+    def test_read_exception_keeps_the_batch_sending_and_records_the_error(self):
+        store = self._Store(self._batch())
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend",
+            return_value=self._server([{"id": "task-1", "status": "completed"}]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings", side_effect=RuntimeError("boom"),
+        ):
+            self._sync(store)
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["status"], "sending")
+        self.assertEqual(batch["items"][0]["status"], "sending")
+        self.assertEqual(batch["sync_attempts"], 1)
+        self.assertIn("读取发送状态失败", batch["sync_error"])
+        self.assertEqual(store.events, [])
+
+    def test_ok_false_is_not_treated_as_a_read(self):
+        store = self._Store(self._batch())
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend",
+            return_value=self._server([{"id": "task-1", "status": "completed"}]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings",
+            return_value={"ok": False, "error": "读不到发送状态", "greetings": []},
+        ):
+            self._sync(store)
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["status"], "sending")
+        self.assertEqual(batch["sync_error"], "读不到发送状态")
+        self.assertEqual(batch["items"][0]["status"], "sending")
+
+    def test_five_failed_reads_finalize_the_batch_as_unknown(self):
+        store = self._Store(self._batch())
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend",
+            return_value=self._server([{"id": "task-1", "status": "completed"}]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings",
+            return_value={"ok": False, "error": "读不到发送状态", "greetings": []},
+        ):
+            for _ in range(backend.DELIVERY_SYNC_MAX_ATTEMPTS):
+                self._sync(store)
+        batch = store.deliveries()[0]
+        self.assertEqual(batch["status"], "unknown")
+        self.assertEqual(batch["sync_attempts"], backend.DELIVERY_SYNC_MAX_ATTEMPTS)
+        self.assertEqual(batch["unknown"], 1)
+        self.assertEqual(batch["sent"], 0)
+        self.assertEqual(batch["stop_reason"], "status_unreadable")
+        self.assertEqual(batch["items"][0]["status"], "unknown")
+        self.assertEqual(batch["items"][0]["error_code"], "status_unreadable")
+        self.assertEqual(len(store.events), 1)
+
+    def test_a_later_successful_read_clears_the_error_and_finalizes_normally(self):
+        store = self._Store(self._batch())
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend",
+            return_value=self._server([{"id": "task-1", "status": "completed"}]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings",
+            return_value={"ok": False, "error": "读不到发送状态", "greetings": []},
+        ):
+            self._sync(store)
+        self.assertIn("sync_error", store.deliveries()[0])
+        with patch.object(
+            backend.offerpilot_runtime, "load_backend",
+            return_value=self._server([{"id": "task-1", "status": "completed"}]),
+        ), patch.object(
+            backend.offerpilot_runtime, "get_greetings",
+            return_value={"ok": True, "greetings": [{"id": "v1", "status": "approved"}]},
+        ), patch.object(backend.offerpilot_runtime, "task_stop_reason", return_value=""):
+            self._sync(store)
+        batch = store.deliveries()[0]
+        self.assertNotIn("sync_error", batch)
+        self.assertEqual(batch["sync_attempts"], 1)
+        self.assertEqual(batch["status"], "failed")
+        self.assertEqual(batch["items"][0]["status"], "deferred")
+
+
+class StartTaskAlreadyRunningTests(SeededStoreTestCase):
+    def test_start_task_maps_the_mutex_error_to_409(self):
+        class TaskAlreadyRunningError(RuntimeError):
+            pass
+
+        with patch.object(
+            backend.offerpilot_runtime, "start_task",
+            side_effect=TaskAlreadyRunningError("busy"),
+        ):
+            with self.assertRaises(backend.ApiError) as ctx:
+                backend.start_offerpilot_task({
+                    "mode": "monitor",
+                    "confirm": True,
+                    "risk_acknowledged": True,
+                })
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertIn("已有后台任务正在运行", ctx.exception.message)
+
+
+class DeliverPreflightTests(SeededStoreTestCase):
+    """Sending must not create a batch while another runtime task is active."""
+
+    class TaskAlreadyRunningError(RuntimeError):
+        pass
+
+    def _approved_job_id(self) -> str:
+        store = backend.get_store("user")
+        rows = store.jobs()
+        by_id = {str(row.get("id")): row for row in rows}
+        for row in store.queue():
+            if row.get("status") != "approved":
+                continue
+            job = by_id.get(str(row.get("id")))
+            if job is None:
+                continue
+            if not str(job.get("offerpilot_id") or "").strip():
+                job["offerpilot_id"] = f"vendor-{job['id']}"
+                store.set_jobs(rows)
+            return str(row["id"])
+        self.skipTest("seeded data has no approved queue row")
+
+    def _payload(self, job_id: str) -> dict:
+        return {
+            "ids": [job_id],
+            "confirm": backend.DELIVERY_CONFIRM_TEMPLATE.format(count=1),
+            "risk_acknowledged": True,
+        }
+
+    def test_running_task_is_rejected_before_a_batch_is_created(self):
+        job_id = self._approved_job_id()
+        store = backend.get_store("user")
+        before = list(store.deliveries())
+        with patch.object(
+            backend.offerpilot_runtime, "get_state",
+            return_value={"ok": True, "task": {"id": "task-1", "status": "running"}},
+        ), patch.object(backend.offerpilot_runtime, "start_deliver_task") as start:
+            with self.assertRaises(backend.ApiError) as ctx:
+                backend.start_offerpilot_deliver(self._payload(job_id))
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertEqual(ctx.exception.message, "后台任务运行中，结束后再发送")
+        start.assert_not_called()
+        self.assertEqual(store.deliveries(), before)
+        status = {str(row.get("id")): row.get("status") for row in store.queue()}
+        self.assertEqual(status[job_id], "approved")
+
+    def test_mutex_error_at_start_removes_the_batch_instead_of_marking_failed(self):
+        job_id = self._approved_job_id()
+        store = backend.get_store("user")
+        before = list(store.deliveries())
+        with patch.object(
+            backend.offerpilot_runtime, "get_state",
+            return_value={"ok": True, "task": None},
+        ), patch.object(
+            backend.offerpilot_runtime, "start_deliver_task",
+            side_effect=self.TaskAlreadyRunningError("busy"),
+        ):
+            with self.assertRaises(backend.ApiError) as ctx:
+                backend.start_offerpilot_deliver(self._payload(job_id))
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertEqual(ctx.exception.message, "后台任务运行中，结束后再发送")
+        deliveries = store.deliveries()
+        self.assertEqual(deliveries, before)
+        self.assertTrue(all(row.get("status") != "failed" for row in deliveries))
+        status = {str(row.get("id")): row.get("status") for row in store.queue()}
+        self.assertEqual(status[job_id], "approved")
+        latest = store.activity(1)[0]
+        self.assertEqual(latest["action"], "发送未启动")
+        self.assertIn("后台任务运行中", latest["detail"])
+
+
+class ReplyRiskDetectionTests(SeededStoreTestCase):
+    def test_monitor_risk_detected_maps_to_409_without_retry(self):
+        class MonitorRiskDetected(RuntimeError):
+            pass
+
+        store = backend.get_store("user")
+        before = len(store.activity(100))
+        with patch.object(
+            backend.offerpilot_runtime, "send_reply",
+            side_effect=MonitorRiskDetected("captcha"),
+        ) as send:
+            with self.assertRaises(backend.ApiError) as ctx:
+                backend.send_offerpilot_reply({
+                    "id": "a" * 32,
+                    "text": "你好，想进一步沟通岗位情况",
+                    "confirm": "确认发送这条回复",
+                    "risk_acknowledged": True,
+                })
+        send.assert_called_once()
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertIn("验证码或风控页", ctx.exception.message)
+        self.assertEqual(len(store.activity(100)), before)
+
+
+class OfferpilotOptionsControlCharTests(unittest.TestCase):
+    def test_control_characters_in_keywords_and_cities_are_rejected(self):
+        for options in (
+            {"keywords": "产品经理\x01", "cities": "上海"},
+            {"keywords": "产品经理", "cities": "上海\x7f"},
+        ):
+            with self.subTest(options=options):
+                with self.assertRaises(backend.ApiError) as ctx:
+                    backend._offerpilot_options({"options": options})
+                self.assertEqual(ctx.exception.status, 400)
+                self.assertEqual(ctx.exception.message, "关键词和城市不能包含控制字符")
+
+    def test_clean_options_still_parse(self):
+        result = backend._offerpilot_options({
+            "options": {"keywords": "产品经理", "cities": "上海"},
+        })
+        self.assertEqual(result["platforms"]["boss"]["keywords"], ["产品经理"])
+        self.assertEqual(result["platforms"]["boss"]["cities"], ["上海"])
+
+
+class CollectImportIdCollisionTests(SeededStoreTestCase):
+    def test_same_job_from_two_channels_keeps_distinct_ids(self):
+        store = backend.get_store("user")
+        boss = {
+            "id": "op-boss-1",
+            "title": "产品经理",
+            "company": "虚构双渠道采集公司",
+            "city": "上海",
+            "score": 80,
+            "source_platform": "boss",
+        }
+        zhilian = dict(boss, id="op-zhilian-1", source_platform="zhilian")
+        result = backend._import_offerpilot_records(
+            store, [boss, zhilian], ["op-boss-1", "op-zhilian-1"]
+        )
+        self.assertEqual(len(result["added"]), 2)
+        self.assertEqual(len(set(result["added"])), 2)
+        rows = [
+            row for row in store.jobs()
+            if row.get("company") == "虚构双渠道采集公司"
+        ]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["source_channel"] for row in rows}, {"boss", "zhilian"})
+        self.assertEqual(len({row["id"] for row in rows}), 2)
+        all_ids = [str(row.get("id") or "") for row in store.all_jobs()]
+        self.assertEqual(len(all_ids), len(set(all_ids)))
 
 
 if __name__ == "__main__":

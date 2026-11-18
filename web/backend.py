@@ -1629,6 +1629,13 @@ def send_offerpilot_reply(payload: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         status = 409 if "会话不在最近" in str(exc) else 400
         raise ApiError(str(exc), status) from exc
+    except Exception as exc:
+        # 平台出现验证码/风控页：立即停手，不重试，等用户到平台人工处理。
+        if type(exc).__name__ == "MonitorRiskDetected":
+            raise ApiError(
+                "平台出现验证码或风控页，已停止发送，请到平台人工处理后再试", 409
+            ) from exc
+        raise
     store = get_store("user")
     # Log the action and company only: never the reply body or HR name.
     store.log("发送 HR 回复", str(result.get("company") or "未知公司"))
@@ -1707,6 +1714,9 @@ def _offerpilot_options(payload: dict[str, Any]) -> dict[str, Any] | None:
     platform = _offerpilot_platform(raw.get("platform") or "boss")
     keywords = _offerpilot_text_list(raw.get("keywords"), "搜索关键词", 10)
     cities = _offerpilot_text_list(raw.get("cities"), "城市", 5)
+    for item in keywords + cities:
+        if any(ord(char) < 32 or ord(char) == 127 for char in item):
+            raise ApiError("关键词和城市不能包含控制字符", 400)
     try:
         max_pages = int(raw.get("max_pages", 1))
     except (TypeError, ValueError) as exc:
@@ -1765,6 +1775,9 @@ def start_offerpilot_task(payload: dict[str, Any]) -> dict[str, Any]:
     except KeyError as exc:
         raise ApiError("岗位自动化任务不存在", 404) from exc
     except Exception as exc:
+        # 运行时的互斥异常按类名识别，不 import vendor 内部模块。
+        if type(exc).__name__ == "TaskAlreadyRunningError":
+            raise ApiError("已有后台任务正在运行，请等它结束或先停止", 409) from exc
         raise ApiError(f"岗位自动化 启动失败：{type(exc).__name__}", 500) from exc
     message = "岗位自动化任务已受控提交；发送仍须经过人工确认门、每日上限与平台风控锁"
     if task_mode == "collect":
@@ -1837,6 +1850,8 @@ DELIVERY_BLOCKED_REASONS = frozenset(
         "daily_platform_page_limit",
     }
 )
+# 读不到平台发送状态时最多再试 4 次；第 5 次仍读不到才按 unknown 定稿。
+DELIVERY_SYNC_MAX_ATTEMPTS = 5
 
 
 def _delivery_item(job: dict[str, Any], job_id: str) -> dict[str, Any]:
@@ -1892,6 +1907,13 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
             409,
         )
 
+    # 建批次前先看运行时是否已有任务：采集/监控/评分运行中时启动发送必然被拒，
+    # 先拒绝可以避免留下一个永远起不来的批次。
+    runtime_state = offerpilot_runtime.get_state()
+    active_task = runtime_state.get("task") if isinstance(runtime_state.get("task"), dict) else {}
+    if str(active_task.get("status") or "") in {"running", "stopping"}:
+        raise ApiError("后台任务运行中，结束后再发送", 409)
+
     batch_id = "dlv-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
     batch = {
         "batch_id": batch_id,
@@ -1911,6 +1933,7 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     deliveries.append(batch)
     store.set_deliveries(deliveries)
 
+    busy = False
     try:
         result = offerpilot_runtime.start_deliver_task(vendor_ids)
     except offerpilot_runtime.OfferPilotUnavailable as exc:
@@ -1920,10 +1943,23 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     except KeyError as exc:
         error = ApiError("岗位自动化任务不存在", 404)
     except Exception as exc:
-        error = ApiError(f"发送任务启动失败：{type(exc).__name__}", 500)
+        if type(exc).__name__ == "TaskAlreadyRunningError":
+            busy = True
+            error = ApiError("后台任务运行中，结束后再发送", 409)
+        else:
+            error = ApiError(f"发送任务启动失败：{type(exc).__name__}", 500)
     else:
         error = None
     if error is not None:
+        if busy:
+            # 互斥任务抢在预检之后启动：没有任何一条发送过，删掉刚建的批次，
+            # 不要把它标成 failed，否则会留下错误的失败记录。
+            store.set_deliveries([
+                row for row in deliveries
+                if str(row.get("batch_id") or "") != batch_id
+            ])
+            store.log("发送未启动", f"批次 {batch_id}；后台任务运行中", False)
+            raise error
         batch["status"] = "failed"
         batch["stop_reason"] = "start_failed"
         batch["finished_at"] = _now()
@@ -1994,12 +2030,62 @@ def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str,
                 continue
         items = [item for item in batch.get("items") or [] if isinstance(item, dict)]
         vendor_ids = [str(item.get("offerpilot_id") or "") for item in items if item.get("offerpilot_id")]
+        preview_ok = True
+        sync_error = ""
         preview: dict[str, Any] = {}
         if vendor_ids:
             try:
                 preview = offerpilot_runtime.get_greetings(vendor_ids)
-            except Exception:
+            except Exception as exc:
                 preview = {}
+                preview_ok = False
+                sync_error = f"读取发送状态失败：{type(exc).__name__}"
+            else:
+                if not isinstance(preview, dict):
+                    preview = {}
+                    preview_ok = False
+                    sync_error = "读取发送状态失败：返回格式不可用"
+                elif preview.get("ok") is not True:
+                    preview_ok = False
+                    sync_error = str(preview.get("error") or "读取发送状态失败")
+        if not preview_ok:
+            # 读不到平台状态时不能猜 sent/failed：批次保持 starting/sending，
+            # 记下错误并累计次数；达到上限后才按 unknown 定稿，交用户人工核实。
+            attempts = int(batch.get("sync_attempts") or 0) + 1
+            batch["sync_attempts"] = attempts
+            batch["sync_error"] = sync_error
+            changed = True
+            if attempts < DELIVERY_SYNC_MAX_ATTEMPTS:
+                continue
+            finished_at = _now()
+            for item in items:
+                item["status"] = "unknown"
+                item["error_code"] = "status_unreadable"
+                item["finished_at"] = finished_at
+                label = f"{item.get('company') or ''}｜{item.get('title') or ''}".strip("｜")
+                store.append_pipeline_event({
+                    "received_at": _now(),
+                    "stage": "send",
+                    "status": "skipped",
+                    "job_id": str(item.get("job_id") or ""),
+                    "message": f"{label} unknown".strip(),
+                    "occurred_at": "",
+                    "actor": "embedded_runtime",
+                    "auto_submit": False,
+                })
+            batch.update({
+                "status": "unknown",
+                "sent": 0,
+                "failed": 0,
+                "deferred": 0,
+                "blocked": 0,
+                "unknown": len(items),
+                "stop_reason": "status_unreadable",
+                "finished_at": finished_at,
+            })
+            continue
+        if batch.pop("sync_error", None) is not None:
+            changed = True
         by_vendor = {
             str(item.get("id")): item
             for item in preview.get("greetings") or []
@@ -2016,7 +2102,7 @@ def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str,
                 stop_reason = ""
         if not task_id:
             stop_reason = stop_reason or "task_not_started"
-        counts = {"sent": 0, "failed": 0, "deferred": 0, "blocked": 0}
+        counts = {"sent": 0, "failed": 0, "deferred": 0, "blocked": 0, "unknown": 0}
         for item in items:
             greeting = by_vendor.get(str(item.get("offerpilot_id") or ""))
             vendor_status = str((greeting or {}).get("status") or "")
@@ -2057,6 +2143,7 @@ def _sync_deliveries(store: Store, boss_state: dict[str, Any]) -> list[dict[str,
             "failed": counts["failed"],
             "deferred": counts["deferred"],
             "blocked": counts["blocked"],
+            "unknown": counts["unknown"],
             "stop_reason": stop_reason or None,
             "finished_at": _now(),
         })
@@ -2189,6 +2276,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
     # all_jobs(): soft-deleted rows are part of the index; a match revives them.
     rows = store.all_jobs()
     index = _pool_duplicate_index(rows)
+    used_ids = {str(row.get("id") or ""): row for row in rows}
     hard_cfg = _hard_filter_config(_profile_target_cities(store.profile()))
     by_id = {str(job.get("id")): job for job in runtime_jobs if isinstance(job, dict)}
     added: list[str] = []
@@ -2237,6 +2325,19 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
         if hard["hard_filter"]["status"] == "reject":
             hard_rejected += 1
         job = _normalize_job(record, position, platform)
+        # 同公司/岗位/城市来自不同渠道时 _job_id 的种子相同：把渠道并入哈希重新生成，
+        # 让两条记录各有独立 id，不在 jobs.json 里出现重复 id。
+        holder = used_ids.get(str(job.get("id") or ""))
+        if holder is not None and str(holder.get("source_channel") or "") != str(job.get("source_channel") or ""):
+            seed = "|".join(str(job.get(key) or "") for key in ("company", "title", "city"))
+            candidate = "j-" + hashlib.sha256(f"{seed}|{platform}".encode("utf-8")).hexdigest()[:12]
+            salt = 0
+            while candidate in used_ids:
+                salt += 1
+                candidate = "j-" + hashlib.sha256(
+                    f"{seed}|{platform}|{salt}".encode("utf-8")
+                ).hexdigest()[:12]
+            job["id"] = candidate
         fingerprint = _job_fingerprint(job)
         match, revived = _resolve_pool_duplicate(index, fingerprint)
         if match is not None:
@@ -2261,6 +2362,7 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
                     backfilled += 1
             continue
         rows.append(job)
+        used_ids[str(job["id"])] = job
         if fingerprint:
             index.setdefault(fingerprint, []).append(job)
         added.append(str(job["id"]))
@@ -2684,6 +2786,10 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
     boss_state = get_offerpilot_state(mode)
     filtered_jobs = sliced["jobs"]
     risk_map = _job_risk_map(jobs)
+    # 详情/核对面板读 standard、match、dossier、traceability；这四个键只读派生，
+    # 只用本机已有数据，缺失字段保持 None，不会触发任何外部请求。
+    analysis_cv_text = profile_context_text(profile) or cv_text
+    analysis_variants = store.variants()
     state_counts = _state_counts(filtered_jobs, sliced["events"], queue)
     channel_rows = _channel_rows(filtered_jobs, sliced["events"], sliced["debriefs"])
     quarter = _quarter_rows(filtered_jobs, sliced["events"], sliced["debriefs"])
@@ -2815,7 +2921,9 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
             "score_scale": _score_scale_of(job),
             "risk": risk_map.get(str(job.get("id"))),
             "materials": materials_by_vendor.get(str(job.get("offerpilot_id") or "")),
-        } for job in filtered_jobs],
+        } | decorate_job_analysis(
+            job, profile=profile, cv_text=analysis_cv_text, variants=analysis_variants
+        ) for job in filtered_jobs],
         "queue": queue_view,
         "mails": sliced["mails"],
         "debriefs": sliced["debriefs"],

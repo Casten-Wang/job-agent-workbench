@@ -1107,9 +1107,11 @@ def send_greetings(config: dict, force: bool = False, db_path=None) -> int:
     interval_min = throttle_config.get("interval_min", 60)
     interval_max = throttle_config.get("interval_max", 180)
 
-    # Count today's sent
+    # Count today's sent in local time; ``created_at`` is stored in UTC, so a
+    # plain date comparison would reset the quota at 08:00 local time.
     today_sent = db.execute(
-        "SELECT COUNT(*) as cnt FROM history WHERE action='sent' AND date(created_at)=date('now')"
+        "SELECT COUNT(*) as cnt FROM history WHERE action='sent'"
+        " AND datetime(created_at,'localtime') >= datetime('now','localtime','start of day')"
     ).fetchone()
     already_sent = today_sent["cnt"] if today_sent else 0
 

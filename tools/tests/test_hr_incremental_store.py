@@ -3,9 +3,9 @@
 
 Contracts locked here (fictional rows; no browser, no network, nothing sent):
 
-- an unchanged listing signature with a stored body does not open the page;
-- a changed conversation is opened once and its new messages are merged
-  without duplicating what was already stored;
+- a listing refresh never reads a body from the DOM;
+- opening a conversation reads its body once, and merging a new read never
+  duplicates what was already stored;
 - a single-platform refresh replaces only that platform's stored records;
 - a failed read keeps the stored messages and marks them stale;
 - the file lives under ``web/data`` and is written atomically;
@@ -101,7 +101,7 @@ class _StoreMonitor:
     def close_tab(self, target_id):
         self.closed.append(target_id)
 
-    def _open_conversation_from_chat_list(self, job, config, *, background=True):
+    def _open_conversation_from_chat_list(self, job, config, *, background=True, allow_company_only=True):
         hr = job.get("hr_name") or ""
         self.opened.append(hr)
         if hr in self.fail_open:
@@ -153,7 +153,11 @@ class _StoreCase(unittest.TestCase):
 class UnchangedSignatureTests(_StoreCase):
     def test_unchanged_signature_with_a_body_does_not_reopen_the_page(self):
         self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "你好，方便沟通吗"}]
-        runtime.list_conversations("boss")
+        listing = runtime.list_conversations("boss")
+        self.assertEqual(self.monitor.opened, [], "the background list refresh reads no body")
+
+        conversation_id = listing["conversations"][0]["id"]
+        runtime.get_thread(conversation_id, "boss")
         self.assertEqual(self.monitor.opened, ["示例招聘官"])
 
         runtime.list_conversations("boss")  # same signature, body already stored
@@ -164,7 +168,10 @@ class UnchangedSignatureTests(_StoreCase):
             {"sender": "hr", "text": "你好，方便沟通吗"},
             {"sender": "me", "text": "您好，方便"},
         ]
-        runtime.list_conversations("boss")
+        listing = runtime.list_conversations("boss")
+        conversation_id = listing["conversations"][0]["id"]
+        runtime.get_thread(conversation_id, "boss")
+
         self.monitor.list_rows = [dict(ROW, last_message_at="11-16 11:00", last_message="好的，周四可以")]
         self.monitor.threads["示例招聘官"] = [
             {"sender": "hr", "text": "你好，方便沟通吗"},
@@ -172,6 +179,8 @@ class UnchangedSignatureTests(_StoreCase):
             {"sender": "hr", "text": "好的，周四可以"},
         ]
         runtime.list_conversations("boss")
+        self.assertEqual(self.monitor.opened, ["示例招聘官"], "the listing alone opens nothing")
+        runtime.get_thread(conversation_id, "boss")
         self.assertEqual(self.monitor.opened, ["示例招聘官", "示例招聘官"])
         messages = self._store()[self._key_for("示例招聘官")]["messages"]
         self.assertEqual(
@@ -187,7 +196,9 @@ class UnchangedSignatureTests(_StoreCase):
             {"sender": "me", "text": "好的"},
             {"sender": "me", "text": "好的"},
         ]
-        runtime.list_conversations("boss")
+        listing = runtime.list_conversations("boss")
+        conversation_id = listing["conversations"][0]["id"]
+        runtime.get_thread(conversation_id, "boss")
         self.assertEqual(len(self._store()[self._key_for("示例招聘官")]["messages"]), 2)
 
         self.monitor.list_rows = [dict(ROW, last_message_at="11-16 14:00", last_message="好的")]
@@ -197,6 +208,7 @@ class UnchangedSignatureTests(_StoreCase):
             {"sender": "hr", "text": "收到"},
         ]
         runtime.list_conversations("boss")
+        runtime.get_thread(conversation_id, "boss")
         messages = self._store()[self._key_for("示例招聘官")]["messages"]
         self.assertEqual([(m["sender"], m["text"]) for m in messages],
                          [("me", "好的"), ("me", "好的"), ("hr", "收到")])
@@ -240,12 +252,15 @@ class StaleOnFailureTests(_StoreCase):
         self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "你好，方便沟通吗"}]
         listing = runtime.list_conversations("boss")
         conversation_id = listing["conversations"][0]["id"]
+        runtime.get_thread(conversation_id, "boss")  # the user opened it once
 
         self.monitor.list_rows = [dict(ROW, last_message_at="11-16 12:00", last_message="新消息")]
         self.monitor.fail_open.add("示例招聘官")
         runtime.list_conversations("boss")
+        thread = runtime.get_thread(conversation_id, "boss")
 
         record = self._store()[self._key_for("示例招聘官")]
+        self.assertTrue(thread["stale"])
         self.assertTrue(record["stale"])
         self.assertTrue(record["error"])
         self.assertEqual(record["messages"][0]["text"], "你好，方便沟通吗")
@@ -253,7 +268,8 @@ class StaleOnFailureTests(_StoreCase):
 
     def test_failed_list_keeps_the_platform_records_and_marks_them_stale(self):
         self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "你好，方便沟通吗"}]
-        runtime.list_conversations("boss")
+        listing = runtime.list_conversations("boss")
+        runtime.get_thread(listing["conversations"][0]["id"], "boss")
         with patch.object(runtime, "_list_boss_conversations_within", side_effect=ValueError("列表解析失败")):
             with self.assertRaises(ValueError):
                 runtime.list_conversations("boss")
@@ -265,6 +281,7 @@ class StaleOnFailureTests(_StoreCase):
         self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "你好，方便沟通吗"}]
         listing = runtime.list_conversations("boss")
         conversation_id = listing["conversations"][0]["id"]
+        runtime.get_thread(conversation_id, "boss")
         self.monitor.fail_open.add("示例招聘官")
         self.monitor.list_rows = [dict(ROW, last_message_at="11-16 12:00", last_message="新消息")]
         runtime.list_conversations("boss")

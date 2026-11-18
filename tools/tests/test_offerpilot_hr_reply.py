@@ -120,8 +120,12 @@ class _FakeMonitor:
     def _monitor_safety_guard(self, config):
         return self.guard
 
-    def _open_conversation_from_chat_list(self, job, config, *, background=True):
-        self.opened.append({"job": dict(job), "background": background})
+    def _open_conversation_from_chat_list(self, job, config, *, background=True, allow_company_only=True):
+        self.opened.append({
+            "job": dict(job),
+            "background": background,
+            "allow_company_only": allow_company_only,
+        })
         return "tab-thread"
 
     def _send_message_in_chat(self, target_id, message, config=None):

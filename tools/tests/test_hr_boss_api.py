@@ -195,7 +195,7 @@ class _FakePage:
     def _monitor_safety_guard(self, config):
         return _Guard()
 
-    def _open_conversation_from_chat_list(self, job, config, *, background=True):
+    def _open_conversation_from_chat_list(self, job, config, *, background=True, allow_company_only=True):
         self.opened.append({"job": dict(job), "background": background})
         return "thread-tab"
 
@@ -455,8 +455,8 @@ class FallbackTests(_Case):
         self.assertEqual(result["count"], 1)
         self.assertEqual(self.page.list_calls, 1, "a failure is not retried")
         self.assertEqual(self.page.dom_list_calls, 1)
-        self.assertTrue(self.page.opened)
-        self.assertTrue(all(item["background"] for item in self.page.opened))
+        # 后台列表刷新不读正文：DOM 兜底只列会话，正文等用户打开时再读。
+        self.assertFalse(self.page.opened)
 
     def test_risk_answer_stops_without_retry_or_dom_fallback(self):
         self.page.list_mode = "risk"
