@@ -111,6 +111,33 @@ class AnnotateCardTests(unittest.TestCase):
         self.assertNotIn("card", result[0])
 
 
+class BossCardTextTests(unittest.TestCase):
+    def test_known_boss_cards_are_readable(self):
+        self.assertEqual(
+            runtime._boss_card_text({"type": 12, "headTitle": "", "hyperLink": {"text": "点击修改打招呼语  去修改"}}),
+            "点击修改打招呼语 去修改",
+        )
+        self.assertEqual(
+            runtime._boss_card_text({"type": 8, "headTitle": "您正在与Boss刘先生直接沟通如下职位"}),
+            "您正在与Boss刘先生直接沟通如下职位",
+        )
+        article = {"type": 16, "articles": [{"title": "你与该职位竞争者PK情况", "subTitle": "共**人投递"}]}
+        self.assertEqual(runtime._boss_card_text(article), "你与该职位竞争者PK情况 共**人投递")
+
+    def test_dialog_card_text_is_used_and_recognised_as_a_resume_request(self):
+        text = runtime._boss_card_text({"type": 4, "dialog": {"text": "我想要一份你的附件简历，你是否同意？"}})
+        self.assertIn("附件简历", text)
+        result = runtime._annotate_cards([{"sender": "system", "text": text}], "boss")
+        self.assertEqual(result[0]["card"], {"kind": "resume_request", "attach": True, "pending": True})
+
+    def test_unreadable_card_returns_empty_so_the_placeholder_applies(self):
+        self.assertEqual(runtime._boss_card_text({"type": 99}), "")
+        messages = runtime._boss_history_messages(
+            200, {"code": 0, "zpData": {"messages": [{"from": {"uid": 1}, "body": {"type": 99}, "mid": 1}]}}, "2")
+        self.assertEqual(messages[0]["text"], runtime._CARD_PLACEHOLDER)
+        self.assertEqual(messages[0]["sender"], "system")
+
+
 class RespondGuardTests(unittest.TestCase):
     ENTRY = {"id": "a" * 32, "platform": "zhilian", "hr_name": "周女士", "company": "示例公司"}
 

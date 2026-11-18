@@ -2094,6 +2094,37 @@ def _acquire_boss_tab(
     return str(target_id), True
 
 
+def _boss_card_text(body_info: dict[str, Any]) -> str:
+    """Readable text of a BOSS card body (job card, tips, article cards, dialogs).
+
+    Cards are never HR words, but their text is what the user sees on the
+    platform, so it is shown instead of a placeholder.  Returns "" when nothing
+    readable is found.
+    """
+    parts: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value).strip() if isinstance(value, (str, int, float)) else ""
+        if text and text not in parts:
+            parts.append(text)
+
+    add(body_info.get("headTitle"))
+    add(body_info.get("text"))
+    dialog = body_info.get("dialog")
+    if isinstance(dialog, dict):
+        add(dialog.get("text"))
+    link = body_info.get("hyperLink")
+    if isinstance(link, dict):
+        add(link.get("text"))
+    articles = body_info.get("articles")
+    if isinstance(articles, list):
+        for article in articles[:3]:
+            if isinstance(article, dict):
+                add(article.get("title"))
+                add(article.get("subTitle") or article.get("description"))
+    return " ".join(" ".join(part.split()) for part in parts)
+
+
 def _boss_history_messages(
     status: int,
     body: dict[str, Any] | None,
@@ -2131,7 +2162,7 @@ def _boss_history_messages(
         else:
             # Cards, job links and system notices are never HR or our words.
             sender = "system"
-            text = body_info.get("headTitle") or body_info.get("text") or "[卡片消息，工作台不支持预览，请在平台内查看]"
+            text = _boss_card_text(body_info) or _CARD_PLACEHOLDER
         messages.append({
             "sender": sender,
             "text": _redact_contacts(text)[:HR_MESSAGE_MAX_CHARS],
