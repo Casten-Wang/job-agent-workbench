@@ -1319,6 +1319,18 @@ class ApprovalGateTests(SeededStoreTestCase):
 
 
 class DeliveryActionTests(unittest.TestCase):
+    def setUp(self):
+        # 不碰真实的 web/data/user：用到真实仓储的测试一律落在临时目录里，
+        # 全新克隆（没有本机数据）与开发机上的结果才一致。
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        for patcher in (
+            patch.object(backend, "WEB_DIR", Path(self._tmp.name)),
+            patch.object(backend, "CV_PATH", Path(self._tmp.name) / "missing-resume.md"),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def _store(self):
         class _Store:
             def __init__(self):
@@ -1491,6 +1503,11 @@ class DeliveryActionTests(unittest.TestCase):
 
     def test_confirm_only_touches_pending_rows(self):
         store = backend.get_store("user")
+        store.set_queue([
+            {"id": "job-approved", "company": "示例公司", "title": "示例岗位",
+             "status": "approved", "approved_at": "2026-11-18T09:00:00"},
+            {"id": "job-pending", "company": "示例公司", "title": "另一个岗位", "status": "pending"},
+        ])
         rows = store.queue()
         approved = next(row for row in rows if row.get("status") == "approved")
         stamp = approved.get("approved_at")
