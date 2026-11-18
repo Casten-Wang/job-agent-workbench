@@ -2793,6 +2793,11 @@ def _refresh_platform_store(
     user opens that conversation.  A ``dom`` listing reads no bodies at all:
     without interface ids every read would open a page.
     """
+    if not items:
+        # An empty listing (page not loaded yet, selector drift, logged-out view) is
+        # indistinguishable from a failed read; replacing the stored records with it
+        # would throw away every cached conversation and body.  Keep what is on disk.
+        return
     signature_by_key = {_hr_store_key(row): _hr_signature(row) for row in items}
 
     # 1. Listing first: replace this platform's records with the fresh

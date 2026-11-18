@@ -462,6 +462,15 @@ class RestartIncrementalTests(_StoreCase):
         merged = store[runtime._hr_store_key(changed[1])]
         self.assertEqual([m["mid"] for m in merged["messages"]], ["101", "102"])
 
+    def test_an_empty_listing_never_wipes_the_stored_conversations(self):
+        rows = [self._listing("a", last_message="你好", at="11-16 10:20")]
+        self._store_current_bodies(rows)
+        self._reset_sync_state()
+        runtime._refresh_platform_store([], "boss", source="dom")
+        kept = runtime._load_hr_store()
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(next(iter(kept.values()))["messages"])
+
     def test_the_cooldown_survives_a_restart(self):
         runtime._save_sync_meta({"boss": {"last_synced_at": runtime._hr_now(), "source": "api", "error": None}})
         self._reset_sync_state()  # the "restart"

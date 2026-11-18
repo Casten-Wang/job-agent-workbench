@@ -238,13 +238,21 @@ class PerPlatformReplacementTests(_StoreCase):
     def test_boss_refresh_replaces_its_own_stale_records(self):
         self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "旧消息"}]
         runtime.list_conversations("boss")
-        self.monitor.list_rows = []  # the conversation left the list
+        # The conversation left the list and another one took its place.
+        self.monitor.list_rows = [dict(ROW, id="", hr_name="另一位招聘官", company="另一家公司")]
+        self.monitor.threads["另一位招聘官"] = [{"sender": "hr", "text": "新消息"}]
         runtime.list_conversations("boss")
-        self.assertEqual(
-            [value for value in self._store().values() if value["platform"] == "boss"],
-            [],
-            "a successful listing drops that platform's records that are no longer listed",
-        )
+        boss = [value for value in self._store().values() if value["platform"] == "boss"]
+        self.assertEqual([value["hr_name"] for value in boss], ["另一位招聘官"],
+                         "a non-empty listing replaces that platform's records")
+
+    def test_empty_boss_listing_keeps_the_cache(self):
+        self.monitor.threads["示例招聘官"] = [{"sender": "hr", "text": "旧消息"}]
+        runtime.list_conversations("boss")
+        self.monitor.list_rows = []  # unreadable page looks the same as an empty list
+        runtime.list_conversations("boss")
+        boss = [value for value in self._store().values() if value["platform"] == "boss"]
+        self.assertEqual(len(boss), 1, "an empty listing must not wipe the stored conversations")
 
 
 class StaleOnFailureTests(_StoreCase):
