@@ -43,6 +43,9 @@ STATIC_FILES = {
     "/ui-signals.js": ("ui-signals.js", "text/javascript; charset=utf-8"),
     "/workbench-agent.css": ("workbench-agent.css", "text/css; charset=utf-8"),
     "/career-resume.css": ("career-resume.css", "text/css; charset=utf-8"),
+    "/sg-base.css": ("sg-base.css", "text/css; charset=utf-8"),
+    "/sg-pipeline.css": ("sg-pipeline.css", "text/css; charset=utf-8"),
+    "/sg-tools.css": ("sg-tools.css", "text/css; charset=utf-8"),
     "/workbench-agent.js": ("workbench-agent.js", "text/javascript; charset=utf-8"),
     "/career-user.js": ("career-user.js", "text/javascript; charset=utf-8"),
 }

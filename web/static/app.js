@@ -923,7 +923,7 @@ function renderInterviewHub() {
       attrs: {
         type: 'button',
         'data-interview-module': card.id,
-        'aria-label': `${card.title}，${card.count} ${card.unit}，${statusLabel}；打开${card.title}`
+        'aria-label': `${card.title}，${card.count} ${card.unit}，${statusLabel}；进入${card.title}`
       }
     }, [
       el('span', { className: 'pipeline-top' }, [
@@ -931,12 +931,15 @@ function renderInterviewHub() {
         el('span', { className: 'pipeline-owner', text: card.owner })
       ]),
       el('span', { className: 'pipeline-name', text: card.title }),
-      el('span', { className: 'pipeline-desc', text: card.description }),
-      el('span', { className: 'pipeline-count' }, [
+      el('span', { className: 'sg-card-count' }, [
         el('strong', { text: String(card.count) }),
         el('span', { text: card.unit })
       ]),
-      el('span', { className: 'pipeline-status', text: statusLabel })
+      el('span', { className: 'pipeline-desc', text: card.description }),
+      el('span', { className: 'sg-card-foot' }, [
+        el('span', { className: 'pipeline-status', text: statusLabel }),
+        el('span', { className: 'sg-card-enter', text: '进入' })
+      ])
     ]);
     node.addEventListener('click', () => showInterviewModule(card.id));
     dom.interviewHub.append(node);
@@ -2614,9 +2617,54 @@ function renderProfileList(kind, rows) {
   list.forEach((row) => addProfileRow(kind, row, false));
 }
 
+/* 左侧分节导航：每节只显示必填是否完成，规则来自后端 completeness.required。 */
+const SG_PROFILE_NAV_SECTIONS = [
+  { id: 'sg-profile-sec-basic', label: '基本信息', keys: ['basic_name', 'basic_city'] },
+  { id: 'sg-profile-sec-intent', label: '求职偏好', keys: ['job_intent_titles', 'job_intent_cities'] },
+  { id: 'sg-profile-sec-education', label: '教育', keys: ['education'] },
+  { id: 'sg-profile-sec-experiences', label: '经历', keys: ['experience_or_project'] },
+  { id: 'sg-profile-sec-projects', label: '项目', keys: ['experience_or_project'] },
+  { id: 'sg-profile-sec-skills', label: '技能', keys: ['skills'] },
+  { id: 'sg-profile-sec-summary', label: '简介', keys: ['summary'] },
+  { id: 'sg-profile-sec-truth', label: '确认', keys: ['truth_confirmed'] }
+];
+
+function renderProfileNav(completeness) {
+  const list = document.getElementById('sg-profile-nav-list');
+  if (!list) return;
+  const data = completeness && typeof completeness === 'object' ? completeness : {};
+  const required = Array.isArray(data.required) ? data.required : [];
+  const doneByKey = {};
+  required.forEach((item) => {
+    if (item && item.key) doneByKey[item.key] = item.done === true;
+  });
+  clear(list);
+  SG_PROFILE_NAV_SECTIONS.forEach((section) => {
+    const done = section.keys.every((key) => doneByKey[key] === true);
+    const stateLabel = done ? '✓' : '缺';
+    const button = el('button', {
+      className: `sg-profile-nav-item${done ? ' is-done' : ''}`,
+      attrs: {
+        type: 'button',
+        'data-sg-profile-target': section.id,
+        'aria-label': `${section.label}，必填${done ? '已完成' : '未完成'}；跳到这一节`
+      }
+    }, [
+      el('span', { className: 'sg-profile-nav-label', text: section.label }),
+      el('span', { className: 'sg-profile-nav-state', text: stateLabel })
+    ]);
+    button.addEventListener('click', () => {
+      const target = document.getElementById(section.id);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    list.append(button);
+  });
+}
+
 function renderProfileMeter(completeness) {
   if (!dom.profileMeter) return;
   const data = completeness && typeof completeness === 'object' ? completeness : {};
+  renderProfileNav(data);
   if (!Number.isFinite(Number(data.percent)) && state.profileDirty) {
     clear(dom.profileMeter);
     dom.profileMeter.append(el('p', {
@@ -2628,13 +2676,17 @@ function renderProfileMeter(completeness) {
   const percent = Number.isFinite(Number(data.percent)) ? Number(data.percent) : 0;
   const sections = Array.isArray(data.sections) ? data.sections : [];
   clear(dom.profileMeter);
-  const bar = el('div', { className: 'profile-meter-bar', attrs: { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(percent) } });
+  const progress = el('div', { className: 'sg-profile-progress' });
+  const value = el('p', { className: 'sg-profile-progress-value' });
+  value.append(document.createTextNode(String(percent)), el('small', { text: '%' }));
+  const body = el('div', { className: 'sg-profile-progress-body' });
+  const bar = el('div', { className: 'profile-meter-bar', attrs: { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(percent), 'aria-label': '资料完整度' } });
   const fill = el('span');
   fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
   bar.append(fill);
-  dom.profileMeter.append(bar);
+  body.append(bar);
   const missing = Array.isArray(data.missing) ? data.missing : [];
-  dom.profileMeter.append(el('p', {
+  body.append(el('p', {
     className: 'profile-meter-text',
     text: state.profileDirty
       ? `当前显示已保存资料的完整度 ${percent}%；页面有未保存修改，保存后更新。`
@@ -2642,13 +2694,19 @@ function renderProfileMeter(completeness) {
         ? `完整度 ${percent}%，还缺：${missing.join('、')}`
         : `完整度 ${percent}%，资料齐全，可以生成草稿。`
   }));
+  progress.append(value, body);
+  dom.profileMeter.append(progress);
   if (sections.length) {
     const chips = el('div', { className: 'chip-row' });
     sections.forEach((section) => {
-      chips.append(el('span', {
+      // 走查第 5 条：chip 旁直接渲染后端给的 sections[].hint，不用悬停才能看到。
+      const item = el('span', { className: 'sg-profile-chip-item' });
+      item.append(el('span', {
         className: `chip profile-chip${section.done ? ' is-done' : ''}`,
-        text: `${section.done ? '✓' : '○'} ${section.label}`
+        text: `${section.done ? '✓' : '缺'} ${section.label}`
       }));
+      if (section.hint) item.append(el('span', { className: 'sg-profile-chip-hint', text: section.hint }));
+      chips.append(item);
     });
     dom.profileMeter.append(chips);
   }
@@ -6510,8 +6568,9 @@ function syncChatContextLabels() {
 
 function updateChatProgress() {
   if (!dom.chatProgress) return;
-  const minutes = remainingMinutesFromSession(state.interviewChat.session);
-  dom.chatProgress.textContent = `剩余 ${minutes} 分钟`;
+  const idle = chatPhase() === 'idle';
+  const minutes = idle ? chatDurationValue() : remainingMinutesFromSession(state.interviewChat.session);
+  dom.chatProgress.textContent = `${idle ? '预计' : '剩余'} ${minutes} 分钟`;
 }
 
 function chatPhase() {
@@ -6557,7 +6616,25 @@ function syncChatPrimary() {
   }
   if (dom.chatAnswer) {
     const lockInput = phase === 'preparing' || phase === 'asking' || phase === 'ending' || phase === 'done' || phase === 'end';
-    dom.chatAnswer.disabled = lockInput;
+    // 走查第 3 条：未开始时直接隐藏答题框，而不是留一个禁用但可见的输入区。
+    dom.chatAnswer.hidden = phase === 'idle';
+    dom.chatAnswer.disabled = phase === 'idle' || lockInput;
+    dom.chatAnswer.placeholder = phase === 'idle'
+      ? '开始后再输入回答。'
+      : '输入这一问的回答。空白内容不会发送。';
+  }
+  const mockTools = document.getElementById('sg-chat-mock-tools');
+  if (mockTools) mockTools.hidden = phase === 'idle';
+  const chatPanel = document.getElementById('interview-chat');
+  if (chatPanel) chatPanel.classList.toggle('is-idle', phase === 'idle');
+  const reason = document.getElementById('sg-chat-reason');
+  if (reason) {
+    let text = '';
+    if (phase === 'idle') text = '先点「开始这场面试」。';
+    else if (phase === 'send' && !String(dom.chatAnswer && dom.chatAnswer.value || '').trim()) text = '输入回答后才能发送。';
+    else if (busy) text = '正在处理，请稍候。';
+    reason.textContent = text;
+    reason.hidden = !text;
   }
 }
 
@@ -7676,7 +7753,8 @@ function renderVariants(snapshot) {
   const variants = snapshot && Array.isArray(snapshot.variants) ? snapshot.variants : [];
   renderTable(dom.variantList, {
     caption: '表：已保存的经历变体',
-    columns: ['项目', '保存时间', '经历原文', 'SHA-256', '主稿对比'],
+    // SHA-256 收进项目单元格，保证「主稿对比」在桌面首屏可见。
+    columns: ['项目', '保存时间', '经历原文', '主稿对比'],
     rows: variants.map((variant) => {
       const project = String(variant.project || '');
       const compareButton = el('button', {
@@ -7689,14 +7767,16 @@ function renderVariants(snapshot) {
         }
       });
       compareButton.addEventListener('click', () => compareVariantWithMaster(variant, compareButton));
+      const projectCell = el('div', { className: 'sg-variant-project' });
+      projectCell.append(el('span', { className: 'cell-text', text: project || '—' }));
+      projectCell.append(el('span', {
+        className: 'cell-mono sg-variant-sha',
+        text: `SHA-256 ${String(variant.sha256 || '').slice(0, 16) || '—'}`
+      }));
       return [
-        String(variant.project || '—'),
+        projectCell,
         formatDateTime(variant.created_at),
         el('div', { className: 'cell-text', text: String(variant.text || '') }),
-        el('span', {
-          className: 'cell-mono',
-          text: String(variant.sha256 || '').slice(0, 16) || '—'
-        }),
         el('div', { className: 'resume-compare-cell' }, [compareButton])
       ];
     }),
@@ -8382,11 +8462,17 @@ function bindEvents() {
     event.preventDefault();
     const file = dom.atsFile.files && dom.atsFile.files[0];
     if (!file) {
-      setStatus('请先选择一个 PDF 文件。', 'error');
+      const message = '请先选择一个 PDF 文件。';
+      setStatus(message, 'error');
+      showInline(dom.atsResult, message, 'error');
+      if (dom.atsFile) dom.atsFile.focus();
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setStatus('PDF 超过 5 MB，没有上传。', 'error');
+      const message = 'PDF 超过 5 MB，没有上传。';
+      setStatus(message, 'error');
+      showInline(dom.atsResult, message, 'error');
+      if (dom.atsFile) dom.atsFile.focus();
       return;
     }
     const keywords = dom.atsKeywords.value.trim();
@@ -8508,7 +8594,10 @@ function bindEvents() {
     event.preventDefault();
     const minutes = Number(dom.worksheetMinutes.value);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) {
-      setStatus('时长必须是 1–180 分钟的整数。', 'error');
+      const message = '时长必须是 1–180 分钟的整数。';
+      setStatus(message, 'error');
+      showInline(dom.worksheetResult, message, 'error');
+      if (dom.worksheetMinutes) dom.worksheetMinutes.focus();
       return;
     }
     const data = await runAction(dom.worksheetSubmit, () => postAction('worksheet', {
@@ -8526,6 +8615,18 @@ function bindEvents() {
       downloadNames: data.download ? [data.download] : [],
       kind
     });
+    if (count === 0) {
+      // 0 题时给出下一步入口，不用用户自己返回卡片找题库。
+      const next = el('p', { className: 'sg-empty-next' });
+      const toLibrary = el('button', {
+        className: 'button button-quiet button-small',
+        text: '去题库补充题目',
+        attrs: { type: 'button' }
+      });
+      toLibrary.addEventListener('click', () => showInterviewModule('library'));
+      next.append(toLibrary);
+      dom.worksheetResult.append(next);
+    }
     await loadState();
   });
 
@@ -8533,7 +8634,10 @@ function bindEvents() {
     event.preventDefault();
     const transcript = dom.debriefTranscript.value.trim();
     if (!transcript) {
-      setStatus('请先粘贴逐字稿。', 'error');
+      const message = '请先粘贴逐字稿。';
+      setStatus(message, 'error');
+      showInline(dom.debriefResult, message, 'error');
+      if (dom.debriefTranscript) dom.debriefTranscript.focus();
       return;
     }
     const data = await runAction(dom.debriefSubmit, () => postAction('debrief', { transcript }));
@@ -8580,7 +8684,11 @@ function bindEvents() {
     const project = dom.variantProject.value.trim();
     const text = dom.variantText.value.trim();
     if (!project || !text) {
-      setStatus('项目名和经历原文不能为空。', 'error');
+      const message = '项目名和经历原文不能为空。';
+      setStatus(message, 'error');
+      showInline(dom.variantResult, message, 'error');
+      const focusTarget = !project ? dom.variantProject : dom.variantText;
+      if (focusTarget) focusTarget.focus();
       return;
     }
     const data = await runAction(dom.variantSubmit, () => postAction('add-variant', { project, text }));
@@ -8621,7 +8729,10 @@ function bindEvents() {
     setStatus(data.message || '已生成通知预览；没有发出任何请求。', 'ok');
     dom.dryRunResult.hidden = false;
     dom.dryRunResult.textContent = JSON.stringify(data.result || data, null, 2);
+    const emptyNote = document.getElementById('sg-dry-empty');
+    if (emptyNote) emptyNote.hidden = true;
   });
+
 }
 
 function bindAmbient() {

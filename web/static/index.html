@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="/ui-signals.css">
   <link rel="stylesheet" href="/workbench-agent.css">
   <link rel="stylesheet" href="/career-resume.css">
+  <link rel="stylesheet" href="/sg-base.css">
+  <link rel="stylesheet" href="/sg-pipeline.css">
+  <link rel="stylesheet" href="/sg-tools.css">
 </head>
 <body class="offer-ui">
   <div class="ambient" aria-hidden="true">
@@ -661,26 +664,12 @@
         <section class="view" id="view-profile" data-view-panel="profile" aria-labelledby="profile-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="profile-title">个人资料</h2>
-            <p class="view-lede">这里填写的基本信息、求职偏好、教育/工作/项目经历和技能，会用于生成招呼语、模拟面试和定制简历。保存后只写在本机，联系方式不会进入草稿。</p>
+            <p class="view-lede">填写后用于生成招呼语、模拟面试和定制简历；只保存在本机。</p>
+            <details class="sg-help">
+              <summary>这页怎么用</summary>
+              <p>这里填写的基本信息、求职偏好、教育/工作/项目经历和技能，会用于生成招呼语、模拟面试和定制简历。保存后只写在本机，联系方式不会进入草稿。左侧分节标出每节的必填是否已完成，点一节可以跳到对应位置。</p>
+            </details>
           </header>
-
-          <section class="panel integration-panel" aria-labelledby="profile-api-title">
-            <div class="integration-head">
-              <span class="integration-mark" aria-hidden="true">05</span>
-              <div>
-                <h3 id="profile-api-title">本机资料接口</h3>
-                <p>本机其他工具可以读取这份资料；修改仍要你在这个页面上确认并保存。</p>
-              </div>
-              <span class="badge badge-good">本地可用</span>
-            </div>
-            <dl class="integration-meta">
-              <div><dt>读取</dt><dd><code>GET /api/profile?mode=user</code> 返回资料与完整度；不包含任何凭据</dd></div>
-              <div><dt>写入</dt><dd><code>POST /api/action</code> → <code>{"action":"save-profile","mode":"user","profile":{...}}</code></dd></div>
-              <div><dt>导入</dt><dd><code>import-profile-cv</code> 支持上传 PDF、DOCX、MD、TXT（由 Agent 提取资料与经历），也可读取本机 <code>workspace/resume.md</code>；只返回建议，不自动保存</dd></div>
-              <div><dt>边界</dt><dd>只在本机访问；联系方式不进入招呼语和题单；不自动投递</dd></div>
-            </dl>
-            <p><a class="button button-quiet button-small" href="/api/doc/profile-api" download="PROFILE-API.md">下载接口文档</a></p>
-          </section>
 
           <section class="panel" aria-labelledby="profile-form-title">
             <div class="panel-head">
@@ -698,6 +687,14 @@
             <div class="profile-meter" id="profile-meter" aria-live="polite"></div>
             <div class="notice notice-accent profile-draft-banner" id="profile-draft-banner" role="status" hidden></div>
             <div class="action-result" id="profile-result" hidden></div>
+            <div class="sg-profile-layout">
+              <nav class="sg-profile-nav" aria-label="资料分节">
+                <p class="sg-profile-nav-title">资料分节</p>
+                <div id="sg-profile-nav-list"></div>
+                <p class="sg-profile-nav-note">「✓」表示该节的必填项已完成；保存后更新。</p>
+              </nav>
+              <div class="sg-profile-body">
+
             <div class="resume-dropzone" id="profile-resume-drop" role="button" tabindex="0" aria-label="拖入简历或点击选择文件">
               <strong>将简历拖到这里，或点击选择文件</strong>
               <p class="panel-note">支持 PDF、DOCX、Markdown、TXT，最大 5 MB。文件在本机读取，全文交由已配置的 Agent 解析；扫描件 PDF 请先转为文字。</p>
@@ -709,17 +706,17 @@
             </details>
 
             <form id="profile-form">
-              <h4 class="profile-section-title">基本信息</h4>
+              <h4 class="profile-section-title" id="sg-profile-sec-basic">基本信息</h4>
               <div class="form-grid">
                 <div class="form-field"><label for="profile-name">姓名 <span class="profile-required-mark">必填</span></label><input id="profile-name" type="text" autocomplete="name"></div>
                 <div class="form-field"><label for="profile-city">所在城市 <span class="profile-required-mark">必填</span></label><input id="profile-city" type="text" autocomplete="address-level2"></div>
-                <div class="form-field"><label for="profile-email">邮箱</label><input id="profile-email" type="email" autocomplete="email"></div>
+                <div class="form-field"><label for="profile-email">邮箱</label><input id="profile-email" type="email" autocomplete="email"><p class="sg-field-note">选填，影响完整度：填写会计入「基本信息」完整度；不填时这一节会显示未完成。</p></div>
                 <div class="form-field"><label for="profile-phone">电话</label><input id="profile-phone" type="tel" autocomplete="tel"></div>
                 <div class="form-field"><label for="profile-wechat">微信</label><input id="profile-wechat" type="text" autocomplete="off"></div>
                 <div class="form-field"><label for="profile-links">作品集 / GitHub / 链接</label><input id="profile-links" type="text" autocomplete="url" placeholder="多个链接用逗号分隔"></div>
               </div>
 
-              <h4 class="profile-section-title">求职偏好</h4>
+              <h4 class="profile-section-title" id="sg-profile-sec-intent">求职偏好</h4>
               <div class="form-grid">
                 <div class="form-field"><label for="profile-titles">目标岗位 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-titles" type="text" placeholder="产品经理, 产品助理"></div>
                 <div class="form-field"><label for="profile-target-cities">目标城市 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-target-cities" type="text" placeholder="上海, 杭州"></div>
@@ -737,41 +734,59 @@
                 <div class="form-field"><label for="profile-availability">到岗时间</label><input id="profile-availability" type="text" placeholder="一个月内 / 随时"></div>
               </div>
 
-              <h4 class="profile-section-title">教育经历 <span class="profile-required-mark">必填：至少一段</span></h4>
+              <h4 class="profile-section-title" id="sg-profile-sec-education">教育经历 <span class="profile-required-mark">必填：至少一段</span></h4>
               <div class="profile-list" id="profile-education"></div>
               <button class="button button-quiet button-small profile-add" type="button" data-profile-add="education">添加教育经历</button>
 
-              <h4 class="profile-section-title">工作 / 实习经历 <span class="profile-required-mark">必填：与下方项目经历至少填一处</span></h4>
+              <h4 class="profile-section-title" id="sg-profile-sec-experiences">工作 / 实习经历 <span class="profile-required-mark">必填：与下方项目经历至少填一处</span></h4>
               <div class="profile-list" id="profile-experiences"></div>
               <button class="button button-quiet button-small profile-add" type="button" data-profile-add="experiences">添加工作经历</button>
 
-              <h4 class="profile-section-title">项目经历 <span class="profile-required-mark">必填：与上方工作经历至少填一处</span></h4>
+              <h4 class="profile-section-title" id="sg-profile-sec-projects">项目经历 <span class="profile-required-mark">必填：与上方工作经历至少填一处</span></h4>
               <div class="profile-list" id="profile-projects"></div>
               <button class="button button-quiet button-small profile-add" type="button" data-profile-add="projects">添加项目经历</button>
 
-              <h4 class="profile-section-title">技能与简介</h4>
+              <h4 class="profile-section-title" id="sg-profile-sec-skills">技能与简介</h4>
               <div class="form-grid">
                 <div class="form-field full"><label for="profile-tools">工具 / 技能 <span class="profile-required-mark">必填：至少 3 个</span>（逗号分隔）</label><input id="profile-tools" type="text" placeholder="Axure, Visio, Excel"></div>
                 <div class="form-field full"><label for="profile-strengths">优势标签（逗号分隔）</label><input id="profile-strengths" type="text" placeholder="需求分析, 用户调研, 数据分析"></div>
-                <div class="form-field full"><label for="profile-summary">个人简介 <span class="profile-required-mark">必填：至少 20 字</span></label><textarea id="profile-summary" rows="5" placeholder="用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
+                <div class="form-field full" id="sg-profile-sec-summary"><label for="profile-summary">个人简介 <span class="profile-required-mark">必填：至少 20 字</span></label><textarea id="profile-summary" rows="5" placeholder="用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
                 <div class="form-field full"><label for="profile-excluded">排除词（逗号分隔）</label><input id="profile-excluded" type="text" placeholder="外包, 驻场"></div>
               </div>
 
-              <label class="checkbox-label profile-truth"><input type="checkbox" id="profile-truth"> <span class="profile-required-mark">必填</span>　我确认以上信息真实，可由本工作台用于生成招呼语、题单与简历草稿；联系方式不会写入草稿。</label>
+              <label class="checkbox-label profile-truth" id="sg-profile-sec-truth"><input type="checkbox" id="profile-truth"> <span class="profile-required-mark">必填</span>　我确认以上信息真实，可由本工作台用于生成招呼语、题单与简历草稿；联系方式不会写入草稿。</label>
 
               <div class="form-actions profile-submit-row">
                 <button class="button" type="submit" id="profile-save">保存个人资料</button>
                 <p class="hint">只写本机；不联网、不投递、不生成数字或未填写的经历。必填项缺失时，「岗位流水线 › 采集」和「完整流程」都无法启动。</p>
               </div>
             </form>
+              </div>
+            </div>
           </section>
+
+          <details class="sg-dev-note">
+            <summary><span id="profile-api-title">本机资料接口（开发者）</span><span class="badge badge-good">本地可用</span></summary>
+            <p>本机其他工具可以读取这份资料；修改仍要你在这个页面上确认并保存。</p>
+            <dl class="integration-meta">
+              <div><dt>读取</dt><dd><code>GET /api/profile?mode=user</code> 返回资料与完整度；不包含任何凭据</dd></div>
+              <div><dt>写入</dt><dd><code>POST /api/action</code> → <code>{"action":"save-profile","mode":"user","profile":{...}}</code></dd></div>
+              <div><dt>导入</dt><dd><code>import-profile-cv</code> 支持上传 PDF、DOCX、MD、TXT（由 Agent 提取资料与经历），也可读取本机 <code>workspace/resume.md</code>；只返回建议，不自动保存</dd></div>
+              <div><dt>边界</dt><dd>只在本机访问；联系方式不进入招呼语和题单；不自动投递</dd></div>
+            </dl>
+            <p><a class="button button-quiet button-small" href="/api/doc/profile-api" download="PROFILE-API.md">下载接口文档</a></p>
+          </details>
 
         </section>
 
         <section class="view" id="view-interview" data-view-panel="interview" aria-labelledby="interview-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="interview-title">模拟面试</h2>
-            <p class="view-lede">题单只从本地题库取题；复盘只摘录逐字稿里写出来的内容。</p>
+            <p class="view-lede">题库、对话与复盘都在本机进行；题库为空时不会编造题目。</p>
+            <details class="sg-help">
+              <summary>这页怎么用</summary>
+              <p>题单只从本地题库取题；复盘只摘录逐字稿里写出来的内容。四张卡片分别是本场对话、Mock 题单、面试复盘与题库，进入后可以随时返回。</p>
+            </details>
           </header>
 
           <div class="pipeline interview-hub" id="interview-hub" aria-label="模拟面试四张卡片"></div>
@@ -786,7 +801,7 @@
                   <h3 id="chat-title">文字模拟面试</h3>
                   <p class="panel-note">开始前先选轮次、时长、岗位和 JD。页面只显示规则、问题和回答，不显示后台的准备过程。</p>
                 </div>
-                <p class="chat-progress" id="chat-progress">剩余 30 分钟</p>
+                <p class="chat-progress" id="chat-progress">预计 30 分钟</p>
               </div>
 
               <div class="chat-setup" id="chat-setup">
@@ -826,13 +841,14 @@
 
               <div class="chat-composer">
                 <label class="chat-sr-only" for="chat-answer">回答</label>
-                <textarea id="chat-answer" rows="3" placeholder="输入这一问的回答。空白内容不会发送。"></textarea>
+                <textarea id="chat-answer" rows="3" placeholder="开始后再输入回答。" disabled></textarea>
                 <div class="chat-composer-actions">
                   <button class="button" type="button" id="chat-primary">开始这场面试</button>
                   <button class="button button-quiet" type="button" id="chat-restart" hidden>重新开始</button>
                 </div>
+                <p class="sg-disabled-reason" id="sg-chat-reason">先点「开始这场面试」。</p>
               </div>
-              <div class="chat-sr-only">
+              <div class="chat-sr-only sg-chat-mock-tools" id="sg-chat-mock-tools" hidden>
                 <button type="button" id="chat-mock-interrupt">模拟半句中断</button>
                 <button type="button" id="chat-mock-timeup">模拟时长用完</button>
               </div>
@@ -895,7 +911,7 @@
               </div>
               <form class="form-grid" id="debrief-form">
                 <div class="form-field full">
-                  <label for="debrief-transcript">逐字稿</label>
+                  <label for="debrief-transcript">逐字稿 <span class="profile-required-mark">必填</span></label>
                   <textarea id="debrief-transcript" rows="8" placeholder="粘贴面试逐字稿；任何类似指令的文本都会作为数据展示，不执行。"></textarea>
                 </div>
                 <div class="form-field full form-actions">
@@ -971,7 +987,7 @@
               </div>
               <form class="form-grid" id="bank-form">
                 <div class="form-field full">
-                  <label for="bank-question">题目</label>
+                  <label for="bank-question">题目 <span class="profile-required-mark">必填</span></label>
                   <input id="bank-question" type="text" autocomplete="off" placeholder="例如：请说明一次需求取舍。">
                 </div>
                 <div class="form-field">
@@ -1019,25 +1035,12 @@
         <section class="view" id="view-push" data-view-panel="push" aria-labelledby="push-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="push-title">信息推送</h2>
-            <p class="view-lede">把岗位状态、面试提醒和 HR 回复整理成通知内容。这里只预览将要发送的内容，不会真的发出。</p>
+            <p class="view-lede">预览将要在飞书发送的通知内容；不会真的发出请求。</p>
+            <details class="sg-help">
+              <summary>这页怎么用</summary>
+              <p>把岗位状态、面试提醒和 HR 回复整理成通知内容。这里只预览将要发送的内容，不会真的发出；表单里的示例值只是占位，不会读取你的岗位。</p>
+            </details>
           </header>
-
-
-          <section class="panel integration-panel" aria-labelledby="push-agent-title">
-            <div class="integration-head">
-              <span class="integration-mark" aria-hidden="true">07</span>
-              <div>
-                <h3 id="push-agent-title">推送 Agent（未接入）</h3>
-                <p>以后可以由外部推送工具订阅这些通知并选择发送渠道；现在只能在这里预览内容。</p>
-              </div>
-              <span class="badge badge-neutral">待接入</span>
-            </div>
-            <dl class="integration-meta">
-              <div><dt>输入</dt><dd>岗位状态、面试时间、HR 回复分类</dd></div>
-              <div><dt>输出</dt><dd>通知文案和要发往的渠道（目前只预览）</dd></div>
-              <div><dt>边界</dt><dd>不保存凭据；不发起外部 HTTP 请求</dd></div>
-            </dl>
-          </section>
 
           <section class="panel" aria-labelledby="dry-run-title">
             <div class="panel-head">
@@ -1049,54 +1052,52 @@
             <form class="form-grid" id="dry-run-form">
               <div class="form-field">
                 <label for="dry-job-id">岗位 ID</label>
-                <input id="dry-job-id" type="text" value="web-demo" autocomplete="off">
+                <input id="dry-job-id" type="text" placeholder="例如 web-demo" autocomplete="off">
               </div>
               <div class="form-field">
                 <label for="dry-company">公司</label>
-                <input id="dry-company" type="text" value="虚构公司" autocomplete="off">
+                <input id="dry-company" type="text" placeholder="例如 虚构公司" autocomplete="off">
               </div>
               <div class="form-field">
                 <label for="dry-title">岗位</label>
-                <input id="dry-title" type="text" value="产品经理" autocomplete="off">
+                <input id="dry-title" type="text" placeholder="例如 产品经理" autocomplete="off">
               </div>
               <div class="form-field">
                 <label for="dry-status">状态</label>
-                <input id="dry-status" type="text" value="已采集" autocomplete="off">
+                <input id="dry-status" type="text" placeholder="例如 已采集" autocomplete="off">
               </div>
               <div class="form-field">
                 <label for="dry-channel">渠道</label>
-                <input id="dry-channel" type="text" value="manual_paste" autocomplete="off">
+                <input id="dry-channel" type="text" placeholder="例如 manual_paste" autocomplete="off">
               </div>
               <div class="form-field full form-actions">
                 <button class="button" type="submit" id="dry-run-button">生成通知预览</button>
               </div>
             </form>
+            <p class="sg-dry-empty" id="sg-dry-empty">生成后在这里查看通知 JSON。</p>
             <pre class="code-block" id="dry-run-result" hidden></pre>
           </section>
+
+          <details class="sg-dev-note">
+            <summary><span id="push-agent-title">推送 Agent（未接入）</span><span class="badge badge-neutral">待接入</span></summary>
+            <p>以后可以由外部推送工具订阅这些通知并选择发送渠道；现在只能在这里预览内容。</p>
+            <dl class="integration-meta">
+              <div><dt>输入</dt><dd>岗位状态、面试时间、HR 回复分类</dd></div>
+              <div><dt>输出</dt><dd>通知文案和要发往的渠道（目前只预览）</dd></div>
+              <div><dt>边界</dt><dd>不保存凭据；不发起外部 HTTP 请求</dd></div>
+            </dl>
+          </details>
         </section>
 
         <section class="view" id="view-resume" data-view-panel="resume" aria-labelledby="resume-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="resume-title">定制简历</h2>
-            <p class="view-lede">围绕一个岗位整理可核实的经历原文，并检查简历筛选系统（ATS）能不能读懂。不改动主简历，不编造数字。</p>
+            <p class="view-lede">整理可核实的经历原文，检查 ATS 能否读懂；不改动主简历。</p>
+            <details class="sg-help">
+              <summary>这页怎么用</summary>
+              <p>围绕一个岗位整理可核实的经历原文，并检查简历筛选系统（ATS）能不能读懂。不改动主简历，不编造数字。已保存的经历变体单独放在下方，可以逐段与主稿对比。</p>
+            </details>
           </header>
-
-
-          <section class="panel integration-panel" aria-labelledby="resume-agent-title">
-            <div class="integration-head">
-              <span class="integration-mark" aria-hidden="true">08</span>
-              <div>
-                <h3 id="resume-agent-title">定制简历 Agent（未接入）</h3>
-                <p>外部简历 Agent 可以按岗位生成单栏简历；现在可用的是经历变体、关键词核对和 PDF 预检。</p>
-              </div>
-              <span class="badge badge-neutral">待接入</span>
-            </div>
-            <dl class="integration-meta">
-              <div><dt>输入</dt><dd>岗位 id、JD 关键词、已保存经历变体</dd></div>
-              <div><dt>输出</dt><dd>单栏简历草稿与关键词核对结果</dd></div>
-              <div><dt>边界</dt><dd>只使用本地事实；不自动生成数字或经历</dd></div>
-            </dl>
-          </section>
 
           <div class="two-col">
             <section class="panel" aria-labelledby="ats-title">
@@ -1108,7 +1109,7 @@
               </div>
               <form class="form-grid" id="ats-form">
                 <div class="form-field full resume-dropzone" id="ats-resume-drop" role="group" aria-label="拖入 ATS 检查 PDF">
-                  <label for="ats-file">PDF 文件（最大 5 MB）</label>
+                  <label for="ats-file">PDF 文件（最大 5 MB）<span class="sg-required">必填</span></label>
                   <input id="ats-file" type="file" accept="application/pdf,.pdf">
                   <p class="hint">将 PDF 拖到这里，或选择文件，再点击「检查 PDF」。</p>
                   <p class="resume-drop-status" aria-live="polite"></p>
@@ -1135,11 +1136,11 @@
               </div>
               <form class="form-grid" id="variant-form">
                 <div class="form-field full">
-                  <label for="variant-project">项目名</label>
+                  <label for="variant-project">项目名<span class="sg-required">必填</span></label>
                   <input id="variant-project" type="text" autocomplete="off" placeholder="项目或经历名称">
                 </div>
                 <div class="form-field full">
-                  <label for="variant-text">经历原文</label>
+                  <label for="variant-text">经历原文<span class="sg-required">必填</span></label>
                   <textarea id="variant-text" rows="6" placeholder="粘贴你手动改写的经历原文。"></textarea>
                 </div>
                 <div class="form-field full form-actions">
@@ -1147,12 +1148,20 @@
                 </div>
               </form>
               <div class="action-result" id="variant-result" hidden></div>
-              <h4 class="subhead">已保存变体</h4>
-              <p class="panel-note">每行可以对比主稿，逐段展示新增、删除和改写；不会修改主稿。</p>
-              <div id="variant-list"></div>
-              <div class="action-result resume-compare-result" id="resume-compare-result" aria-live="polite" hidden></div>
             </section>
           </div>
+
+          <section class="panel sg-variant-saved" aria-labelledby="sg-variant-saved-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="sg-variant-saved-title">已保存变体</h3>
+                <p class="panel-note">每行可以对比主稿，逐段展示新增、删除和改写；不会修改主稿。</p>
+              </div>
+            </div>
+            <div id="variant-list"></div>
+            <div class="action-result resume-compare-result" id="resume-compare-result" aria-live="polite" hidden></div>
+          </section>
+
           <section class="panel career-user-panel" id="cu-resume-panel" aria-labelledby="cu-title">
             <div class="panel-head"><div><h3 id="cu-title">从真实经历到定制简历</h3><p class="panel-note">先选导入方式，再整理并确认经历，然后预览，最后保存并导出。</p></div><span class="badge" id="cu-connection">经历导入</span></div>
             <div id="cu-personal" hidden>
@@ -1182,11 +1191,11 @@
               <details id="cu-browser" hidden><summary id="cu-browser-title">仓库文件</summary><div id="cu-files"></div><button class="button button-quiet" type="button" id="cu-more-files" hidden>更多文件</button><pre id="cu-file-text" class="career-code" hidden></pre></details>
               <form id="cu-project-form" class="form-grid" hidden>
                 <div class="form-field full"><label for="cu-repository">选中的仓库</label><input id="cu-repository" type="text" readonly required></div>
-                <div class="form-field full"><label for="cu-role">目标岗位</label><input id="cu-role" type="text" maxlength="200" required placeholder="例如：初级 Python 后端工程师"></div>
+                <div class="form-field full"><label for="cu-role">目标岗位<span class="sg-required">必填</span></label><input id="cu-role" type="text" maxlength="200" required placeholder="例如：初级 Python 后端工程师"></div>
                 <div class="form-field full"><label for="cu-jd">岗位 JD（建议填写）</label><textarea id="cu-jd" rows="4" maxlength="15000"></textarea></div>
-                <div class="form-field full"><label for="cu-contribution">你实际负责的工作与协作边界</label><textarea id="cu-contribution" rows="5" maxlength="4000" required placeholder="说明本人实现、第三方代码、团队分工和 AI 辅助；尚无证明的成果数字暂不填写。"></textarea></div>
-                <label class="full cu-check"><input type="checkbox" id="cu-contribution-confirmed" required>我确认上面的职责陈述，不把仓库归属直接当成独立完成的证明。</label>
-                <label class="full cu-check"><input type="checkbox" id="cu-model-consent" required>允许将所选源码片段、职责和 JD 发给 Step 模型，用于整理简历经历；不会发送 GitHub 令牌。</label>
+                <div class="form-field full"><label for="cu-contribution">你实际负责的工作与协作边界<span class="sg-required">必填</span></label><textarea id="cu-contribution" rows="5" maxlength="4000" required placeholder="说明本人实现、第三方代码、团队分工和 AI 辅助；尚无证明的成果数字暂不填写。"></textarea></div>
+                <label class="full cu-check"><input type="checkbox" id="cu-contribution-confirmed" required><span><span class="sg-required">必填</span>我确认上面的职责陈述，不把仓库归属直接当成独立完成的证明。</span></label>
+                <label class="full cu-check"><input type="checkbox" id="cu-model-consent" required><span><span class="sg-required">必填</span>允许将所选源码片段、职责和 JD 发给 Step 模型，用于整理简历经历；不会发送 GitHub 令牌。</span></label>
                 <div class="form-actions full"><button class="button" id="cu-prepare" type="submit">读取项目并整理经历</button></div>
               </form>
               </div>
@@ -1194,14 +1203,14 @@
                 <h4>自主导入经历 / 作品集</h4><p class="hint">无需 GitHub。每次整理一段经历，填写你实际做过的工作；文件与链接可作为补充。</p>
                 <form id="cu-experience-form" class="form-grid">
                   <div class="form-field"><label for="cu-exp-kind">经历类型</label><select id="cu-exp-kind"><option value="internship">实习经历</option><option value="work">工作经历</option><option value="project">项目经历</option><option value="portfolio">作品集</option></select></div>
-                  <div class="form-field"><label for="cu-exp-name">经历 / 项目名称</label><input id="cu-exp-name" type="text" maxlength="120" required placeholder="例如：新用户引导改版"></div>
+                  <div class="form-field"><label for="cu-exp-name">经历 / 项目名称<span class="sg-required">必填</span></label><input id="cu-exp-name" type="text" maxlength="120" required placeholder="例如：新用户引导改版"></div>
                   <div class="form-field"><label for="cu-exp-organization">公司 / 团队（选填）</label><input id="cu-exp-organization" type="text" maxlength="120" placeholder="填写实际公司、团队或独立项目"></div>
                   <div class="form-field"><label for="cu-exp-position">本人职位 / 项目角色（选填）</label><input id="cu-exp-position" type="text" maxlength="120" placeholder="例如：产品实习生"></div>
                   <div class="form-field"><label for="cu-exp-start">开始时间（选填）</label><input id="cu-exp-start" type="text" maxlength="40" placeholder="例如：2026.06"></div>
                   <div class="form-field"><label for="cu-exp-end">结束时间（选填）</label><input id="cu-exp-end" type="text" maxlength="40" placeholder="例如：2026.08 或至今"></div>
-                  <div class="form-field full"><label for="cu-exp-role">目标岗位</label><input id="cu-exp-role" type="text" maxlength="200" required placeholder="例如：产品经理、用户运营、交互设计师"></div>
-                  <div class="form-field full"><label for="cu-exp-context">背景与要解决的问题</label><textarea id="cu-exp-context" rows="3" maxlength="4000" required placeholder="面向哪些用户？遇到了什么问题？为什么要做这件事？"></textarea></div>
-                  <div class="form-field full"><label for="cu-exp-contribution">你具体做了什么</label><textarea id="cu-exp-contribution" rows="5" maxlength="4000" required placeholder="例如：如何访谈用户、取舍需求、设计方案、推进评审或验证效果。说明本人工作、团队分工与辅助工具。"></textarea></div>
+                  <div class="form-field full"><label for="cu-exp-role">目标岗位<span class="sg-required">必填</span></label><input id="cu-exp-role" type="text" maxlength="200" required placeholder="例如：产品经理、用户运营、交互设计师"></div>
+                  <div class="form-field full"><label for="cu-exp-context">背景与要解决的问题<span class="sg-required">必填</span></label><textarea id="cu-exp-context" rows="3" maxlength="4000" required placeholder="面向哪些用户？遇到了什么问题？为什么要做这件事？"></textarea></div>
+                  <div class="form-field full"><label for="cu-exp-contribution">你具体做了什么<span class="sg-required">必填</span></label><textarea id="cu-exp-contribution" rows="5" maxlength="4000" required placeholder="例如：如何访谈用户、取舍需求、设计方案、推进评审或验证效果。说明本人工作、团队分工与辅助工具。"></textarea></div>
                   <div class="form-field full"><label for="cu-exp-outcome">实际成果与交付（选填）</label><textarea id="cu-exp-outcome" rows="3" maxlength="4000" placeholder="写实际交付、反馈与有依据的数据；没有可靠数字可留空，不必编造增长率。"></textarea></div>
                   <div class="form-field full"><label for="cu-exp-portfolio-url">作品集链接（选填）</label><input id="cu-exp-portfolio-url" type="url" maxlength="1000" placeholder="https://"><p class="hint">链接作为简历引用保留；请在下方补充需要整理的文字。</p></div>
                   <details class="full"><summary>补充材料与岗位要求（选填）</summary>
@@ -1209,8 +1218,8 @@
                     <div class="form-field"><label for="cu-exp-source-text">补充材料原文</label><textarea id="cu-exp-source-text" rows="6" maxlength="20000" placeholder="粘贴作品说明、需求文档、复盘或访谈摘要；也可从文件提取。请删除与本次简历无关的信息。"></textarea></div>
                     <div class="form-field"><label for="cu-exp-jd">目标岗位 JD</label><textarea id="cu-exp-jd" rows="4" maxlength="15000"></textarea></div>
                   </details>
-                  <label class="full cu-check"><input type="checkbox" id="cu-exp-confirmed" required>我确认这些是本人真实经历，已区分个人贡献与团队成果。</label>
-                  <label class="full cu-check"><input type="checkbox" id="cu-exp-consent" required>允许将上述经历、补充原文与岗位要求发给 Step 模型，用于整理简历。</label>
+                  <label class="full cu-check"><input type="checkbox" id="cu-exp-confirmed" required><span><span class="sg-required">必填</span>我确认这些是本人真实经历，已区分个人贡献与团队成果。</span></label>
+                  <label class="full cu-check"><input type="checkbox" id="cu-exp-consent" required><span><span class="sg-required">必填</span>允许将上述经历、补充原文与岗位要求发给 Step 模型，用于整理简历。</span></label>
                   <div class="form-actions full"><button class="button" id="cu-prepare-experience" type="submit">整理经历并核对表述</button></div>
                 </form>
               </section>
@@ -1220,6 +1229,16 @@
               <section id="cu-history" hidden><h4>简历版本记录</h4><div id="cu-versions"></div></section>
             </div>
           </section>
+
+          <details class="sg-dev-note">
+            <summary><span id="resume-agent-title">定制简历 Agent（未接入）</span><span class="badge badge-neutral">待接入</span></summary>
+            <p>外部简历 Agent 可以按岗位生成单栏简历；现在可用的是经历变体、关键词核对和 PDF 预检。</p>
+            <dl class="integration-meta">
+              <div><dt>输入</dt><dd>岗位 id、JD 关键词、已保存经历变体</dd></div>
+              <div><dt>输出</dt><dd>单栏简历草稿与关键词核对结果</dd></div>
+              <div><dt>边界</dt><dd>只使用本地事实；不自动生成数字或经历</dd></div>
+            </dl>
+          </details>
         </section>
 
         <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
