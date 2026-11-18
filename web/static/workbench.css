@@ -1161,3 +1161,1128 @@ body[data-wb-capability="variants"] #cu-resume-panel {
   cursor: wait;
   transition: opacity 150ms ease;
 }
+
+/* ==========================================================================
+ * 任务式工作台外壳（集成工作台概念稿 W01–W06）
+ * 任务侧栏取代原编号导航；原导航在任务外壳启用时隐藏，?workbench=legacy 可回退。
+ * ========================================================================== */
+body.wb-task-shell.offer-ui:not(#wa-theme-off) .app-shell,
+body.wb-task-shell .app-shell {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+}
+
+body.wb-task-shell .app-shell > .sidebar,
+body.wb-task-shell.offer-ui:not(#wa-theme-off) .app-shell > .sidebar {
+  display: none;
+}
+
+body.wb-task-shell.offer-ui:not(#wa-theme-off) .main-column,
+body.wb-task-shell .main-column {
+  flex: 1;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100dvh;
+}
+
+body.wb-task-shell.offer-ui:not(#wa-theme-off) .views,
+body.wb-task-shell .views {
+  overflow: hidden;
+}
+
+body.wb-task-shell.offer-ui:not(#wa-theme-off) .views > #view-workbench:not(#view-agent):not([hidden]),
+body.wb-task-shell #view-workbench {
+  flex: 1 1 0;
+  min-height: 0;
+  max-width: none;
+  padding: 0;
+  gap: 0;
+}
+
+body.wb-task-shell .wb-shell {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+.wb-shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  flex-direction: row;
+}
+
+.wb-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.wb-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 任务侧栏 */
+.wb-tasknav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px 14px 14px;
+  border-right: 0.5px solid var(--line);
+  background: var(--accent-soft);
+  overflow-y: auto;
+}
+
+.wb-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 6px;
+  font-size: 16px;
+  font-weight: var(--wa-semibold, 600);
+  color: var(--ink);
+}
+
+.wb-brand-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--wa-brand);
+}
+
+.wb-shell .wb-new-task {
+  width: 100%;
+  background: var(--surface);
+}
+
+.wb-shell .wb-tasknav-title {
+  margin: 8px 6px 0;
+  font-size: 12px;
+  font-weight: var(--wa-medium, 500);
+  color: var(--mute);
+}
+
+.wb-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-task-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-task-item:hover {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.wb-task-item[aria-current="true"] {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.wb-task-title {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--wa-medium, 500);
+}
+
+.wb-shell .wb-task-status,
+.wb-shell .wb-task-empty {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.wb-task-empty {
+  padding: 6px 10px;
+}
+
+.wb-tasknav-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--line);
+}
+
+.wb-foot-link {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2, var(--ink));
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-foot-link:hover {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.wb-shell .wb-foot-legacy {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+/* 顶部标题行 */
+.wb-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wb-title-home {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: var(--wa-semibold, 600);
+  cursor: pointer;
+}
+
+.wb-shell #wb-breadcrumb {
+  font-size: 16px;
+  font-weight: var(--wa-semibold, 600);
+}
+
+.wb-shell .wb-task-state {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--wa-brand);
+  font-size: 12px;
+}
+
+/* 上下文条与步骤条 */
+.wb-taskbar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 24px;
+  border-bottom: 0.5px solid var(--line);
+  background: var(--surface);
+}
+
+.wb-context-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+
+.wb-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-shell .wb-chip-label {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.wb-context-strip .button {
+  margin-left: auto;
+}
+
+.wb-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-step {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-step:not(:last-child)::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  margin: 0 10px;
+  background: var(--line);
+}
+
+.wb-step-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mute);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wb-step-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-step[data-state="done"] .wb-step-mark {
+  border-color: var(--wa-brand);
+  background: var(--wa-brand);
+  color: var(--accent-ink, #fff);
+}
+
+.wb-step[data-state="done"] .wb-step-button {
+  color: var(--ink);
+}
+
+.wb-step[data-state="current"] .wb-step-button {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: var(--wa-medium, 500);
+}
+
+.wb-step[data-state="current"] .wb-step-mark {
+  border-color: var(--wa-brand);
+  background: var(--wa-brand);
+  color: var(--accent-ink, #fff);
+}
+
+/* 对话栏位于工作区左侧（概念稿：对话 330px + 工作区） */
+.wb-layout {
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
+.wb-layout > .wb-assistant {
+  order: -1;
+  border-left: 0;
+  border-right: 0.5px solid var(--line);
+}
+
+/* W01 开始任务 */
+.wb-start {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 40px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-top: 24px;
+}
+
+.wb-start-main {
+  min-width: 0;
+}
+
+.wb-shell .wb-start h2 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.wb-shell .wb-start-lede {
+  max-width: 620px;
+  color: var(--mute);
+}
+
+.wb-goal {
+  margin: 22px 0 16px;
+}
+
+.wb-goal textarea {
+  width: 100%;
+  min-height: 108px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--wa-brand) 45%, var(--line));
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+  resize: vertical;
+}
+
+.wb-goal-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.wb-goal-actions .wb-goal-submit {
+  margin-left: auto;
+  min-height: 42px;
+  padding: 8px 22px;
+  font-size: 16px;
+}
+
+.wb-intents {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding-bottom: 22px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-intent {
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: var(--wa-medium, 500);
+  cursor: pointer;
+}
+
+.wb-intent:hover {
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--wa-brand) 12%);
+}
+
+.wb-continue {
+  margin-top: 22px;
+}
+
+.wb-continue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 12px 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+
+.wb-continue-row > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wb-continue-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-shell .wb-continue-row small {
+  color: var(--mute);
+}
+
+.wb-start-side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-left: 24px;
+  border-left: 0.5px solid var(--line);
+}
+
+.wb-side-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-side-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-shell .wb-side-value {
+  color: var(--wa-brand);
+  font-size: 12px;
+}
+
+/* W02 岗位筛选（就地） */
+.wb-step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wb-shell .wb-sub {
+  margin: 0;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.wb-segment {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+}
+
+.wb-segment-tab {
+  min-height: 30px;
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mute);
+  cursor: pointer;
+}
+
+.wb-segment-tab[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--wa-medium, 500);
+}
+
+.wb-filter-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.wb-filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.wb-filter-row input {
+  min-width: 180px;
+}
+
+.wb-table-wrap {
+  overflow-x: auto;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+
+.wb-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wb-table th,
+.wb-table td {
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.wb-table th {
+  color: var(--mute);
+  font-weight: var(--wa-medium, 500);
+  background: var(--wa-elevated, var(--surface));
+}
+
+.wb-table tbody tr {
+  cursor: pointer;
+}
+
+.wb-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
+}
+
+.wb-table tbody tr.is-selected {
+  background: var(--accent-soft);
+}
+
+.wb-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.wb-table td:first-child,
+.wb-table th:first-child {
+  width: 40px;
+}
+
+.wb-table td.wb-empty {
+  padding: 18px 12px;
+  color: var(--mute);
+  cursor: default;
+}
+
+.wb-job-detail {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--wa-elevated, var(--surface));
+  border: 0.5px solid var(--line);
+}
+
+.wb-job-detail ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.wb-job-detail pre {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 13px;
+}
+
+.wb-inline-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wb-inline-host {
+  padding: 4px 0;
+}
+
+.wb-inline-host .sg-collect-grid {
+  margin: 0;
+}
+
+.wb-step-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 0.5px solid var(--line);
+}
+
+@media (max-width: 1180px) {
+  .wb-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .wb-start {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wb-start-side {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 960px) {
+  .wb-shell {
+    display: flex;
+    flex-direction: column;
+  }
+  .wb-tasknav {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 0.5px solid var(--line);
+    overflow-x: auto;
+  }
+  .wb-tasknav-title,
+  .wb-task-list,
+  .wb-foot-legacy {
+    display: none;
+  }
+  .wb-shell .wb-new-task {
+    width: auto;
+  }
+  .wb-tasknav-foot {
+    flex-direction: row;
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: 0;
+  }
+  .wb-brand {
+    padding: 0 4px 0 0;
+  }
+  .wb-stage {
+    flex: 1;
+  }
+  .wb-taskbar {
+    padding: 10px 16px;
+  }
+  .wb-step-label {
+    display: none;
+  }
+  .wb-step[data-state="current"] .wb-step-label {
+    display: inline;
+  }
+  .wb-step:not(:last-child)::after {
+    margin: 0 6px;
+  }
+  .wb-intents {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .wb-brand > span:last-child {
+    display: none;
+  }
+  .wb-shell .wb-start h2 {
+    font-size: 22px;
+  }
+  .wb-goal-actions .wb-goal-submit {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* W03 材料协作编辑（就地草稿） */
+.wb-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.wb-draft-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-tabs {
+  display: flex;
+  gap: 22px;
+}
+
+.wb-tab {
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mute);
+  cursor: pointer;
+}
+
+.wb-tab[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--wa-brand);
+  font-weight: var(--wa-medium, 500);
+}
+
+.wb-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wb-draft-head .wb-sub {
+  padding-bottom: 8px;
+}
+
+.wb-draft-host {
+  padding: 22px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
+}
+
+.wb-paper {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 44px;
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03), 0 10px 28px -18px rgba(0, 0, 0, 0.25);
+}
+
+.wb-paper:focus-visible {
+  outline: 2px solid var(--wa-focus);
+}
+
+.wb-shell .wb-paper h2 {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.wb-shell .wb-paper h3 {
+  margin: 18px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.wb-shell .wb-paper h4 {
+  margin: 12px 0 4px;
+}
+
+.wb-paper p {
+  margin: 0 0 6px;
+}
+
+.wb-paper ::selection {
+  background: color-mix(in srgb, var(--wa-brand) 22%, transparent);
+}
+
+.wb-draft-diff {
+  max-width: 760px;
+  margin: 14px auto 0;
+}
+
+.wb-draft-diff summary {
+  color: var(--mute);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wb-source-row {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.wb-draft-revise {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+
+/* W04 就地发送复核 */
+.wb-review-host .queue-delivery-panel.queue-delivery-modal,
+.wb-main .wb-review-host .queue-delivery-modal {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+
+.wb-review-host .queue-delivery-modal[hidden] {
+  display: none;
+}
+
+.wb-review-host .queue-modal,
+.wb-main .wb-review-host .queue-modal {
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  padding: 20px 22px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--wa-elevated, var(--surface));
+  box-shadow: none;
+}
+
+.wb-review-host .queue-delivery-head h3 {
+  font-size: 16px;
+}
+
+.wb-review-host .queue-delivery-text {
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  white-space: pre-wrap;
+}
+
+.wb-review-gate {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 240px) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 14px 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+
+.wb-review-gate .checkbox-label {
+  grid-column: 1 / -1;
+}
+
+.wb-review-gate .wb-sub {
+  grid-column: 2;
+}
+
+.wb-review-gate #wb-review-back {
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: end;
+}
+
+.wb-review-empty {
+  padding: 16px;
+  border: 0.5px dashed var(--line);
+  border-radius: 10px;
+}
+
+body.wb-task-shell[data-wb-capability="queue"] #view-queue > .view-head {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .wb-paper {
+    padding: 22px 18px;
+  }
+  .wb-draft-host {
+    padding: 10px;
+  }
+  .wb-review-gate {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wb-review-gate .wb-sub,
+  .wb-review-gate #wb-review-back {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+}
+
+/* 原「岗位流水线」1–4 页签由任务步骤条取代 */
+body.wb-task-shell .ui-hub-tabs:not(.iv-mode-tabs),
+body.wb-task-shell.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail) .ui-hub-tabs:not(.iv-mode-tabs) {
+  display: none;
+}
+
+/* W05 面试专注模式：通用任务对话收起后，面试区占满工作区 */
+.wb-shell.wb-interview-focus #view-interview > .view-head .view-lede {
+  display: none;
+}
+
+.wb-shell.wb-interview-focus #view-interview .iv-mode-tabs {
+  opacity: 0.7;
+}
+
+.wb-shell.wb-interview-focus #ci-panel {
+  border: 0;
+  box-shadow: none;
+  padding-inline: 0;
+  background: transparent;
+}
+
+/* W06 HR 回复确认就地显示在会话下方 */
+.wb-hr-confirm-host .hr-reply-modal,
+.wb-main .wb-hr-confirm-host .hr-reply-modal {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  display: block;
+  padding: 0;
+  margin-top: 12px;
+  background: transparent;
+}
+
+.wb-hr-confirm-host .hr-reply-modal[hidden] {
+  display: none;
+}
+
+.wb-hr-confirm-host .hr-reply-dialog,
+.wb-main .wb-hr-confirm-host .hr-reply-dialog {
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  padding: 16px 18px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--wa-elevated, var(--surface));
+}
+
+.wb-hr-confirm-host .hr-reply-text {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  white-space: pre-wrap;
+}
+
+/* 线性图标（概念稿：细描边、跟随文字颜色） */
+.wb-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-icon-lg {
+  width: 22px;
+  height: 22px;
+}
+
+.wb-shell :is(.button, .wb-foot-link, .wb-intent, .wb-task-item, .wb-tool-item) > .wb-icon {
+  color: var(--wa-brand);
+}
+
+.wb-shell .button:not(.button-quiet) > .wb-icon {
+  color: inherit;
+}
+
+.wb-foot-link,
+.wb-intent {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wb-intent {
+  justify-content: center;
+}
+
+.wb-shell .wb-task-item {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.wb-task-item > .wb-icon {
+  margin-top: 2px;
+}
+
+.wb-task-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wb-continue-row > .wb-icon {
+  color: var(--wa-brand);
+}
+
+.wb-continue-row > div {
+  flex: 1;
+}
+
+.wb-side-row {
+  align-items: center;
+}
+
+.wb-side-row > .wb-icon {
+  color: var(--wa-brand);
+}
+
+.wb-side-row > span:not(.wb-side-value) {
+  flex: 1;
+}
+
+/* 「全部功能」：按任务分组的图标列表（概念稿 37） */
+#wb-tool-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 48px;
+}
+
+.wb-tool-section h3 {
+  margin: 0 0 6px;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--line);
+  font-size: 18px;
+  font-weight: var(--wa-semibold, 600);
+}
+
+.wb-tool-items {
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-tool-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px 6px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-tool-item:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.wb-tool-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wb-tool-item > .wb-icon {
+  width: 20px;
+  height: 20px;
+}
+
+#wb-tool-list > .wb-empty {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  #wb-tool-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wb-foot-link > span,
+  .wb-tasknav-foot .wb-foot-link {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .wb-tasknav-foot .wb-foot-link {
+    font-size: 0;
+    padding: 6px 8px;
+  }
+  .wb-tasknav-foot .wb-foot-link > .wb-icon {
+    width: 20px;
+    height: 20px;
+  }
+}

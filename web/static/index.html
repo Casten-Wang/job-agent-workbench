@@ -85,15 +85,100 @@
         <section class="view" id="view-workbench" data-view-panel="workbench" aria-labelledby="workbench-title">
 
           <section id="wb-shell" class="wb-shell" aria-label="求职任务工作台" hidden>
+            <nav id="wb-tasknav" class="wb-tasknav" aria-label="任务导航">
+              <div class="wb-brand"><span class="wb-brand-mark" aria-hidden="true"></span><span>OfferPilot</span></div>
+              <button type="button" id="wb-new-task" class="button button-quiet wb-new-task">＋ 新任务</button>
+              <h2 class="wb-tasknav-title" id="wb-tasknav-title">最近任务</h2>
+              <ul id="wb-task-list" class="wb-task-list" aria-labelledby="wb-tasknav-title"></ul>
+              <div class="wb-tasknav-foot">
+                <button type="button" id="wb-nav-profile" class="wb-foot-link" aria-label="我的资料" data-wb-open="profile">我的资料</button>
+                <button type="button" id="wb-all-tools" class="wb-foot-link" aria-label="全部功能" data-wb-open="tools">全部功能</button>
+                <button type="button" id="wb-settings-button" class="wb-foot-link" aria-label="设置" data-wb-open="settings">设置</button>
+                <a class="wb-foot-legacy" href="/?workbench=legacy">使用原工作台</a>
+              </div>
+            </nav>
+            <div class="wb-stage">
             <header class="wb-toolbar">
-              <div><button type="button" id="wb-home-button" class="button button-quiet">工作总览</button><span id="wb-breadcrumb" aria-live="polite"></span></div>
-              <div class="wb-toolbar-actions"><button type="button" id="wb-all-tools" class="button button-quiet">全部工具</button><button type="button" id="wb-settings-button" class="button button-quiet">连接与设置</button><button type="button" id="wb-assistant-toggle" class="button button-quiet" aria-expanded="false">对话助手</button></div>
+              <div class="wb-title-row"><button type="button" id="wb-home-button" class="wb-title-home">工作台</button><span id="wb-breadcrumb" aria-live="polite"></span><span id="wb-task-state" class="wb-task-state" hidden></span></div>
+              <div class="wb-toolbar-actions"><button type="button" id="wb-history-button" class="button button-quiet">任务记录</button><button type="button" id="wb-assistant-toggle" class="button button-quiet" aria-expanded="false">展开任务对话</button></div>
             </header>
+            <section id="wb-taskbar" class="wb-taskbar" aria-label="当前任务" hidden>
+              <div id="wb-context-strip" class="wb-context-strip">
+                <span class="wb-chip"><span class="wb-chip-label">目标岗位</span><span id="wb-strip-job">未选择</span></span>
+                <span class="wb-chip"><span class="wb-chip-label">简历</span><span id="wb-strip-version">未选择</span></span>
+                <span class="wb-chip"><span class="wb-chip-label">经历</span><span id="wb-strip-material">未选择</span></span>
+                <button type="button" id="wb-strip-edit" class="button button-quiet button-small">更改</button>
+              </div>
+              <ol id="wb-stepper" class="wb-stepper" aria-label="任务步骤"></ol>
+            </section>
             <div class="wb-layout">
               <div id="wb-main" class="wb-main" tabindex="-1">
                 <p id="wb-notice" class="wb-notice" role="status" aria-live="polite" hidden></p>
                 <div id="wb-approval-slot"></div><div id="wb-progress-slot"></div>
-                <section id="wb-home" aria-labelledby="wb-home-title">
+                <section id="wb-start" class="wb-start" aria-labelledby="wb-start-title">
+                  <div class="wb-start-main">
+                    <h2 id="wb-start-title">今天想推进哪件事？</h2>
+                    <p class="wb-start-lede">输入你的目标，OfferPilot 会在当前工作台里分步完成：找岗位、准备材料、复核申请、练习面试，不用切换页面。</p>
+                    <form id="wb-goal-form" class="wb-goal">
+                      <label for="wb-goal-input" class="wb-visually-hidden">求职目标</label>
+                      <textarea id="wb-goal-input" rows="3" maxlength="12000" placeholder="例如：帮我找上海的 AI 应用岗位，准备申请材料，再练一轮面试。"></textarea>
+                      <div class="wb-goal-actions">
+                        <button type="button" id="wb-goal-material" class="button button-quiet">＋ 简历或项目资料</button>
+                        <button type="button" id="wb-goal-paste-job" class="button button-quiet">粘贴岗位</button>
+                        <button type="submit" id="wb-goal-start" class="button wb-goal-submit">开始任务 →</button>
+                      </div>
+                    </form>
+                    <div class="wb-intents" role="group" aria-label="任务类型">
+                      <button type="button" class="wb-intent" data-wb-intent="jobs">找岗位</button>
+                      <button type="button" class="wb-intent" data-wb-intent="application">准备申请</button>
+                      <button type="button" class="wb-intent" data-wb-intent="interview">练习面试</button>
+                      <button type="button" class="wb-intent" data-wb-intent="notes">整理面经</button>
+                    </div>
+                    <section class="wb-continue" aria-labelledby="wb-continue-title">
+                      <h3 id="wb-continue-title">继续未完成的任务</h3>
+                      <div id="wb-continue-list"></div>
+                    </section>
+                  </div>
+                  <aside class="wb-start-side" aria-label="资料与连接">
+                    <section aria-labelledby="wb-side-materials-title">
+                      <h3 id="wb-side-materials-title">当前可用资料</h3>
+                      <ul id="wb-side-materials" class="wb-side-list"></ul>
+                      <button type="button" id="wb-side-add" class="button button-quiet button-small">＋ 补充资料</button>
+                    </section>
+                    <section aria-labelledby="wb-side-connections-title">
+                      <h3 id="wb-side-connections-title">连接状态</h3>
+                      <ul id="wb-side-connections" class="wb-side-list"></ul>
+                      <button type="button" id="wb-side-manage" class="button button-quiet button-small">管理连接</button>
+                    </section>
+                  </aside>
+                </section>
+                <section id="wb-jobs" class="wb-step-panel" aria-labelledby="wb-jobs-title" hidden>
+                  <div class="wb-heading"><div><h2 id="wb-jobs-title">候选岗位</h2><p id="wb-jobs-sub" class="wb-sub">从已有岗位中选择一个，再继续准备材料</p></div></div>
+                  <div class="wb-segment" role="tablist" aria-label="岗位来源">
+                    <button type="button" role="tab" id="wb-jobs-tab-pool" class="wb-segment-tab" aria-selected="true" aria-controls="wb-jobs-pool">已有岗位</button>
+                    <button type="button" role="tab" id="wb-jobs-tab-collect" class="wb-segment-tab" aria-selected="false" aria-controls="wb-jobs-collect">平台采集</button>
+                  </div>
+                  <div id="wb-jobs-pool" role="tabpanel" aria-labelledby="wb-jobs-tab-pool">
+                    <div class="wb-filter-row">
+                      <label>关键词<input id="wb-jobs-keyword" type="search" maxlength="100" placeholder="例如：AI 应用"></label>
+                      <label>城市<input id="wb-jobs-city" type="search" maxlength="50" placeholder="例如：上海"></label>
+                      <span id="wb-jobs-count" class="wb-sub" aria-live="polite"></span>
+                    </div>
+                    <div class="wb-table-wrap"><table class="wb-table" id="wb-jobs-table"><thead><tr><th scope="col"><span class="wb-visually-hidden">选择</span></th><th scope="col">职位</th><th scope="col">公司</th><th scope="col">城市 / 薪资</th><th scope="col">匹配</th><th scope="col">状态</th></tr></thead><tbody id="wb-jobs-rows"></tbody></table></div>
+                    <section id="wb-job-detail" class="wb-job-detail" aria-label="岗位要点" hidden></section>
+                    <div class="wb-inline-actions">
+                      <button type="button" id="wb-jobs-paste" class="button button-quiet button-small" aria-expanded="false" aria-controls="wb-jobs-entry">＋ 粘贴 JD</button>
+                      <button type="button" id="wb-jobs-json" class="button button-quiet button-small" aria-expanded="false" aria-controls="wb-jobs-entry">导入 JSON</button>
+                    </div>
+                    <div id="wb-jobs-entry" class="wb-inline-host" hidden></div>
+                  </div>
+                  <div id="wb-jobs-collect" class="wb-inline-host" role="tabpanel" aria-labelledby="wb-jobs-tab-collect" hidden></div>
+                  <footer class="wb-step-foot">
+                    <span class="wb-sub">选择岗位不会开始投递</span>
+                    <button type="button" id="wb-jobs-continue" class="button" disabled>用此岗位准备材料 →</button>
+                  </footer>
+                </section>
+                <section id="wb-home" aria-labelledby="wb-home-title" hidden>
                   <div class="wb-heading"><h2 id="wb-home-title">工作总览</h2><button id="wb-refresh" type="button" class="button button-quiet">刷新</button></div>
                   <section class="wb-next" aria-label="建议下一步"><span>下一步</span><h3 id="wb-next-title">正在读取本机工作区</h3><button id="wb-next" type="button" class="button" disabled>继续</button></section>
                   <div id="wb-counts" class="wb-counts" aria-label="已有成果计数"></div>
@@ -101,8 +186,41 @@
                   <div class="wb-home-columns"><section><h3>进行中的任务</h3><div id="wb-tasks"></div><h3>待你确认</h3><div id="wb-pending"></div></section><section><h3>最近成果</h3><div id="wb-results"></div></section></div>
                   <p id="wb-setup-hint" class="wb-setup-hint" hidden></p>
                 </section>
-                <section id="wb-tools" aria-labelledby="wb-tools-title" hidden><h2 id="wb-tools-title">全部工具</h2><label for="wb-tool-filter">查找功能</label><input id="wb-tool-filter" type="search" placeholder="例如：导入、面经、简历"><div id="wb-tool-list"></div></section>
-                <section id="wb-application" aria-labelledby="wb-application-title" hidden><h2 id="wb-application-title">准备申请材料</h2><p>选择目标岗位和已确认经历，助手会准备简历与招呼语草稿。</p><div id="wb-context" class="wb-context"><label>目标岗位<select id="wb-context-job"><option value="">选择岗位</option></select></label><label>经历材料<select id="wb-context-material"><option value="">选择已确认经历</option></select></label><label>简历版本<select id="wb-context-version"><option value="">暂不选择</option></select></label><label>面试会话<select id="wb-context-interview"><option value="">暂不选择</option></select></label></div><div class="wb-actions"><button id="wb-prepare" type="button" class="button">准备简历与招呼语</button><button id="wb-add-experience" type="button" class="button button-quiet">补充经历</button><button id="wb-add-job" type="button" class="button button-quiet">录入岗位</button></div></section>
+                <section id="wb-tools" aria-labelledby="wb-tools-title" hidden><h2 id="wb-tools-title">全部功能</h2><label for="wb-tool-filter">查找功能</label><input id="wb-tool-filter" type="search" placeholder="例如：导入、面经、简历"><div id="wb-tool-list"></div></section>
+                <section id="wb-application" aria-labelledby="wb-application-title" hidden><h2 id="wb-application-title">准备申请材料</h2><p id="wb-application-lede">选择目标岗位和已确认经历，助手会准备简历与招呼语草稿。</p><div id="wb-context" class="wb-context"><label>目标岗位<select id="wb-context-job"><option value="">选择岗位</option></select></label><label>经历材料<select id="wb-context-material"><option value="">选择已确认经历</option></select></label><label>简历版本<select id="wb-context-version"><option value="">暂不选择</option></select></label><label>面试会话<select id="wb-context-interview"><option value="">暂不选择</option></select></label></div><div class="wb-actions"><button id="wb-prepare" type="button" class="button">准备简历与招呼语</button><button id="wb-add-experience" type="button" class="button button-quiet">补充经历</button><button id="wb-add-job" type="button" class="button button-quiet">录入岗位</button></div>
+                  <section id="wb-draft" class="wb-draft" aria-label="申请材料草稿" hidden>
+                    <div class="wb-draft-head">
+                      <div class="wb-tabs" role="tablist" aria-label="草稿类型">
+                        <button type="button" role="tab" class="wb-tab" id="wb-draft-tab-resume" data-wb-draft="resume" aria-selected="true">简历草稿</button>
+                        <button type="button" role="tab" class="wb-tab" id="wb-draft-tab-greeting" data-wb-draft="greeting" aria-selected="false">招呼语</button>
+                        <button type="button" role="tab" class="wb-tab" id="wb-draft-tab-sources" data-wb-draft="sources" aria-selected="false">资料依据</button>
+                      </div>
+                      <span id="wb-draft-state" class="wb-sub" aria-live="polite"></span>
+                    </div>
+                    <div id="wb-draft-host" class="wb-draft-host"></div>
+                    <div id="wb-draft-revise" class="wb-draft-revise" role="group" aria-label="针对选中内容修改" hidden>
+                      <span id="wb-draft-quote" class="wb-sub"></span>
+                      <button type="button" id="wb-draft-revise-button" class="button button-small">针对选中内容提修改</button>
+                    </div>
+                    <footer class="wb-step-foot">
+                      <span id="wb-draft-summary" class="wb-sub">修改通过对话完成，会保留事实来源</span>
+                      <button type="button" id="wb-draft-save" class="button button-quiet">保存为正式简历版本</button>
+                      <button type="button" id="wb-draft-review" class="button">核对完成，去复核申请 →</button>
+                      <span class="wb-sub">尚未发送</span>
+                    </footer>
+                  </section>
+                </section>
+                <section id="wb-review" class="wb-step-panel" aria-labelledby="wb-review-title" hidden>
+                  <div class="wb-heading"><div><h2 id="wb-review-title">核对本次发送</h2><p class="wb-sub">核对对象与实际文案后再确认；对方将看到这里显示的文案。</p></div></div>
+                  <div id="wb-review-host" class="wb-review-host"></div>
+                  <section id="wb-review-gate" class="wb-review-gate" aria-label="发送前确认" hidden>
+                    <label class="checkbox-label"><input type="checkbox" id="wb-review-checked"> 我已核对对象与内容</label>
+                    <label for="wb-review-phrase">确认短语</label>
+                    <input id="wb-review-phrase" type="text" autocomplete="off" spellcheck="false" maxlength="20" aria-describedby="wb-review-phrase-hint">
+                    <p id="wb-review-phrase-hint" class="wb-sub">请输入：确认发送</p>
+                    <button type="button" id="wb-review-back" class="button button-quiet">继续修改</button>
+                  </section>
+                </section>
                 <section id="wb-material" aria-label="经历与资料整理" hidden><div class="wb-heading"><h2>整理真实经历</h2><button id="wb-detailed-experience" type="button" class="button button-quiet">按经历类型填写</button></div><div id="wb-material-host"></div></section>
                 <section id="wb-knowledge" aria-labelledby="wb-knowledge-title" hidden><div class="wb-heading"><h2 id="wb-knowledge-title">项目知识库与证据</h2><button id="wb-knowledge-refresh" type="button" class="button button-quiet">刷新项目资料</button></div><p id="wb-knowledge-status" role="status"></p><div id="wb-knowledge-sources"></div><form id="wb-knowledge-form"><label for="wb-knowledge-project">检索范围</label><select id="wb-knowledge-project" required></select><label for="wb-knowledge-query">想了解项目的什么内容</label><input id="wb-knowledge-query" type="search" maxlength="1000" required placeholder="例如：登录校验、失败处理"><button id="wb-knowledge-search" type="submit" class="button">查找项目依据</button></form><section id="wb-knowledge-results" aria-live="polite"></section><section id="wb-knowledge-coverage"></section></section>
                 <section id="wb-notes" aria-labelledby="wb-notes-title" hidden>
@@ -114,7 +232,8 @@
                 <section id="wb-business-result" aria-label="业务处理结果" hidden></section>
                 <div id="wb-content-host"></div><div id="wb-result-host"></div>
               </div>
-              <aside id="wb-assistant" class="wb-assistant" aria-label="求职对话助手"><div class="wb-heading"><h3>求职助手</h3><button id="wb-show-main" type="button" class="button button-quiet">返回操作区</button></div><details id="wb-history"><summary>历史会话</summary></details><div id="wb-assistant-host"></div></aside>
+              <aside id="wb-assistant" class="wb-assistant" aria-label="任务对话"><div class="wb-heading"><h3>任务对话</h3><button id="wb-show-main" type="button" class="button button-quiet button-small">收起</button></div><details id="wb-history"><summary>历史会话</summary></details><div id="wb-assistant-host"></div></aside>
+            </div>
             </div>
           </section>
 

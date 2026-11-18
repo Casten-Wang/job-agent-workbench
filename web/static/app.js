@@ -4767,11 +4767,17 @@ async function openDeliveryModal(rows, trigger) {
   state.queueDeliveryBatchId = null;
   renderDeliveryModal(list);
   // 视图容器可能带 transform，会让 position:fixed 相对容器定位；弹窗挂到 body 才是全屏遮罩。
-  if (dom.queueDeliveryPanel.parentElement !== document.body) {
+  // 任务工作台把复核面板放进当前任务区（就地复核），不挂到 body。
+  const inlineHost = window.OfferPilotWorkbench?.deliveryHost?.();
+  if (inlineHost) {
+    if (dom.queueDeliveryPanel.parentElement !== inlineHost) inlineHost.append(dom.queueDeliveryPanel);
+    document.body.classList.remove('queue-modal-open');
+  } else if (dom.queueDeliveryPanel.parentElement !== document.body) {
     document.body.append(dom.queueDeliveryPanel);
   }
   dom.queueDeliveryPanel.hidden = false;
-  if (dom.queueDeliveryCancel) dom.queueDeliveryCancel.focus();
+  window.OfferPilotWorkbench?.deliveryOpened?.(list);
+  if (dom.queueDeliveryCancel && !inlineHost) dom.queueDeliveryCancel.focus();
   updateQueueApprovedSelectionUI();
 }
 
@@ -4856,7 +4862,9 @@ function updateDeliveryStartState() {
   const blocked = state.queueDeliveryBusy
     || state.queueDeliverySubmitted
     || Boolean(state.offerpilotTaskActive)
-    || (window.OfferPilotWorkbench?.enabled && !state.wbDeliveryBinding);
+    || (window.OfferPilotWorkbench?.enabled && !state.wbDeliveryBinding)
+    // 任务工作台就地复核：额外要求勾选「已核对」并输入确认短语（只加严，不替代风险确认）。
+    || (window.OfferPilotWorkbench?.deliveryGateOpen && !window.OfferPilotWorkbench.deliveryGateOpen());
   dom.queueDeliveryStart.disabled = !(count > 0 && riskChecked && !blocked);
   dom.queueDeliveryStart.textContent = `确认发送本批 ${count} 条`;
   if (dom.queueDeliveryCancel) dom.queueDeliveryCancel.disabled = state.queueDeliveryBusy;
@@ -4871,6 +4879,8 @@ function deliveryFocusable() {
 
 function handleDeliveryKeydown(event) {
   if (!state.queueDeliveryOpen) return;
+  // 就地复核不是模态框：不拦截 Tab，也不用 Esc 关闭（复核区内的确认短语需要可达）。
+  if (window.OfferPilotWorkbench?.deliveryHost?.()) return;
   if (event.key === 'Escape') {
     if (state.queueDeliveryBusy) return;
     event.preventDefault();
@@ -4902,6 +4912,7 @@ function closeDeliveryModal() {
   state.queueDeliveryBatchId = null;
   document.body.classList.remove('queue-modal-open');
   document.removeEventListener('keydown', handleDeliveryKeydown);
+  window.OfferPilotWorkbench?.deliveryClosed?.();
   // 先恢复按钮可用状态，否则弹窗打开期间被禁用的触发按钮无法接收焦点。
   updateQueueApprovedSelectionUI();
   const target = state.queueDeliveryReturnFocus;
@@ -4917,6 +4928,7 @@ async function startQueueDelivery(button) {
   const ids = [...state.queueDeliveryIds];
   if (!ids.length) return;
   if (!dom.queueDeliveryRisk || !dom.queueDeliveryRisk.checked) return;
+  if (window.OfferPilotWorkbench?.deliveryGateOpen && !window.OfferPilotWorkbench.deliveryGateOpen()) return;
   const count = ids.length;
   state.queueDeliveryBusy = true;
   state.queueDeliverySubmitted = false;
@@ -6366,7 +6378,12 @@ function openHrReplyModal(trigger) {
     document.body.classList.add('hr-modal-open');
     document.addEventListener('keydown', handleHrReplyKeydown);
   }
-  if (dom.hrReplyConfirmPanel.parentElement !== document.body) {
+  // 任务工作台：回复确认在当前会话下方就地显示（W06），不挂到 body 作为模态框。
+  const hrInlineHost = window.OfferPilotWorkbench?.hrReplyHost?.();
+  if (hrInlineHost) {
+    if (dom.hrReplyConfirmPanel.parentElement !== hrInlineHost) hrInlineHost.append(dom.hrReplyConfirmPanel);
+    document.body.classList.remove('hr-modal-open');
+  } else if (dom.hrReplyConfirmPanel.parentElement !== document.body) {
     document.body.append(dom.hrReplyConfirmPanel);
   }
   dom.hrReplyConfirmPanel.hidden = false;
@@ -6391,6 +6408,7 @@ function hrReplyFocusable() {
 
 function handleHrReplyKeydown(event) {
   if (!state.hrReplyModalOpen) return;
+  if (window.OfferPilotWorkbench?.hrReplyHost?.()) return;
   if (event.key === 'Escape') {
     if (state.hrReplyBusy) return;
     event.preventDefault();

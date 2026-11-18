@@ -371,6 +371,7 @@
   }
   async function load() {
     const ticket=epoch;try {const data=await api('/conversations');if(ticket!==epoch)return;sessions=data.items;availableMaterials=data.materials || [];const sid=storage.get(key('conversation'));
+      window.dispatchEvent(new CustomEvent('offerpilot:agent-sessions'));
       notice('');
       if(sessions.some(s=>s.id===sid))await open(sid);else {current=null;events=[];render();$('input').value=storage.get(key('draft.new')) || '';resizeInput();}
     } catch(error) {if(ticket===epoch){notice(error.message+'。可前往其他页面继续操作。');if(error.message.includes('已关闭'))tab('overview');}}
@@ -467,6 +468,7 @@
   tab('chat');render();load().then(resizeInput);refreshNotes();
   window.OfferPilotAgent={
     snapshot:()=>current,
+    sessions:()=>sessions.slice(),
     contextReady:()=>contextChanges,
     setToolLabels:values=>{Object.assign(toolLabels,values);eventsSnapshot='';renderEvents();},
     setOverview:value=>{workspaceOverview=value;if(!current?.messages?.length)renderMessages(false);},
