@@ -1436,7 +1436,7 @@ class DeliveryActionTests(unittest.TestCase):
         self.assertEqual(store.deliveries()[0]["batch_id"], batch["batch_id"])
 
     def test_deliver_is_blocked_for_platforms_without_send_support(self):
-        for channel in ("zhilian", "51job", "liepin"):
+        for channel in ("51job", "liepin"):
             with self.subTest(channel=channel):
                 store = self._store()
                 store.jobs = lambda channel=channel: [{

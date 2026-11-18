@@ -755,6 +755,14 @@ def _detect_job_closed_on_page(target_id: str) -> dict | None:
 
 
 def _send_greeting_once(job: dict, greeting: str, throttle_config: dict) -> tuple[dict, str | None]:
+    if str(job.get("source_platform") or "boss") == "zhilian":
+        # 智联没有「先沟通」流程：立即投递即把简历与平台预置招呼语一起发出。
+        from offerpilot.executor.sender_zhilian import send_zhilian_application
+
+        return send_zhilian_application(
+            job, throttle_config,
+            stop_requested=_stop_requested, sleep_or_stop=_sleep_or_stop,
+        )
     stop_event = throttle_config.get("_workbench_stop_event")
     existing_target_ids = {
         str(target.get("targetId") or "")
@@ -1222,7 +1230,8 @@ def send_greetings(config: dict, force: bool = False, db_path=None) -> int:
                     throttle.mark()
                     update_job_status(db, job["id"], "sent")
                     update_job_last_error(db, job["id"], "")
-                    add_history(db, job["id"], "sent", greeting[:50])
+                    # 智联发出的是平台预置招呼语，历史里记平台实际发送的文字。
+                    add_history(db, job["id"], "sent", str(result_data.get("sent_text") or greeting)[:50])
                     sent_count += 1
                     send_report["sent_count"] = sent_count
                     backoff.record_success()
