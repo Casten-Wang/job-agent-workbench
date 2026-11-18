@@ -13,6 +13,7 @@ CDP_PROXY_URL = get_runtime_url()
 CDP_DIRECT_URL = "http://localhost:9222"
 CDP_DEFAULT_URL = "http://127.0.0.1:9222"
 NAV_TIMEOUT_MS = 15000
+READY_LOCK_WAIT_SECONDS = 5.0
 
 
 def configure(config: dict[str, Any] | None = None) -> None:
@@ -26,7 +27,8 @@ def _client() -> RuntimeClient:
 
 def _ready() -> bool:
     from offerpilot.browser.ownership import browser_execution
-    with browser_execution():
+    # 各平台的后台读取会并行调用这里：短暂排队，不要一撞锁就报「浏览器正被占用」。
+    with browser_execution(wait=READY_LOCK_WAIT_SECONDS):
         return ensure_runtime()
 
 

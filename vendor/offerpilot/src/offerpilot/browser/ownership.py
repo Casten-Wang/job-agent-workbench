@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import tempfile
 import threading
+import time
 
 from offerpilot.browser.runtime import get_runtime_url
 
@@ -18,7 +19,13 @@ class BrowserBusyError(RuntimeError):
 
 
 @contextmanager
-def browser_execution():
+def browser_execution(wait: float = 0.0):
+    """Own the browser for one workflow.
+
+    ``wait`` > 0 lets a short call (such as the readiness check every helper makes)
+    queue behind another short call instead of failing at once; a long workflow
+    still makes it give up after ``wait`` seconds with ``BrowserBusyError``.
+    """
     if getattr(_local, "depth", 0):
         _local.depth += 1
         try:
@@ -26,7 +33,8 @@ def browser_execution():
         finally:
             _local.depth -= 1
         return
-    if not _thread_lock.acquire(blocking=False):
+    got_thread_lock = _thread_lock.acquire(timeout=wait) if wait > 0 else _thread_lock.acquire(blocking=False)
+    if not got_thread_lock:
         raise BrowserBusyError("浏览器正由其他后台任务使用，请先停止该任务")
     stream = None
     acquired = False
@@ -47,10 +55,15 @@ def browser_execution():
                 raise BrowserBusyError("另一个 OfferPilot 进程正在使用浏览器") from exc
         else:
             import fcntl
-            try:
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError as exc:
-                raise BrowserBusyError("另一个 OfferPilot 进程正在使用浏览器") from exc
+            deadline = time.monotonic() + max(0.0, wait)
+            while True:
+                try:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as exc:
+                    if time.monotonic() >= deadline:
+                        raise BrowserBusyError("另一个 OfferPilot 进程正在使用浏览器") from exc
+                    time.sleep(0.05)
         acquired = True
         _local.depth = 1
         yield

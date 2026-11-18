@@ -4627,20 +4627,30 @@ _LIEPIN_EDITOR_PICK = r"""
         const style = getComputedStyle(el);
         return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
     };
-    const scope = document.querySelector('#im-basic-contact') || document.body;
+    // 点开联系人后，猎聘把聊天窗口放在独立的 .ant-im-modal 里（不在 #im-basic-contact 抽屉内），
+    // 输入框与「发送」按钮都在这个窗口里；2026-11-18 在真实页面核对过。
+    const scope = document.querySelector('.im-ui-basic-chat-modal')
+        || document.querySelector('#im-basic-contact') || document.body;
     const editors = Array.from(scope.querySelectorAll('textarea, [contenteditable="true"]')).filter(visible);
     const editor = editors[editors.length - 1] || null;
     const readEditor = () => editor ? String(editor.value !== undefined ? editor.value : editor.innerText || '') : '';
 """
 
 
-def _liepin_type_expression(text: str) -> str:
-    """Fixed expression: put the text in the open chat's editor and click send."""
+def _liepin_type_expression(text: str, hr_name: str = "") -> str:
+    """Fixed expression: put the text in the open chat's editor and click send.
+
+    When ``hr_name`` is given, the chat window must be showing that HR before anything is typed.
+    """
     script = (
         "(async () => {\n"
         + _LIEPIN_EDITOR_PICK
         + r"""
     if (!editor) return JSON.stringify({ok: false, reason: 'no_editor'});
+    const wantedHr = __HR_NAME__;
+    if (wantedHr && !String(scope.innerText || '').includes(wantedHr)) {
+        return JSON.stringify({ok: false, reason: 'wrong_contact'});
+    }
     editor.focus();
     if (editor.tagName === 'TEXTAREA') {
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
@@ -4665,6 +4675,7 @@ def _liepin_type_expression(text: str) -> str:
 })()
 """
     )
+    script = script.replace("__HR_NAME__", json.dumps(hr_name, ensure_ascii=False))
     return script.replace("__TEXT__", json.dumps(text, ensure_ascii=False))
 
 
@@ -4689,7 +4700,9 @@ def _send_liepin_reply(entry: dict[str, Any], text: str, config: dict[str, Any])
             raise ValueError("无法在猎聘聊天列表里唯一定位该会话，请到平台发送")
         if monitor._wait_or_stop(config, 2):
             return False
-        sent = _json_object(_chat_evaluate(monitor, tab, _liepin_type_expression(text), deadline))
+        sent = _json_object(_chat_evaluate(
+                monitor, tab, _liepin_type_expression(text, str(entry.get("hr_name") or "")), deadline
+            ))
         if not sent or not sent.get("ok"):
             return False
         if sent.get("cleared"):

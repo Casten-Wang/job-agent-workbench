@@ -531,5 +531,20 @@ class ReplySendTests(unittest.TestCase):
             )
 
 
+class LiepinEditorScopeTests(unittest.TestCase):
+    """猎聘点开联系人后，输入框与「发送」在独立的聊天窗口里，不在抽屉里（真实页面核对过）。"""
+
+    def test_editor_is_looked_up_in_the_chat_modal_first(self):
+        script = runtime._liepin_type_expression("你好", "祝女士")
+        self.assertIn(".im-ui-basic-chat-modal", script)
+        self.assertLess(script.index("querySelector('.im-ui-basic-chat-modal')"), script.index("querySelector('#im-basic-contact')"))
+
+    def test_chat_window_must_show_the_target_hr_before_typing(self):
+        script = runtime._liepin_type_expression("你好", "祝女士")
+        self.assertIn('"祝女士"', script)
+        self.assertIn("wrong_contact", script)
+        self.assertLess(script.index("wrong_contact"), script.index("execCommand"))
+
+
 if __name__ == "__main__":
     unittest.main()
