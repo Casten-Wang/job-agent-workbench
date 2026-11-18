@@ -143,8 +143,20 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-progress .profile-meter-text { marg
 body.offer-ui:not(#wa-theme-off) #view-profile .chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px 14px;
   margin-top: 12px;
+}
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-chip-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-chip-hint {
+  color: var(--mute);
+  font-size: 12px;
+  line-height: 1.5;
 }
 body.offer-ui:not(#wa-theme-off) #view-profile .profile-chip {
   padding: 3px 10px;
@@ -163,24 +175,6 @@ body.offer-ui:not(#wa-theme-off) #view-profile .profile-chip.is-done {
   background: var(--sg);
   color: var(--sg-ink);
 }
-body.offer-ui:not(#wa-theme-off) .sg-profile-hints {
-  display: grid;
-  gap: 4px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-body.offer-ui:not(#wa-theme-off) .sg-profile-hints li {
-  color: var(--ink-2);
-  font-size: 13px;
-  line-height: 1.55;
-}
-body.offer-ui:not(#wa-theme-off) .sg-profile-hints strong {
-  margin-right: 6px;
-  color: var(--ink);
-  font-weight: 600;
-}
-
 body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-layout {
   display: grid;
   grid-template-columns: 196px minmax(0, 1fr);
@@ -359,6 +353,9 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-progress {
 body.offer-ui:not(#wa-theme-off) #interview-chat.is-idle .chat-composer textarea {
   opacity: .55;
   cursor: not-allowed;
+}
+body.offer-ui:not(#wa-theme-off) #interview-chat.is-idle .chat-composer > label[for="chat-answer"] {
+  display: none;
 }
 body.offer-ui:not(#wa-theme-off) #interview-chat.is-idle .chat-composer { background: transparent; }
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-sr-only {

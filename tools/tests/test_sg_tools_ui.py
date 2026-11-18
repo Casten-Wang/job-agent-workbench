@@ -44,6 +44,10 @@ class SignalToolsUiTest(unittest.TestCase):
         self.assertIn("SG_PROFILE_NAV_SECTIONS", script)
         # 必填规则来自后端返回的 completeness.required，不在前端另写一套。
         self.assertIn("data.required", script)
+        # 走查第 5 条：分节 hint 直接渲染在 chip 旁，选填邮箱写明「选填，影响完整度」。
+        self.assertIn("sg-profile-chip-hint", script)
+        self.assertIn("section.hint", script)
+        self.assertIn("选填，影响完整度", html)
 
     def test_unconnected_agent_cards_move_to_page_bottom_details(self):
         html = read("index.html")
@@ -51,8 +55,8 @@ class SignalToolsUiTest(unittest.TestCase):
         for marker in ('id="profile-api-title"', 'id="push-agent-title"', 'id="resume-agent-title"'):
             with self.subTest(marker=marker):
                 self.assertIn(marker, html)
-        # 四页视图中不再保留旧的编号角标，避免与左侧导航编号冲突。
-        for view in ("view-profile", "view-resume", "view-push"):
+        # 四页视图中不再保留旧的编号角标，避免与左侧导航编号冲突（走查第 9 条）。
+        for view in ("view-profile", "view-resume", "view-interview", "view-push"):
             start = html.index(f'id="{view}"')
             end = html.index("<section class=\"view\"", start + 10)
             with self.subTest(view=view):
@@ -84,6 +88,11 @@ class SignalToolsUiTest(unittest.TestCase):
                 self.assertIn(marker, script)
         html = read("index.html")
         self.assertIn('id="sg-chat-reason"', html)
+        # 走查第 3 条：未开始时答题框与两个「模拟…」测试按钮都隐藏。
+        self.assertIn('id="sg-chat-mock-tools"', html)
+        self.assertIn("dom.chatAnswer.hidden = phase === 'idle'", script)
+        self.assertIn("mockTools.hidden = phase === 'idle'", script)
+        self.assertIn("预计", script)
 
     def test_push_form_uses_placeholders_and_example_tools(self):
         html = read("index.html")

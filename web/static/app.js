@@ -2630,26 +2630,16 @@ function renderProfileMeter(completeness) {
   if (sections.length) {
     const chips = el('div', { className: 'chip-row' });
     sections.forEach((section) => {
-      chips.append(el('span', {
+      // 走查第 5 条：chip 旁直接渲染后端给的 sections[].hint，不用悬停才能看到。
+      const item = el('span', { className: 'sg-profile-chip-item' });
+      item.append(el('span', {
         className: `chip profile-chip${section.done ? ' is-done' : ''}`,
-        text: `${section.done ? '✓' : '缺'} ${section.label}`,
-        attrs: section.hint ? { title: section.hint } : {}
+        text: `${section.done ? '✓' : '缺'} ${section.label}`
       }));
+      if (section.hint) item.append(el('span', { className: 'sg-profile-chip-hint', text: section.hint }));
+      chips.append(item);
     });
     dom.profileMeter.append(chips);
-  }
-  if (!state.profileDirty) {
-    // 未完成的分节直接写出后端给的 hint，用户不用猜要补什么。
-    const hints = sections.filter((section) => !section.done && section.hint);
-    if (hints.length) {
-      const list = el('ul', { className: 'sg-profile-hints' });
-      hints.forEach((section) => {
-        const item = el('li');
-        item.append(el('strong', { text: section.label }), document.createTextNode(section.hint));
-        list.append(item);
-      });
-      dom.profileMeter.append(list);
-    }
   }
   const requiredMissing = Array.isArray(data.required_missing) ? data.required_missing : [];
   if (!state.profileDirty && requiredMissing.length) {
@@ -6463,12 +6453,15 @@ function syncChatPrimary() {
   }
   if (dom.chatAnswer) {
     const lockInput = phase === 'preparing' || phase === 'asking' || phase === 'ending' || phase === 'done' || phase === 'end';
-    // 未开始时答题框不可编辑，避免看起来像已经在面试。
+    // 走查第 3 条：未开始时直接隐藏答题框，而不是留一个禁用但可见的输入区。
+    dom.chatAnswer.hidden = phase === 'idle';
     dom.chatAnswer.disabled = phase === 'idle' || lockInput;
     dom.chatAnswer.placeholder = phase === 'idle'
       ? '开始后再输入回答。'
       : '输入这一问的回答。空白内容不会发送。';
   }
+  const mockTools = document.getElementById('sg-chat-mock-tools');
+  if (mockTools) mockTools.hidden = phase === 'idle';
   const chatPanel = document.getElementById('interview-chat');
   if (chatPanel) chatPanel.classList.toggle('is-idle', phase === 'idle');
   const reason = document.getElementById('sg-chat-reason');

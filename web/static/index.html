@@ -713,7 +713,7 @@
               <div class="form-grid">
                 <div class="form-field"><label for="profile-name">姓名 <span class="profile-required-mark">必填</span></label><input id="profile-name" type="text" autocomplete="name"></div>
                 <div class="form-field"><label for="profile-city">所在城市 <span class="profile-required-mark">必填</span></label><input id="profile-city" type="text" autocomplete="address-level2"></div>
-                <div class="form-field"><label for="profile-email">邮箱</label><input id="profile-email" type="email" autocomplete="email"><p class="sg-field-note">计入「基本信息」完整度；不填时这一节会显示未完成。</p></div>
+                <div class="form-field"><label for="profile-email">邮箱</label><input id="profile-email" type="email" autocomplete="email"><p class="sg-field-note">选填，影响完整度：填写会计入「基本信息」完整度；不填时这一节会显示未完成。</p></div>
                 <div class="form-field"><label for="profile-phone">电话</label><input id="profile-phone" type="tel" autocomplete="tel"></div>
                 <div class="form-field"><label for="profile-wechat">微信</label><input id="profile-wechat" type="text" autocomplete="off"></div>
                 <div class="form-field"><label for="profile-links">作品集 / GitHub / 链接</label><input id="profile-links" type="text" autocomplete="url" placeholder="多个链接用逗号分隔"></div>
@@ -851,7 +851,7 @@
                 </div>
                 <p class="sg-disabled-reason" id="sg-chat-reason">先点「开始这场面试」。</p>
               </div>
-              <div class="chat-sr-only">
+              <div class="chat-sr-only sg-chat-mock-tools" id="sg-chat-mock-tools" hidden>
                 <button type="button" id="chat-mock-interrupt">模拟半句中断</button>
                 <button type="button" id="chat-mock-timeup">模拟时长用完</button>
               </div>
