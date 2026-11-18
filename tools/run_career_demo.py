@@ -84,7 +84,7 @@ def main():
             raise RuntimeError("Career service startup failed; check model configuration and ports 18747/18748")
         print("OfferPilot: http://127.0.0.1:8766/ · demo > 定制简历 > 开始项目核验", flush=True)
         print("Personal projects: user > 定制简历 > 连接 GitHub", flush=True)
-        print("Model: step-5-preview · isolated demo/user databases · Ctrl+C stops services", flush=True)
+        print("Model: from 设置 > AI 接口设置 · isolated demo/user databases · Ctrl+C stops services", flush=True)
         workbench.serve_forever()
     except KeyboardInterrupt:
         pass

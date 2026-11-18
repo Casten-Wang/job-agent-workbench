@@ -361,6 +361,47 @@ process.stdout.write(JSON.stringify({
                 self.assertIn(marker, block)
 
 
+class WindowsLauncherTests(unittest.TestCase):
+    """Windows 启动脚本要用仓库内 .venv、不加 -I，且 README 不再留下已不存在的启动/凭据说法。"""
+
+    def test_ps1_uses_repo_venv_without_isolated_mode(self):
+        ps1 = _read(PROJECT_ROOT / "run_career_demo.ps1")
+        self.assertIn(".venv\\Scripts\\python.exe", ps1)
+        self.assertNotIn(".venv-interview", ps1)
+        self.assertNotIn(" -I ", ps1)
+        self.assertIn("tools\\run_career_demo.py", ps1)
+        self.assertIn("--engine-root", ps1)
+        self.assertIn("NO_PROXY", ps1)
+
+    def test_docs_do_not_mention_removed_launcher_pieces(self):
+        for rel in ("README.md", "web/WORKBENCH-AGENT-API.md", "web/PERSONAL-CAREER-API.md"):
+            text = _read(PROJECT_ROOT / rel)
+            for stale in ("start-background.py", "--reset-keys", ".venv-interview", "上级 Python 引擎", "上级目录的 Python 引擎"):
+                self.assertNotIn(stale, text, (rel, stale))
+        readme = _read(PROJECT_ROOT / "README.md")
+        self.assertIn("run_career_demo.ps1", readme)
+        self.assertIn("--remote-debugging-port=9222", readme)
+        self.assertIn("chrome.exe", readme)
+
+    def test_launcher_banner_does_not_claim_fixed_model(self):
+        self.assertNotIn("step-5-preview", _read(PROJECT_ROOT / "tools/run_career_demo.py"))
+
+
+class TestGateAndPdfFontTests(unittest.TestCase):
+    def test_run_tests_script_runs_all_three_suites(self):
+        script = _read(PROJECT_ROOT / "tools/run_tests.sh")
+        for suite in ("-s tools/tests", "-s tests", "-s interview_agent/tests"):
+            self.assertIn(suite, script)
+        self.assertIn("status=1", script)
+        self.assertIn("exit $status", script)
+
+    def test_pdf_export_has_non_windows_cjk_font_candidates(self):
+        source = _read(PROJECT_ROOT / "web/resume_pdf.py")
+        for font in ("simsun.ttc", "msyh.ttc", "Songti.ttc", "STHeiti Medium.ttc"):
+            self.assertIn(font, source)
+        self.assertIn("def cjk_font_candidates", source)
+
+
 class ReadmeRunStepsTests(unittest.TestCase):
     """README 里的安装与启动步骤要和仓库里真实存在的文件、命令一致。"""
 

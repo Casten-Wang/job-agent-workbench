@@ -1,11 +1,13 @@
+import sys
 import tempfile
 from pathlib import Path
 import unittest
 
-from offerpilot.tools.local_secrets import load, save
+from tools.local_secrets import load, save
 
 
 class LocalSecretsTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'win32', 'DPAPI 仅在 Windows 可用')
     def test_windows_dpapi_roundtrip(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "credentials.dpapi.json"

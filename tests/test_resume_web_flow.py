@@ -12,7 +12,7 @@ import time
 from test_experience_import import ExperienceAgent, INPUT
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'offerpilot' / 'web'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'web'))
 import test_career_pipeline as pipeline
 import backend
 import server

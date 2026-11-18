@@ -38,7 +38,7 @@
 
 ### 环境要求
 
-- Python 3.11 及以上（开发机为 3.14），macOS 或 Linux 的 `sh`。
+- Python 3.11 及以上（开发机为 3.14），macOS / Linux 用 `sh`，Windows 用 PowerShell（命令见下文各处的 Windows 写法）。
 - Google Chrome：采集岗位与读取 HR 会话都通过你本机已登录的 Chrome 完成，不会另起浏览器。
 - 一个大模型服务的 API Key（Claude、DeepSeek、豆包或兼容接口）：评分、招呼语和对话助理需要；只看岗位池、个人资料等页面不需要。Key 只在网页「设置 › AI 接口设置」里填写，保存在本机被忽略的目录，不写进仓库、命令行或环境变量。
 
@@ -76,7 +76,13 @@ NO_PROXY=127.0.0.1,localhost .venv/bin/python -B tools/run_career_demo.py --engi
 
 `run_web.sh` 在没有 `.venv` 时会自动创建并安装工作台依赖。
 
-Windows 下的 `run_career_demo.ps1` 是旧启动方式，默认在上级目录找 `.venv-interview`；其他系统请用上面的命令。
+**Windows（PowerShell）**：先在仓库根目录执行 `python -m venv .venv`，再 `.venv\Scripts\python.exe -m pip install -r requirements-offerpilot.txt -r interview_agent/requirements.lock.txt`，之后启动：
+
+```powershell
+.\run_career_demo.ps1
+```
+
+脚本使用仓库内的 `.venv`，等价于上面的完整启动命令。Windows 路径尚未在真机上跑通验证；`run_web.sh` 是 sh 脚本，Windows 上只启动工作台时请运行 `.venv\Scripts\python.exe -I -B web\server.py --host 127.0.0.1 --port 8766`。
 
 ### 首次使用
 
@@ -86,6 +92,16 @@ Windows 下的 `run_career_demo.ps1` 是旧启动方式，默认在上级目录�
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.offerpilot-chrome"
+```
+
+Windows 与 Linux 同理（以下命令未在对应系统实测）：
+
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:USERPROFILE\.offerpilot-chrome"
+```
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.offerpilot-chrome"
 ```
 
 4. 进入「03 岗位流水线 › 1 采集」，选任务类型和平台，点「检查环境」，全部通过后再开始。检查项里会明确写出缺什么。
@@ -109,7 +125,7 @@ Windows 下的 `run_career_demo.ps1` 是旧启动方式，默认在上级目录�
 sh tools/run_tests.sh
 ```
 
-脚本优先使用 `.venv`；测试只用虚构数据，不读取本机的 `web/data/`，在没有任何本机数据的全新克隆里也应全部通过。
+脚本优先使用 `.venv`，依次跑三组测试：工作台（`tools/tests`）、对话与项目核验引擎（`tests`）、面试引擎（`interview_agent/tests`），任何一组失败整体即失败。测试只用虚构数据，不读取本机的 `web/data/`，在没有任何本机数据的全新克隆里也应全部通过。
 
 命令行工具示例：
 
@@ -202,7 +218,7 @@ python3 -I -B tools/upcv_adapter.py --print-config
 
 本项目面向用户本人授权的本机求职流程。自动化功能仅用于用户有权访问和操作的账号、资料及平台；用户自行确认平台规则、账号影响、隐私与外部服务的数据处理方式。不要将真实身份资料、账号凭据或个人浏览器数据提交到仓库。
 
-凭据只从环境变量或本机运行时配置读取；`.env`、`workspace/` 下的个人资料、`web/data/`、`.venv/` 已在 [.gitignore](.gitignore) 中忽略。Windows 启动脚本首次输入 Step/LangSmith key 后，会使用当前 Windows 用户 DPAPI 加密保存到 `web/data/user/career-agent/model-credentials.dpapi.json`，后续重启无需重复输入；更换 key 时使用 `start-background.py --reset-keys`。
+凭据不进仓库：模型 API Key 只在网页「设置 › AI 接口设置」填写，保存在被忽略的 `web/data/user/offerpilot/` 下；GitHub 登录令牌保存在本机 user 目录（Windows 用当前用户 DPAPI 加密，POSIX 用仅所有者可读写的文件）。`.env`、`workspace/` 下的个人资料、`web/data/`、`.venv/` 已在 [.gitignore](.gitignore) 中忽略。
 
 ## 验收文档
 

@@ -4,9 +4,9 @@
 
 ## 运行与恢复
 
-沿用 `run_career_demo.ps1` 和上级 Python 引擎，不新增产品服务端口。变更后需重启该启动器，已在内存中的旧服务不会自动加载新路由。8766 为工作台，18747/18748 为隔离的 demo/user 引擎。
+沿用 `tools/run_career_demo.py`（Windows 可用 `run_career_demo.ps1`）和仓库内的 `interview_agent` 引擎，不新增产品服务端口。变更后需重启该启动器，已在内存中的旧服务不会自动加载新路由。8766 为工作台，18747/18748 为隔离的 demo/user 引擎。
 
-新增模块位于引擎的 `interview_agent/workbench.py`、`workbench_contracts.py`、`workbench_api.py`，同源桥接在 `web/workbench_agent_runtime.py`，页面资产为独立的 `workbench-agent.js/css`。引擎仍在本仓库上级目录，尚未合并成独立发行包。
+新增模块位于引擎的 `interview_agent/workbench.py`、`workbench_contracts.py`、`workbench_api.py`，同源桥接在 `web/workbench_agent_runtime.py`，页面资产为独立的 `workbench-agent.js/css`。引擎源码位于本仓库的 `interview_agent/`。
 
 会话记录使用各 owner 业务数据库里的 `wb_conversation` 记录类型，包含消息、事件、执行状态、草稿修订和待确认动作；LangGraph 的 thread_id 包含 owner、会话编号和执行编号，与旧面试 checkpoint 分离。停止会取消当前模型请求，正式提交开始后等待真实写入结果，不把取消 HTTP 等同于撤销写入。重启不自动重放已执行工具；未完成任务保留结果并等待继续。
 
@@ -53,7 +53,7 @@
 
 ## 验收命令与限制
 
-OfferPilot 根测试使用本机默认 Python，`python -I -B -m unittest discover -s tools/tests -q`。引擎与 Agent 测试使用上级 `.venv-interview/Scripts/python.exe -X utf8 -m unittest discover -s interview_agent/tests -q`。Windows Python 3.11 的 `-I` 子进程会忽略编码环境变量，部分旧 CLI 测试在该解释器下有 GBK/UTF-8 冲突；这不通过修改断言掩盖。
+OfferPilot 根测试使用本机默认 Python，`python -I -B -m unittest discover -s tools/tests -q`。引擎与 Agent 测试使用仓库 `.venv` 的 Python：`.venv/bin/python -X utf8 -m unittest discover -s interview_agent/tests -q`（Windows 为 `.venv\Scripts\python.exe`）。Windows Python 3.11 的 `-I` 子进程会忽略编码环境变量，部分旧 CLI 测试在该解释器下有 GBK/UTF-8 冲突；这不通过修改断言掩盖。
 
 上级 `验证/workbench_agent_smoke.py --verify` 使用真实 localhost HTTP、隔离数据库与协议测试模型完成主链。`--live --verify` 则使用已有 DPAPI 配置的 Step 密钥和同样的合成资料进行真实模型验收；不会记录密钥，也不使用真实 user 资料。验收结果与页面证据保存在上级 `outputs/workbench-agent/`。
 

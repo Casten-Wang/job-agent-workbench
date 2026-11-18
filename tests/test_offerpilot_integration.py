@@ -17,10 +17,10 @@ from interview_agent.model_adapter import ModelError
 from interview_hub.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "offerpilot/web"))
+sys.path.insert(0, str(ROOT / "web"))
 import backend
 import career_agent_runtime as career
-spec = importlib.util.spec_from_file_location("offerpilot_workbench_server", ROOT / "offerpilot/web/server.py")
+spec = importlib.util.spec_from_file_location("offerpilot_workbench_server", ROOT / "web/server.py")
 workbench = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workbench)
 TOKEN = "public-integration-contract-test-token"
@@ -86,7 +86,7 @@ class OfferPilotIntegrationTests(unittest.TestCase):
     def call(self, method, path, payload=None):
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=10)
         try:
-            connection.request(method, path + "?mode=demo", body=json.dumps(payload) if payload else None,
+            connection.request(method, path + "?mode=user", body=json.dumps(payload) if payload else None,
                                headers={"Content-Type": "application/json"})
             response = connection.getresponse()
             data = json.loads(response.read())

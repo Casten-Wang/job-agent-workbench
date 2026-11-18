@@ -7,6 +7,20 @@ from pathlib import Path
 from resume_layout import blocks, emphasized, inline_text, template_name
 
 
+def cjk_font_candidates(classic):
+    """(正文字体候选, 粗体候选)：Windows 优先，其次 macOS 与常见 Linux 中文字体；reportlab 只能嵌入 TrueType 轮廓。"""
+    windows = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
+    mac = Path('/System/Library/Fonts')
+    linux = [Path('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'), Path('/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf')]
+    if classic:
+        regular = [windows / 'simsun.ttc', mac / 'Supplemental/Songti.ttc', *linux]
+        heavy = [windows / 'simhei.ttf', windows / 'simsun.ttc', mac / 'STHeiti Medium.ttc', *linux]
+    else:
+        regular = [windows / 'msyh.ttc', windows / 'simsun.ttc', mac / 'STHeiti Light.ttc', mac / 'STHeiti Medium.ttc', *linux]
+        heavy = [windows / 'msyhbd.ttc', windows / 'simsun.ttc', mac / 'STHeiti Medium.ttc', *linux]
+    return regular, heavy
+
+
 def render_pdf(markdown, *, role='', template='professional'):
     template_name(template)
     from reportlab.lib.colors import HexColor
@@ -18,14 +32,10 @@ def render_pdf(markdown, *, role='', template='professional'):
     from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate
 
     classic = template == 'classic'
-    font_dir = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
     font, bold = ('OfferPilotSong', 'OfferPilotHei') if classic else ('OfferPilotSans', 'OfferPilotSansBold')
-    files = ('simsun.ttc', 'simhei.ttf') if classic else ('msyh.ttc', 'msyhbd.ttc')
-    for name, filename in zip((font, bold), files):
-        path = font_dir / filename
-        if not path.is_file():
-            path = font_dir / 'simsun.ttc'
-        if not path.is_file():
+    for name, candidates in zip((font, bold), cjk_font_candidates(classic)):
+        path = next((item for item in candidates if item.is_file()), None)
+        if path is None:
             raise ValueError('直接导出 PDF 需要本机中文字体；可改用打印页保存 PDF。')
         if name not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=0))

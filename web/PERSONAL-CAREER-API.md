@@ -15,7 +15,7 @@
 - `POST /api/career-user/experience-text?mode=user`：`{filename,content_base64}`，仅本机提取文字并返回 `{text}`，不保存原文件、不调用模型。
 - `POST /api/career-user/experience-import?mode=user`：`kind` 为 `internship/work/project/portfolio`；字段为 `name,organization,position,start,end,role,jd,context,contribution,outcome,source_text,portfolio_url,confirmed,model_consent`。返回 202 与 `project_id`，通过现有 `/projects/{id}` 读取整理进度并逐条确认。
 
-Python 引擎仍位于上级工作区，新增逻辑在 `interview_agent/experience.py`、`career.py` 与 `career_api.py`；启动器需要使用这份更新后的引擎。
+Python 引擎位于本仓库 `interview_agent/`，新增逻辑在 `interview_agent/experience.py`、`career.py` 与 `career_api.py`；启动器需要使用这份更新后的引擎。
 
 ## 简历模板（2026-11-17）
 
@@ -27,9 +27,9 @@ Python 引擎仍位于上级工作区，新增逻辑在 `interview_agent/experie
 
 ## 首次连接 GitHub
 
-启动 `./run_career_demo.ps1` 后，打开工作台，选择 **05 定制简历 → 首次配置 GitHub 登录应用**。
+按 README「启动」完整启动后，打开工作台，选择 **05 定制简历 → 首次配置 GitHub 登录应用**。
 
-该启动器继续使用上级目录的 Python 引擎，不是独立打包的 OfferPilot 发行版。引擎依赖记录于 `interview_agent/requirements.txt`，Windows GitHub HTTPS 使用 [truststore 的原生系统证书上下文](https://truststore.readthedocs.io/en/latest/)；不关闭证书校验，也不全局替换 SSL。
+该启动器使用仓库内的 `interview_agent` 引擎，不是独立打包的 OfferPilot 发行版。引擎依赖记录于 `interview_agent/requirements.txt`，Windows GitHub HTTPS 使用 [truststore 的原生系统证书上下文](https://truststore.readthedocs.io/en/latest/)；不关闭证书校验，也不全局替换 SSL。
 
 1. 点击页面的 GitHub 创建链接，注册自己的 OAuth App。
 2. Application name 填 `OfferPilot Local`；Homepage URL 和 Authorization callback URL 都填 `http://127.0.0.1:8766`。设备授权不使用回调，但 GitHub 注册表单需要填写。
@@ -65,7 +65,7 @@ GitHub 登录记录在本机 user 目录保存：Windows 使用当前用户 DPAP
 
 2026-11-17 修复：同一源码和经历重新整理后可再次确认，不因任务编号不同触发 409。生成前检查已保存的姓名与真实性确认；资料缺失或存在未保存修改时，引导至个人资料并保留当前勾选。更换项目会清空旧预览和导出状态，已保存版本仍可从历史打开；刷新页面可恢复最近查看的已保存版本。版本读取先于 GitHub 仓库请求执行，仓库读取失败不会阻止已保存版本的展示。
 
-回归入口：上级引擎目录运行 `.venv-interview/Scripts/python.exe -B -m unittest discover -s tests -p test_resume_web_flow.py`，覆盖同源 HTTP → 引擎 → 预览 → 幂等保存 → 读取版本 → 打印文档；`test_career_pipeline.py` 覆盖重复整理与确认。网页验收使用隔离的临时数据库、模拟 GitHub 和模型响应，实际点击下载 Markdown 并打开打印页，不替用户确认真实经历。PDF 文件仍通过浏览器打印对话框另存。
+回归入口：在仓库根目录运行 `.venv/bin/python -B -m unittest discover -s tests -p test_resume_web_flow.py`，覆盖同源 HTTP → 引擎 → 预览 → 幂等保存 → 读取版本 → 打印文档；`test_career_pipeline.py` 覆盖重复整理与确认。网页验收使用隔离的临时数据库、模拟 GitHub 和模型响应，实际点击下载 Markdown 并打开打印页，不替用户确认真实经历。PDF 文件仍通过浏览器打印对话框另存。
 
 直接生成的草稿与版本标记 `assessment_status=not_assessed`，`session_id=null`。它们基于源码证据和用户确认，不代表经过面试或证明独立掌握。已有 session_id 生成路径仍兼容：存在职责或版本纠正时，必须先重新确认材料，不能据旧会话直接生成。个人职责属于用户确认，不把仓库所有权或提交量当作独立完成证明。
 
