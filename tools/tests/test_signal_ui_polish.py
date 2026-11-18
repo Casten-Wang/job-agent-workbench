@@ -129,6 +129,14 @@ class SignalScriptTests(unittest.TestCase):
         self.assertIn("}, 3000);", block)
         self.assertIn("if (safeKind === 'error') return;", block)
 
+    def test_switching_pages_clears_the_status(self):
+        # 状态条跨页残留：切页时必须清掉上一页的成功/信息提示，错误也不带进新页面。
+        clear = _between(self.script, "function clearStatus(", "\nfunction ")
+        self.assertIn("window.clearTimeout(statusToastTimer)", clear)
+        self.assertIn("dom.status.textContent = ''", clear)
+        view = _between(self.script, "function showView(", "\nfunction ")
+        self.assertIn("clearStatus();", view)
+
     def test_ai_provider_switch_fills_defaults(self):
         self.assertIn("const AI_PROVIDER_DEFAULTS = {", self.script)
         self.assertIn("applyAiProviderDefaults", self.script)

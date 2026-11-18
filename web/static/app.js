@@ -686,6 +686,16 @@ function setStatus(message, kind = 'ok') {
   }, 3000);
 }
 
+// 切页时清掉上一页的提示：成功/信息类不再残留，错误也不再带进新页面。
+function clearStatus() {
+  if (statusToastTimer) {
+    window.clearTimeout(statusToastTimer);
+    statusToastTimer = null;
+  }
+  dom.status.textContent = '';
+  dom.status.className = 'status status-info';
+}
+
 function setRefreshing(active) {
   state.refreshing = Boolean(active);
   dom.views.classList.toggle('is-loading', Boolean(active));
@@ -871,6 +881,7 @@ function applyTheme(choice) {
 }
 
 function showView(name) {
+  clearStatus();
   const hub = HUB_FOR_VIEW[name] || name;
   if (dom.topbarTitle) dom.topbarTitle.textContent = VIEW_TITLES[name] || '首页';
   dom.navItems.forEach((button) => {
