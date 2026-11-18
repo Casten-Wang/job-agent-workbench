@@ -171,6 +171,37 @@ class DossierModelTests(unittest.TestCase):
             ["86", "中", "低"],
         )
 
+    def test_real_snapshot_shapes_are_translated_not_dumped(self):
+        # 真实快照里薪资是对象、招聘状态与平台是枚举、判断依据是 0–1 小数。
+        job = {
+            "standard": {
+                "title": "产品经理",
+                "salary_and_start": {"salary": "20-24K", "start": None},
+                "hiring_status": "unknown",
+                "source_platform": "boss",
+            },
+            "match": {"fit_score": 49, "fit_confidence": 0.92, "risk_level": "medium"},
+        }
+        result = self._run({"job": job, "snapshot": {}, "review_id": None})
+        values = {item["key"]: item["value"] for item in result["standard"]}
+        self.assertEqual(values["salary_and_start"], "薪资 20-24K")
+        self.assertIsNone(values["hiring_status"])
+        self.assertEqual(values["source_platform"], "BOSS直聘")
+        self.assertEqual(
+            [item["value"] for item in result["match"]],
+            ["49", "92%", "中"],
+        )
+        both = self._run({
+            "job": {"standard": {"salary_and_start": {"salary": "20-24K", "start": "尽快"}, "hiring_status": "closed"}},
+            "snapshot": {},
+            "review_id": None,
+        })
+        both_values = {item["key"]: item["value"] for item in both["standard"]}
+        self.assertEqual(both_values["salary_and_start"], "薪资 20-24K；到岗 尽快")
+        self.assertEqual(both_values["hiring_status"], "已停止招聘")
+        empty = self._run({"job": {"standard": {"salary_and_start": {"salary": None, "start": None}}}, "snapshot": {}, "review_id": None})
+        self.assertIsNone({i["key"]: i["value"] for i in empty["standard"]}["salary_and_start"])
+
     def test_traceability_keeps_partial_rows_and_drops_empty_ones(self):
         job = {
             "traceability": [

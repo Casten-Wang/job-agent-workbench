@@ -1949,24 +1949,58 @@ function dossierList(value) {
   return text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
 }
 
+/* 后端给的是枚举原值或对象；这里只翻译成人话，缺值仍返回 null（显示为「未知」），不猜测。 */
+const DOSSIER_HIRING_STATUS = { closed: '已停止招聘', not_closed: '仍在招聘', unknown: null };
+const DOSSIER_SOURCE_PLATFORM = { boss: 'BOSS直聘', liepin: '猎聘', zhilian: '智联招聘', job51: '前程无忧' };
+const DOSSIER_RISK_LEVEL = { low: '低', medium: '中', high: '高' };
+
+function dossierSalaryAndStart(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const parts = [];
+    const salary = dossierText(raw.salary);
+    const start = dossierText(raw.start);
+    if (salary) parts.push(`薪资 ${salary}`);
+    if (start) parts.push(`到岗 ${start}`);
+    return parts.length ? parts.join('；') : null;
+  }
+  return dossierText(raw);
+}
+
+function dossierEnum(map, raw) {
+  const text = dossierText(raw);
+  if (text === null) return null;
+  return Object.prototype.hasOwnProperty.call(map, text) ? map[text] : text;
+}
+
+function dossierFormatValue(key, raw) {
+  if (Array.isArray(raw)) return dossierList(raw).join('\n') || null;
+  if (key === 'salary_and_start') return dossierSalaryAndStart(raw);
+  if (key === 'hiring_status') return dossierEnum(DOSSIER_HIRING_STATUS, raw);
+  if (key === 'source_platform') return dossierEnum(DOSSIER_SOURCE_PLATFORM, raw);
+  return dossierText(raw);
+}
+
 function dossierStandard(job) {
   const standard = job && typeof job.standard === 'object' && job.standard ? job.standard : {};
-  return JOB_STANDARD_FIELDS.map(([key, label]) => {
-    const raw = standard[key];
-    return {
-      key,
-      label,
-      value: Array.isArray(raw) ? dossierList(raw).join('\n') || null : dossierText(raw)
-    };
-  });
+  return JOB_STANDARD_FIELDS.map(([key, label]) => ({
+    key,
+    label,
+    value: dossierFormatValue(key, standard[key])
+  }));
+}
+
+function dossierConfidence(raw) {
+  // 0–1 的小数显示成百分比；已经是文字（如「中」）的原样保留。
+  if (typeof raw === 'number' && raw >= 0 && raw <= 1) return `${Math.round(raw * 100)}%`;
+  return dossierText(raw);
 }
 
 function dossierMatch(job) {
   const match = job && typeof job.match === 'object' && job.match ? job.match : {};
   return [
     { key: 'fit_score', label: '适配分', value: dossierText(match.fit_score) },
-    { key: 'fit_confidence', label: '判断依据', value: dossierText(match.fit_confidence) },
-    { key: 'risk_level', label: '岗位风险等级', value: dossierText(match.risk_level) }
+    { key: 'fit_confidence', label: '判断依据', value: dossierConfidence(match.fit_confidence) },
+    { key: 'risk_level', label: '岗位风险等级', value: dossierEnum(DOSSIER_RISK_LEVEL, match.risk_level) }
   ];
 }
 
