@@ -66,7 +66,7 @@
     <div class="main-column" id="main">
       <header class="topbar">
         <div class="topbar-heading">
-          <h1>秋招规划师</h1>
+          <h1 id="topbar-title">首页</h1>
         </div>
         <div class="topbar-meta">
           <p class="meta-line" id="generated-at">尚未载入本地数据</p>
@@ -80,43 +80,66 @@
       <div class="views" id="views" aria-busy="true">
         <section class="view" id="view-workbench" data-view-panel="workbench" aria-labelledby="workbench-title">
           <div class="home-today" id="home-today">
-            <header class="home-head">
-              <h2 class="home-title" id="workbench-title">今天</h2>
-              <p class="home-date" id="home-date"></p>
-            </header>
-            <p class="home-lede" id="home-lede" aria-live="polite">正在读取本地数据…</p>
+            <div class="sg-home-main">
+              <header class="home-head">
+                <p class="sg-home-day" id="sg-home-day" aria-hidden="true">18</p>
+                <div class="sg-home-datemeta">
+                  <h2 class="home-title" id="workbench-title">今天</h2>
+                  <p class="home-date" id="home-date"></p>
+                  <p class="sg-home-live"><span class="sg-live-dot" aria-hidden="true"></span><span id="sg-home-live-text">正在读取本地数据</span></p>
+                </div>
+              </header>
+              <p class="home-lede" id="home-lede" aria-live="polite">正在读取本地数据…</p>
 
-            <ul class="home-tasks" aria-label="今天要做的事">
-              <li class="home-task">
-                <span class="home-task-label">待处理岗位</span>
-                <span class="home-task-count" id="home-jobs-count">0 个</span>
-                <button class="button button-small" type="button" id="home-jobs-action" data-view-link="queue">去确认</button>
-              </li>
-              <li class="home-task">
-                <span class="home-task-label">待确认招呼语</span>
-                <span class="home-task-count" id="home-greetings-count">0 条</span>
-                <button class="button button-small" type="button" id="home-greetings-action" data-view-link="queue">去发送</button>
-              </li>
-              <li class="home-task">
-                <span class="home-task-label">待回复的 HR 邮件</span>
-                <span class="home-task-count" id="home-replies-count">0 封</span>
-                <button class="button button-small" type="button" id="home-replies-action" data-view-link="mail">去回复</button>
-              </li>
-            </ul>
+              <ul class="home-tasks" aria-label="今天要做的事">
+                <li class="home-task">
+                  <span class="home-task-label">待处理岗位<span class="sg-home-task-sub">采集后在这里判断去留</span></span>
+                  <span class="home-task-count" id="home-jobs-count">0 个</span>
+                  <button class="button button-small" type="button" id="home-jobs-action" data-view-link="queue">去确认</button>
+                </li>
+                <li class="home-task">
+                  <span class="home-task-label">待确认招呼语<span class="sg-home-task-sub">生成后发送前再核对</span></span>
+                  <span class="home-task-count" id="home-greetings-count">0 条</span>
+                  <button class="button button-small" type="button" id="home-greetings-action" data-view-link="queue">去发送</button>
+                </li>
+                <li class="home-task">
+                  <span class="home-task-label">待回复的 HR 消息<span class="sg-home-task-sub" id="home-replies-sub">平台会话看未读，本地邮件看意图</span></span>
+                  <span class="home-task-count" id="home-replies-count">0 封</span>
+                  <button class="button button-small" type="button" id="home-replies-action" data-view-link="mail">去回复</button>
+                </li>
+              </ul>
 
-            <p class="home-summary" id="home-send-summary">还没有发送记录。</p>
+              <p class="home-summary" id="home-send-summary">还没有发送记录。</p>
 
-            <details class="home-more" id="home-more">
-              <summary>这个工作台怎么用</summary>
-              <p>采集岗位，筛出合适的，生成招呼语，确认后发送。发送前一定会再问你一次，程序不会自己发。</p>
-              <p>先填好个人资料，评分和招呼语会更准。简历和模拟面试可以随时补。</p>
-              <p class="home-more-links">
-                <button class="button button-quiet button-small" type="button" data-view-link="profile">填写个人资料</button>
-                <button class="button button-quiet button-small" type="button" data-view-link="resume">整理简历</button>
-                <button class="button button-quiet button-small" type="button" data-view-link="interview">练习面试</button>
-                <button class="button button-quiet button-small" type="button" data-view-link="collect">采集新岗位</button>
-              </p>
-            </details>
+              <details class="home-more" id="home-more">
+                <summary>这个工作台怎么用</summary>
+                <p>采集岗位，筛出合适的，生成招呼语，确认后发送。发送前一定会再问你一次，程序不会自己发。</p>
+                <p>先填好个人资料，评分和招呼语会更准。简历和模拟面试可以随时补。</p>
+                <p class="home-more-links">
+                  <button class="button button-quiet button-small" type="button" data-view-link="profile">填写个人资料</button>
+                  <button class="button button-quiet button-small" type="button" data-view-link="resume">整理简历</button>
+                  <button class="button button-quiet button-small" type="button" data-view-link="interview">练习面试</button>
+                  <button class="button button-quiet button-small" type="button" data-view-link="collect">采集新岗位</button>
+                </p>
+              </details>
+            </div>
+
+            <aside class="sg-home-side" aria-label="岗位流水线与最近动态">
+              <section class="sg-side-block" aria-labelledby="sg-pipe-title">
+                <div class="sg-side-head">
+                  <h3 id="sg-pipe-title">岗位流水线</h3>
+                  <span class="sg-side-meta" id="sg-pipe-total">共 0 个</span>
+                </div>
+                <ol class="sg-side-list" id="sg-pipe-list"></ol>
+              </section>
+              <section class="sg-side-block" aria-labelledby="sg-activity-title">
+                <div class="sg-side-head">
+                  <h3 id="sg-activity-title">最近动态</h3>
+                  <span class="sg-side-meta" id="sg-activity-count">最近 5 条</span>
+                </div>
+                <ol class="sg-side-list sg-activity-list" id="sg-home-activity"></ol>
+              </section>
+            </aside>
           </div>
         </section>
 
@@ -279,8 +302,8 @@
               <details id="wa-note-inbox" class="wa-note-inbox" hidden>
                 <summary><span id="wa-note-count" role="status" aria-atomic="true">面经消息</span></summary>
                 <p>这里显示你收藏的面经链接；运行时会自动检查更新，遇到登录或验证会暂停。</p>
-                <button type="button" id="wa-note-help" class="button button-quiet button-small">面经命令用法</button>
-                <button type="button" id="wa-note-check" class="button button-quiet button-small">运行自检</button>
+                <button type="button" id="wa-note-help" class="button button-quiet button-small">面经怎么用</button>
+                <button type="button" id="wa-note-check" class="button button-quiet button-small">检查更新</button>
                 <p id="wa-note-status" role="status"></p>
                 <div id="wa-note-messages"></div>
               </details>
@@ -1244,23 +1267,11 @@
         <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="data-title">设置</h2>
-            <p class="view-lede">配置 AI 接口，保存后可以测试连接；也可以运行本地测试、生成验收报告或导出数据。外观在左侧切换。</p>
+            <details class="sg-help">
+              <summary>这页怎么用</summary>
+              <p class="view-lede">配置 AI 接口，保存后可以测试连接；也可以运行本地测试、生成验收报告或导出数据。外观在左侧切换。</p>
+            </details>
           </header>
-
-          <section class="panel" aria-labelledby="ops-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="ops-title">本地操作</h3>
-                <p class="panel-note">测试和报告都在本机运行；导出只包含本工作台的数据。</p>
-              </div>
-            </div>
-            <div class="button-row">
-              <button class="button" type="button" id="run-tests-button">运行测试</button>
-              <button class="button" type="button" id="web-report-button">生成网页验收报告</button>
-              <button class="button" type="button" id="export-button">导出 JSON</button>
-            </div>
-            <div class="action-result" id="ops-result" hidden></div>
-          </section>
 
           <section class="panel" aria-labelledby="ai-settings-title" id="ai-settings-panel">
             <div class="panel-head">
@@ -1284,8 +1295,25 @@
                 <div class="form-field"><label for="ai-settings-key">API Key</label><input id="ai-settings-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="留空表示不修改已保存的密钥"></div>
               </div>
               <div class="button-row"><button class="button" type="submit" id="ai-settings-save">保存 AI 接口</button><button class="button button-quiet" type="button" id="ai-settings-test">测试连接</button></div>
+              <p class="sg-ai-test-note" id="ai-settings-test-note">测试的是已保存的配置，改动后请先保存</p>
             </form>
+            <p class="sg-ai-help" id="ai-settings-hint">切换服务商会填入常用模型名与 Base URL，填过的值不会被覆盖。测试连接只发一条最小请求，失败时会说明是哪一项没通过。</p>
             <div class="action-result" id="ai-settings-result" hidden></div>
+          </section>
+
+          <section class="panel" aria-labelledby="ops-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="ops-title">本地操作</h3>
+                <p class="panel-note">测试和报告都在本机运行；导出只包含本工作台的数据。</p>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="button" type="button" id="run-tests-button">运行测试</button>
+              <button class="button" type="button" id="web-report-button">生成网页验收报告</button>
+              <button class="button" type="button" id="export-button">导出 JSON</button>
+            </div>
+            <div class="action-result" id="ops-result" hidden></div>
           </section>
 
           <section class="panel" aria-labelledby="downloads-title">
@@ -1320,6 +1348,9 @@
             <div id="activity-data"></div>
           </section>
 
+          <details class="sg-fold" id="sg-system">
+            <summary>系统信息（四步流程、岗位状态、计数、图表）</summary>
+            <div class="sg-system-body">
           <h3 class="section-label" id="system-title">系统</h3>
           <p class="view-lede">运行看板和图表只展示本地数据，不影响上面的操作。</p>
 
@@ -1397,7 +1428,7 @@
             </section>
           </div>
 
-          <section class="panel" aria-labelledby="activity-overview-title">
+          <section class="panel sg-legacy-activity" aria-labelledby="activity-overview-title">
             <div class="panel-head">
               <div>
                 <h3 id="activity-overview-title">最近动作</h3>
@@ -1406,6 +1437,8 @@
             </div>
             <div id="activity-overview"></div>
           </section>
+            </div>
+          </details>
         </section>
       </div>
 

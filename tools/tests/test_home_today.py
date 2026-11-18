@@ -51,7 +51,7 @@ class HomeMarkupTests(unittest.TestCase):
     def test_home_opens_with_today_and_three_tasks(self):
         self.assertIn('id="home-today"', self.home)
         self.assertIn(">今天<", self.home)
-        for label in ("待处理岗位", "待确认招呼语", "待回复的 HR 邮件"):
+        for label in ("待处理岗位", "待确认招呼语", "待回复的 HR 消息"):
             with self.subTest(label=label):
                 self.assertIn(label, self.home)
         for marker in (
