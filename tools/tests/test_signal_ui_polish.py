@@ -238,6 +238,47 @@ class SignalScriptTests(unittest.TestCase):
         self.assertIn("heading.focus({ preventScroll: true })", view)
         self.assertIn("heading.setAttribute('tabindex', '-1')", view)
 
+    def test_ai_settings_hint_allows_empty_base_url_for_claude_only(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不可用")
+        defaults = _between(self.script, "const AI_PROVIDER_DEFAULTS = {", "const OFFERPILOT_IMPORTED_TASKS_KEY")
+        fn = _between(self.script, "function applyAiProviderDefaults()", "async function loadAiSettings()")
+        harness = (
+            defaults + fn + """
+const messages = [];
+function showInline(_el, text) { messages.push(text); }
+function run(service, baseUrl, model) {
+  global.dom = {
+    aiSettingsService: { value: service, dataset: { previousService: service }, selectedOptions: [{ textContent: service }] },
+    aiSettingsBaseUrl: { value: baseUrl },
+    aiSettingsModel: { value: model },
+    aiSettingsResult: {},
+  };
+  messages.length = 0;
+  applyAiProviderDefaults();
+  return messages[0];
+}
+process.stdout.write(JSON.stringify({
+  claude_empty_url: run('anthropic', '', 'claude-sonnet-4-6'),
+  claude_no_model: run('anthropic', '', ''),
+  deepseek_no_model: run('deepseek', 'https://api.deepseek.com', ''),
+  custom_all_empty: run('custom', '', ''),
+  custom_no_url: run('custom', '', 'my-model'),
+}));
+""".replace("global.dom =", "dom =")
+        )
+        harness = "var dom;\n" + harness
+        done = subprocess.run([node, "-e", harness], text=True, capture_output=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr[:500])
+        out = json.loads(done.stdout)
+        self.assertNotIn("Base URL", out["claude_empty_url"])
+        # Claude 的模型名为空时会先被填入默认模型，不再提示缺失。
+        self.assertIn("已填入", out["claude_no_model"])
+        self.assertEqual(out["deepseek_no_model"], "请填写模型名")
+        self.assertEqual(out["custom_all_empty"], "请填写 Base URL 与模型名")
+        self.assertEqual(out["custom_no_url"], "请填写 Base URL")
+
     def test_home_renderer_fills_the_side_column(self):
         block = _between(self.script, "function renderHomeSide(", "function renderHomeToday(")
         for marker in ("homePipelineStageCount(snapshot, key)", "groupActivityRows(snapshot && Array.isArray(snapshot.activity)", ").slice(0, 5)", "sg-side-num"):

@@ -8222,8 +8222,19 @@ function applyAiProviderDefaults() {
     : service;
   const baseUrl = dom.aiSettingsBaseUrl ? dom.aiSettingsBaseUrl.value.trim() : '';
   const model = dom.aiSettingsModel ? dom.aiSettingsModel.value.trim() : '';
-  if (!baseUrl || !model) {
+  // Claude 官方预设的 Base URL 本来就是空（走官方默认地址），留空是合法的；
+  // 其余服务商的 Base URL 有预设，只有「自定义」必须手填。
+  const needsBaseUrl = service !== 'anthropic';
+  if (needsBaseUrl && !baseUrl && !model) {
     showInline(dom.aiSettingsResult, '请填写 Base URL 与模型名', 'info');
+    return;
+  }
+  if (needsBaseUrl && !baseUrl) {
+    showInline(dom.aiSettingsResult, '请填写 Base URL', 'info');
+    return;
+  }
+  if (!model) {
+    showInline(dom.aiSettingsResult, '请填写模型名', 'info');
     return;
   }
   if (!defaults.base_url && !defaults.model) {
