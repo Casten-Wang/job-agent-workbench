@@ -172,7 +172,7 @@
           <section class="panel offerpilot-panel" aria-labelledby="offerpilot-title">
             <div class="panel-head">
               <div>
-                <h3 id="offerpilot-title">BOSS 直聘岗位采集</h3>
+                <h3 id="offerpilot-title">岗位采集</h3>
               </div>
               <div class="offerpilot-head-actions">
                 <span class="badge badge-neutral" id="offerpilot-connection">未检测</span>
@@ -189,6 +189,16 @@
                     <option value="monitor">仅监控 HR 回复</option>
                     <option value="full" selected>完整流程（推荐）：采集后自动评分、放进待确认队列并生成招呼语，最后停在发送确认</option>
                   </select>
+                </div>
+                <div class="form-field" data-collect-search>
+                  <label for="collect-platform">采集平台</label>
+                  <select id="collect-platform">
+                    <option value="boss" selected>Boss直聘</option>
+                    <option value="zhilian">智联招聘</option>
+                    <option value="51job">前程无忧</option>
+                    <option value="liepin">猎聘</option>
+                  </select>
+                  <p class="hint" id="collect-platform-hint"></p>
                 </div>
                 <div class="form-field" data-collect-search>
                   <label for="collect-pace">采集节奏</label>
@@ -232,7 +242,7 @@
             <details class="offerpilot-details collect-explain-details">
               <summary>会采集什么、不会做什么</summary>
               <ul class="collect-explain">
-                <li><strong>会：</strong>在 BOSS 搜索上述关键词与城市，读取岗位卡片和详情：标题、公司、城市、薪资、经验/学历与 JD 文本。</li>
+                <li><strong>会：</strong>在你选的平台（Boss直聘、智联招聘、前程无忧、猎聘）搜索上述关键词与城市，读取岗位卡片和详情：标题、公司、城市、薪资、经验/学历与 JD 文本。</li>
                 <li><strong>会：</strong>写入本机 <code>web/data/user/offerpilot/data/offerpilot.db</code>，任务完成后自动导入岗位池。</li>
                 <li><strong>完整流程会：</strong>自动评分、把符合岗位要求的岗位加入审批队列（城市、30 天内重复、高风险与必备条件照旧拦截），并为已通过的岗位生成招呼语；之后停在发送确认前，等你核对。</li>
                 <li><strong>不会：</strong>不发送招呼语、不投递、不读取聊天记录、不上传简历；只有开启 AI 评分时才会调用你配置的模型。</li>

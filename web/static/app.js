@@ -323,6 +323,8 @@ const dom = {
   collectCities: document.getElementById('collect-cities'),
   collectPages: document.getElementById('collect-pages'),
   collectPace: document.getElementById('collect-pace'),
+  collectPlatform: document.getElementById('collect-platform'),
+  collectPlatformHint: document.getElementById('collect-platform-hint'),
   collectAutoScore: document.getElementById('collect-auto-score'),
   collectResumeFile: document.getElementById('collect-resume-file'),
   collectResumeUpload: document.getElementById('collect-resume-upload'),
@@ -3348,6 +3350,19 @@ function collectNeedsSearch(mode) {
   return mode === 'collect' || mode === 'full';
 }
 
+// 采集平台：四个平台都能单独采集；「完整流程」会进入投递，目前只有 Boss 直聘开放投递，所以锁定 Boss。
+const COLLECT_PLATFORMS = ['boss', 'zhilian', '51job', 'liepin'];
+
+function collectPlatform() {
+  if (collectMode() === 'full') return 'boss';
+  const value = dom.collectPlatform ? dom.collectPlatform.value : 'boss';
+  return COLLECT_PLATFORMS.includes(value) ? value : 'boss';
+}
+
+function collectPlatformLabel(platform) {
+  return CHANNEL_LABELS[platform] || platform;
+}
+
 /* 采集页「本次初筛条件」：只读展示个人资料里的求职意向，并给空输入框提供默认值。 */
 
 function collectProfileIntent() {
@@ -3408,6 +3423,7 @@ function collectFormKey() {
   const intent = collectProfileIntent();
   return [
     mode,
+    collectPlatform(),
     collectEffectiveList(dom.collectKeywords, intent.titles, 10).join(','),
     collectEffectiveList(dom.collectCities, intent.cities, 5).join(','),
     dom.collectPages ? dom.collectPages.value.trim() : '',
@@ -3434,7 +3450,7 @@ function buildOfferPilotOptions(silent = false) {
     return null;
   }
   return {
-    platform: 'boss',
+    platform: collectPlatform(),
     keywords,
     cities,
     max_pages: pages,
@@ -3455,7 +3471,7 @@ function renderCollectSummary() {
       const pace = OFFERPILOT_PACE[options.pace] || OFFERPILOT_PACE.cautious;
       const low = (2 * pace.multiplier).toFixed(1);
       const high = (5 * pace.multiplier).toFixed(1);
-      text += ` 将在 BOSS 直聘搜索「${options.keywords.join('、')}」，城市「${options.cities.join('、')}」，每个关键词最多 ${options.max_pages} 页。`;
+      text += ` 将在 ${collectPlatformLabel(options.platform)} 搜索「${options.keywords.join('、')}」，城市「${options.cities.join('、')}」，每个关键词最多 ${options.max_pages} 页。`;
       text += ` 节奏「${pace.label}」：每次翻页/读详情前随机等待 ${low}–${high} 秒。`;
       text += ' 采集后会按你的简历自动评分。';
     }
@@ -3515,6 +3531,18 @@ function syncCollectModeUI() {
   });
   if (dom.offerpilotStart) {
     dom.offerpilotStart.textContent = mode === 'monitor' ? '开始监控' : mode === 'full' ? '开始完整流程' : '开始采集';
+  }
+  if (dom.collectPlatform) {
+    const locked = mode === 'full';
+    if (locked) dom.collectPlatform.value = 'boss';
+    dom.collectPlatform.disabled = locked;
+    if (dom.collectPlatformHint) {
+      dom.collectPlatformHint.textContent = locked
+        ? '完整流程会进入投递，目前只有 Boss直聘 开放投递；其他平台请选「仅采集」。'
+        : collectPlatform() === 'boss'
+          ? ''
+          : `${collectPlatformLabel(collectPlatform())} 目前只能采集、评分和生成招呼语，投递与回复监控暂未开放。`;
+    }
   }
   renderCollectSummary();
   const key = collectFormKey();
@@ -8684,7 +8712,7 @@ function bindEvents() {
       maybeRunOfferPilotPreflight();
     });
   }
-  [dom.collectKeywords, dom.collectCities, dom.collectPages, dom.collectPace, dom.collectAutoScore].forEach((input) => {
+  [dom.collectPlatform, dom.collectKeywords, dom.collectCities, dom.collectPages, dom.collectPace, dom.collectAutoScore].forEach((input) => {
     if (!input) return;
     input.addEventListener('input', syncCollectModeUI);
     input.addEventListener('change', syncCollectModeUI);

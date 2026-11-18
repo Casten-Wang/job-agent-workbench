@@ -2396,6 +2396,7 @@ class HttpServerTests(unittest.TestCase):
             'id="collect-keywords"',
             'id="collect-cities"',
             'id="collect-pace"',
+            'id="collect-platform"',
             'id="collect-auto-score"',
             'id="collect-resume-upload"',
             'id="collect-checks"',

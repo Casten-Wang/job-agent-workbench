@@ -204,6 +204,48 @@ class SignalScriptTests(unittest.TestCase):
         self.assertEqual(_read(INDEX).count('id="activity-data"'), 1)
         self.assertIn("renderActivity(dom.activityData, snapshot.activity)", self.script)
 
+    def test_collect_wizard_offers_four_platforms_and_locks_boss_for_full_flow(self):
+        html = _read(INDEX)
+        select = _between(html, 'id="collect-platform"', "</select>")
+        for value in ("boss", "zhilian", "51job", "liepin"):
+            self.assertIn(f'value="{value}"', select)
+        self.assertNotIn("BOSS 直聘岗位采集", html)
+        # 前端不再把平台写死成 boss；完整流程（会进入投递）才锁定 Boss。
+        self.assertNotIn("platform: 'boss',", self.script)
+        self.assertIn("platform: collectPlatform(),", self.script)
+        picker = _between(self.script, "function collectPlatform()", "function collectPlatformLabel(")
+        self.assertIn("collectMode() === 'full'", picker)
+        self.assertIn("return 'boss'", picker)
+        self.assertIn("COLLECT_PLATFORMS", self.script)
+        # 平台进入预检缓存键，换平台后必须重新检查。
+        key = _between(self.script, "function collectFormKey()", "function buildOfferPilotOptions(")
+        self.assertIn("collectPlatform()", key)
+
+    def test_collect_platform_picker_behaviour(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不可用")
+        fn = _between(self.script, "const COLLECT_PLATFORMS", "/* 采集页「本次初筛条件」")
+        harness = (
+            "const CHANNEL_LABELS = {boss:'Boss直聘', liepin:'猎聘', '51job':'前程无忧', zhilian:'智联招聘'};\n"
+            "var dom = {offerpilotMode:{value:'collect'}, collectPlatform:{value:'liepin'}};\n"
+            "function collectMode(){ return dom.offerpilotMode.value; }\n"
+            + fn + """
+const out = {};
+out.collect_liepin = collectPlatform();
+dom.collectPlatform.value = 'bad'; out.bad = collectPlatform();
+dom.collectPlatform.value = 'zhilian'; dom.offerpilotMode.value = 'full'; out.full_locks_boss = collectPlatform();
+out.label = collectPlatformLabel('51job');
+process.stdout.write(JSON.stringify(out));
+"""
+        )
+        done = subprocess.run([node, "-e", harness], text=True, capture_output=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr[:500])
+        self.assertEqual(
+            json.loads(done.stdout),
+            {"collect_liepin": "liepin", "bad": "boss", "full_locks_boss": "boss", "label": "前程无忧"},
+        )
+
     def test_collect_count_explains_gap_to_job_pool(self):
         node = shutil.which("node")
         if not node:
