@@ -34,7 +34,15 @@ class PureLogicTests(unittest.TestCase):
         with patch.dict(os.environ, {"OFFERPILOT_DEPLOY": "1"}):
             self.assertTrue(deploy_mode.enabled())
 
-    def test_platform_automation_and_key_writes_are_blocked(self):
+    def test_nothing_is_blocked_by_default(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("OFFERPILOT_DEPLOY_RESTRICT", None)
+            self.assertIsNone(deploy_mode.blocked_reason("/api/run-tests", {}))
+            self.assertIsNone(deploy_mode.blocked_reason("/api/action", {"action": "offerpilot-start"}))
+            self.assertIsNone(deploy_mode.blocked_reason("/api/action", {"action": "save-ai-settings"}))
+
+    @patch.dict(os.environ, {"OFFERPILOT_DEPLOY_RESTRICT": "1"})
+    def test_platform_automation_and_key_writes_are_blocked_when_restricted(self):
         for path in ("/api/run-tests", "/api/export", "/api/offerpilot/tasks",
                      "/api/offerpilot/tasks/abc/stop", "/api/offerpilot/preflight",
                      "/api/offerpilot/conversations/sync"):
@@ -117,8 +125,8 @@ class ServerTests(unittest.TestCase):
         status, _, _ = self._request(port, "GET", "/favicon.ico", {"Host": "demo.example.com"})
         self.assertEqual(status, 403)
 
-    def test_deploy_mode_allows_public_binding_but_blocks_risky_posts(self):
-        with patch.dict(os.environ, {"OFFERPILOT_DEPLOY": "1"}):
+    def test_deploy_mode_allows_public_binding_but_blocks_risky_posts_when_restricted(self):
+        with patch.dict(os.environ, {"OFFERPILOT_DEPLOY": "1", "OFFERPILOT_DEPLOY_RESTRICT": "1"}):
             httpd = server.make_server("0.0.0.0", 0)
             httpd.server_close()
             port = self._serve()

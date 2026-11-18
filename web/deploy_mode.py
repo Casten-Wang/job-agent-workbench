@@ -3,12 +3,13 @@
 默认关闭：工作台只监听 127.0.0.1（见 CLAUDE.md §1）。只有设置环境变量
 ``OFFERPILOT_DEPLOY=1``（由 ``tools/run_career_demo.py --deploy`` 设置）才启用本模式。
 
-本模式把工作台放到别人的服务器上给访客体验，所以同时收紧三件事：
+本模式把工作台放到别人的服务器上给访客体验：
 
-1. 不连接任何招聘平台：容器里没有浏览器、没有账号，岗位采集、HR 回复、投递、
-   测试、导出这些入口一律拒绝（返回 403 与清楚的中文说明）。
-2. 模型密钥只来自部署环境的密钥变量，访客不能查看、保存或测试 AI 接口设置。
-3. 访客共用一个演示数据空间，并对会调用模型的请求按来源限频，避免耗尽额度。
+1. 默认不限制功能，访客可以自己登录自己的账号使用；只有设置 ``OFFERPILOT_DEPLOY_RESTRICT=1``
+   才拒绝平台自动化、测试、导出与 AI 设置写入（返回 403 与中文说明）。
+2. 模型密钥可由部署环境变量预置，访客也可在设置里改成自己的。
+3. 对会调用模型的请求按来源限频，并拒绝跨站请求。
+注意：容器里没有浏览器，依赖本机 Chrome 的平台自动化需要有可用浏览器才能工作；所有访客共用一份数据空间。
 
 本文件只含判断逻辑与常量，不起服务、不读写用户数据。
 """
@@ -109,8 +110,18 @@ def frame_ancestors() -> str:
     return "frame-ancestors https://modelscope.cn https://*.modelscope.cn https://modelscope.ai https://*.modelscope.ai"
 
 
+ENV_RESTRICT = "OFFERPILOT_DEPLOY_RESTRICT"
+
+
+def restricted() -> bool:
+    """默认不限制功能（访客可自己登录自己的账号使用）；设 OFFERPILOT_DEPLOY_RESTRICT=1 才拒绝平台自动化与密钥写入。"""
+    return os.environ.get(ENV_RESTRICT, "").strip() == "1"
+
+
 def blocked_reason(path: str, payload: dict[str, Any] | None = None) -> str | None:
-    """返回拒绝原因；允许时返回 None。"""
+    """返回拒绝原因；允许时返回 None。只有显式开启 RESTRICT 才会拒绝。"""
+    if not restricted():
+        return None
     if path in BLOCKED_POST_PATHS or path.startswith(BLOCKED_POST_PREFIXES):
         return BLOCKED_MESSAGE
     if path == "/api/action":
