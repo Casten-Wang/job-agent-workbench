@@ -199,7 +199,7 @@ class ApprovalMinResidueTests(unittest.TestCase):
 
     def test_queue_empty_text_mentions_no_threshold(self) -> None:
         source = self._source()
-        self.assertIn("待确认队列为空。到「岗位池」把想联系的岗位加入队列。", source)
+        self.assertIn("待确认队列为空。到「筛选」把想联系的岗位加入队列。", source)
         self.assertNotIn("达到入队线", source)
 
     def test_helper_requires_document_score_and_open_conditions(self) -> None:

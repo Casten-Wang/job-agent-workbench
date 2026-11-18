@@ -1651,6 +1651,42 @@ def send_offerpilot_reply(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def respond_offerpilot_resume_request(payload: dict[str, Any]) -> dict[str, Any]:
+    """Click the platform's own 同意/拒绝 on an HR resume-request card."""
+    conversation_id = str(payload.get("id") or payload.get("conversation_id") or "").strip()
+    if not CONVERSATION_ID_RE.fullmatch(conversation_id):
+        raise ApiError("会话 id 无效")
+    choice = str(payload.get("choice") or "").strip()
+    try:
+        result = offerpilot_runtime.respond_resume_request(
+            conversation_id,
+            choice,
+            confirm=payload.get("confirm"),
+            risk_acknowledged=payload.get("risk_acknowledged") is True,
+        )
+    except offerpilot_runtime.OfferPilotUnavailable as exc:
+        raise ApiError(str(exc), 503) from exc
+    except ValueError as exc:
+        status = 409 if "会话不在最近" in str(exc) else 400
+        raise ApiError(str(exc), status) from exc
+    except Exception as exc:
+        if type(exc).__name__ == "MonitorRiskDetected":
+            raise ApiError(
+                "平台出现验证码或风控页，已停止操作，请到平台人工处理后再试", 409
+            ) from exc
+        raise
+    store = get_store("user")
+    agreed = result.get("choice") == "agree"
+    store.log("同意发送简历" if agreed else "拒绝简历请求", str(result.get("company") or "未知公司"))
+    return {
+        "ok": True,
+        "conversation_id": result.get("conversation_id"),
+        "company": result.get("company"),
+        "choice": result.get("choice"),
+        "message": "已在平台点击「同意」，由平台发送你账户里的简历" if agreed else "已在平台点击「拒绝」",
+    }
+
+
 def upload_offerpilot_resume(payload: dict[str, Any]) -> dict[str, Any]:
     """Store a resume for the embedded runtime's scoring step."""
     filename = str(payload.get("filename") or "").strip()
@@ -3682,7 +3718,8 @@ def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
     Jobs are kept in jobs.json (deduplication by fingerprint on re-import
     depends on the record still existing) and are simply hidden from every
     reader via ``Store.jobs()``. A job that is already approved in the queue
-    or has ever appeared in a delivery batch is protected and skipped; a
+    or has ever appeared in a delivery batch is protected and skipped (an approved
+    job is deletable only with ``include_approved: true``, sent by the 通过 page); a
     pending queue row for a deleted job is removed along with it.
     """
     ids = payload.get("ids")
@@ -3696,6 +3733,8 @@ def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
         if text not in safe_ids:
             safe_ids.append(text)
 
+    # 「通过」页的删除按钮显式带 include_approved；岗位池里的删除仍保护已通过的岗位。
+    include_approved = payload.get("include_approved") is True
     store = get_store("user")
     rows = store.all_jobs()
     by_id = {str(row.get("id")): row for row in rows}
@@ -3711,7 +3750,7 @@ def delete_jobs(payload: dict[str, Any]) -> dict[str, Any]:
         if row is None or row.get("deleted_at"):
             skipped.append({"id": job_id, "reason": "not_found"})
             continue
-        if queue_status.get(job_id) == "approved":
+        if queue_status.get(job_id) == "approved" and not include_approved:
             skipped.append({"id": job_id, "reason": "approved"})
             continue
         if job_id in delivered_ids:
@@ -4914,6 +4953,7 @@ ACTIONS = {
     "offerpilot-import": import_offerpilot_jobs,
     "offerpilot-automate": run_offerpilot_pipeline,
     "offerpilot-reply": send_offerpilot_reply,
+    "offerpilot-resume-request": respond_offerpilot_resume_request,
     "offerpilot-resume": upload_offerpilot_resume,
     "offerpilot-stop": lambda payload: stop_offerpilot_task(
         str(payload.get("task_id") or ""),

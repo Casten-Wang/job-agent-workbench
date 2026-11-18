@@ -375,8 +375,8 @@
 
         <section class="view" id="view-jobs" data-view-panel="jobs" aria-labelledby="jobs-title" hidden>
           <header class="view-head">
-            <h2 class="view-title" id="jobs-title">岗位池</h2>
-            <p class="view-lede">采集到的岗位会自动进入这里，并按岗位要求和你的简历评分。符合条件的岗位会自动通过，进入「3 通过」；没有文档评分、必备条件不满足或已关闭的岗位，可以点「手动加入」，由你自己判断。高风险岗位（如收费、培训贷、保就业承诺）会被拦下，不能加入。这些操作只写本机文件，不访问平台。</p>
+            <h2 class="view-title" id="jobs-title">筛选</h2>
+            <p class="view-lede">采集到的岗位会按要求和你的简历自动评分，达标的直接进入「3 通过」，这里只留还没通过的。不达标的岗位可以点「手动加入」自己判断；收费、培训贷、保就业等高风险岗位不能加入。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
               <button class="ui-hub-tab is-active" type="button" data-view="jobs" aria-current="page">2 筛选</button>
@@ -391,7 +391,6 @@
             <div class="panel-head">
               <div>
                 <h3 id="jobs-table-title">岗位表</h3>
-                <p class="panel-note">每条岗位只能切换到规则允许的下一步；「已确认」只表示你同意联系，不代表已经投递。</p>
               </div>
               <p class="panel-count" id="jobs-count">显示 0 条</p>
             </div>
@@ -482,8 +481,8 @@
 
         <section class="view" id="view-queue" data-view-panel="queue" aria-labelledby="queue-title" hidden>
           <header class="view-head">
-            <h2 class="view-title" id="queue-title">审批队列</h2>
-            <p class="view-lede">评分达标的岗位已自动通过。这里只需处理手动加入的岗位；「今日安排」显示每天可联系的顺序，超出额度的岗位会顺延。</p>
+            <h2 class="view-title" id="queue-title">已通过</h2>
+            <p class="view-lede">评分达标的岗位自动通过；手动加入的先在「待你确认」里通过。「已通过」只表示你同意联系，不代表已经投递；今日安排显示每天联系的顺序，超出额度的顺延。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
               <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
@@ -495,7 +494,7 @@
           <div id="wa-handoff-slot" class="wa-handoff-slot"></div>
           <p class="notice" id="queue-pipeline-status" hidden></p>
 
-          <section class="panel" aria-labelledby="pending-title">
+          <section class="panel" id="queue-pending-panel" aria-labelledby="pending-title">
             <div class="panel-head">
               <div>
                 <h3 id="pending-title">待你确认</h3>
@@ -509,6 +508,7 @@
             <div class="queue-toolbar sg-bulk-bar" id="queue-pending-actions">
               <span class="panel-count sg-bulk-count" id="queue-selection-count">已选 0 条</span>
               <button class="button button-small" type="button" id="queue-confirm-button" disabled>通过所选</button>
+              <button class="button button-small button-quiet" type="button" id="queue-pending-delete" disabled>删除所选</button>
               <span class="sg-disabled-reason">勾选岗位后可批量通过。</span>
             </div>
           </section>
@@ -539,6 +539,7 @@
               <span class="panel-count sg-bulk-count" id="queue-approved-selection-count">已选 0 条</span>
               <button class="button button-small" type="button" id="queue-generate-greetings" disabled>生成招呼语</button>
               <button class="button button-small" type="button" id="queue-send-greetings" disabled>查看并发送</button>
+              <button class="button button-small button-quiet" type="button" id="queue-approved-delete" disabled>删除所选</button>
               <span class="sg-disabled-reason">勾选已通过岗位后可生成或查看招呼语。</span>
             </div>
             <div class="queue-greetings" id="queue-greetings"></div>

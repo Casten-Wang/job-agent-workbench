@@ -372,10 +372,13 @@ const dom = {
   atsSubmit: document.getElementById('ats-submit'),
   atsResult: document.getElementById('ats-result'),
   queuePendingCount: document.getElementById('queue-pending-count'),
+  queuePendingPanel: document.getElementById('queue-pending-panel'),
   queueSelectAll: document.getElementById('queue-select-all'),
   queueSelectionCount: document.getElementById('queue-selection-count'),
   queuePendingTable: document.getElementById('queue-pending-table'),
   queueConfirmButton: document.getElementById('queue-confirm-button'),
+  queuePendingDelete: document.getElementById('queue-pending-delete'),
+  queueApprovedDelete: document.getElementById('queue-approved-delete'),
   queueApprovedCount: document.getElementById('queue-approved-count'),
   queueApprovedTable: document.getElementById('queue-approved-table'),
   queueApprovedSelectAll: document.getElementById('queue-approved-select-all'),
@@ -1937,13 +1940,6 @@ function hardFilterNode(job) {
   return node;
 }
 
-function approvalNode(value) {
-  if (value === 'approved') return badge('已确认可人工投递', 'good', '✓');
-  if (value === 'pending') return badge('待确认', 'warn', '!');
-  if (value) return badge(String(value), 'neutral', '·');
-  return el('span', { className: 'muted', text: '未加入队列' });
-}
-
 /* jobs-dossier:start（tools/tests/test_jobs_dossier.py 会截取本段用 node 执行） */
 const JOB_STANDARD_FIELDS = [
   ['title', '岗位名称'],
@@ -2203,8 +2199,16 @@ function formatJobScore(job) {
   return `${number}/5`;
 }
 
+// 「筛选」只放还没通过的岗位：已进入审批队列（待确认 / 已通过）的在「通过」页处理，这里不再重复出现。
+function poolJobs(snapshot) {
+  const jobs = snapshot && Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  return jobs.filter((job) => !(job && (job.approval === 'pending' || job.approval === 'approved')));
+}
+
 function renderJobs(snapshot) {
-  const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  const allRows = snapshot && Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  const jobs = poolJobs(snapshot);
+  const passedHidden = allRows.length - jobs.length;
   const transitions = snapshot.transitions || {};
   dom.jobsCount.textContent = `显示 ${jobs.length} 条`;
   // 空表有两种原因：岗位池确实为空，或当前筛选没有命中。分开提示，
@@ -2213,8 +2217,17 @@ function renderJobs(snapshot) {
     ? Number(snapshot.scope.all_jobs)
     : null;
   const filteredEmpty = jobs.length === 0 && allJobs !== null && allJobs > 0;
+  const allPassed = jobs.length === 0 && passedHidden > 0;
   if (dom.jobsEmptyHint) dom.jobsEmptyHint.hidden = jobs.length > 0 || filteredEmpty;
-  if (dom.jobsFilterEmptyHint) dom.jobsFilterEmptyHint.hidden = !filteredEmpty;
+  if (dom.jobsFilterEmptyHint) {
+    dom.jobsFilterEmptyHint.hidden = !filteredEmpty;
+    if (dom.jobsFilterEmptyHint.dataset.defaultText === undefined) {
+      dom.jobsFilterEmptyHint.dataset.defaultText = dom.jobsFilterEmptyHint.textContent;
+    }
+    dom.jobsFilterEmptyHint.textContent = allPassed
+      ? `这里的岗位都已通过（${passedHidden} 条），去「3 通过」处理；采集到新岗位会出现在这里。`
+      : dom.jobsFilterEmptyHint.dataset.defaultText;
+  }
 
   // 选择按岗位 id 保留：切换筛选只隐藏行，不清掉已选中的岗位。
 
@@ -2343,7 +2356,6 @@ function renderJobs(snapshot) {
       el('span', { className: 'jobs-hard-filter' }, [hardFilterNode(job)]),
       el('span', { className: 'jobs-risk' }, [riskNode]),
       el('span', { className: 'jobs-state', text: String(job.state || '未知') }),
-      el('span', { className: 'jobs-approval' }, [approvalNode(job.approval)]),
       warningCell,
       actions
     ];
@@ -2351,7 +2363,7 @@ function renderJobs(snapshot) {
 
   renderTable(dom.jobsTable, {
     caption: '表：岗位清单与允许的下一步',
-    columns: ['选择', '公司', '岗位', '城市', '薪资', '来源平台', '评分', '硬条件', '风险', '状态', '审批状态', '警告数', '动作'],
+    columns: ['选择', '公司', '岗位', '城市', '薪资', '来源平台', '评分', '硬条件', '风险', '状态', '警告数', '动作'],
     rows,
     emptyText: '当前筛选下没有岗位。可以调整筛选，或在下方粘贴 JD / 导入静态 JSON。',
     className: 'jobs-table'
@@ -4074,7 +4086,7 @@ async function maybeAutoImportCollected(task) {
     } else if (onCollect) {
       // 采集 → 自动导入 → 挑选岗位 是同一条主线，完成后直接落到岗位表。
       showView('jobs');
-      setStatus(`${message} 已跳到岗位池，挑好后加入审批队列。`, summary.failed ? 'warn' : 'ok');
+      setStatus(`${message} 已跳到「筛选」，挑好后加入「已通过」。`, summary.failed ? 'warn' : 'ok');
     } else {
       setStatus(message, summary.failed ? 'warn' : 'ok');
     }
@@ -4234,6 +4246,28 @@ async function jobsDeleteSelected(jobs, button) {
   await loadState();
 }
 
+// 「通过」页删除岗位：待确认和已通过的都能删；已发送过招呼语的岗位后端会保留作记录。
+async function queueDeleteSelected(selection, button, label) {
+  const ids = Array.from(selection).map(String).filter(Boolean);
+  if (!ids.length) return;
+  if (!window.confirm(`删除所选 ${ids.length} 条${label}岗位？删除后不再出现在流水线里；已发送过招呼语的会保留。`)) return;
+  const data = await runAction(button, () => postAction('delete-jobs', { ids, include_approved: true }));
+  if (!data) return;
+  const kept = new Set(
+    (Array.isArray(data.skipped) ? data.skipped : [])
+      .filter((item) => item && item.reason !== 'not_found')
+      .map((item) => String(item.id))
+  );
+  ids.forEach((id) => {
+    if (kept.has(id)) return;
+    selection.delete(id);
+    state.queueSelection.delete(id);
+    state.queueApprovedSelection.delete(id);
+  });
+  setStatus(data.message || `已删除 ${data.deleted || 0} 条。`, data.deleted ? 'ok' : 'warn');
+  await loadState();
+}
+
 async function prepareJob(job, button) {
   const data = await runAction(button, () => postAction('prepare', { id: String(job.id) }));
   if (!data) return;
@@ -4299,6 +4333,7 @@ function updateQueueSelectionUI() {
   dom.queueSelectAll.checked = allSelected;
   dom.queueSelectAll.indeterminate = selected > 0 && !allSelected;
   dom.queueConfirmButton.disabled = selected === 0;
+  if (dom.queuePendingDelete) dom.queuePendingDelete.disabled = selected === 0;
 }
 
 function renderPipelineStatus() {
@@ -4324,7 +4359,7 @@ function renderPipelineStatus() {
   dom.queuePipelineStatus.hidden = false;
 }
 
-function queueEmptyNode(text, actionLabel = '去岗位池挑选') {
+function queueEmptyNode(text, actionLabel = '去筛选挑选') {
   const empty = el('div', { className: 'sg-empty' });
   empty.append(el('p', { className: 'sg-empty-text', text }));
   const action = el('button', {
@@ -4353,6 +4388,8 @@ function renderQueue(snapshot) {
   });
 
   dom.queuePendingCount.textContent = `${pending.length} 条待确认`;
+  // 没有待确认的岗位时整块收起，避免一个永远为空的面板占在页首。
+  if (dom.queuePendingPanel) dom.queuePendingPanel.hidden = pending.length === 0;
   dom.queueApprovedCount.textContent = `${approved.length} 条已确认`;
 
   const pendingRows = pending.map((row) => {
@@ -4393,8 +4430,8 @@ function renderQueue(snapshot) {
     caption: '表：待确认队列',
     columns: ['选择', '公司', '岗位', '评分', '渠道', '创建时间', '判断依据', '核对'],
     rows: pendingRows,
-    emptyText: '待确认队列为空。到「岗位池」把想联系的岗位加入队列。',
-    emptyNode: queueEmptyNode('待确认队列为空。到「岗位池」把想联系的岗位加入队列。'),
+    emptyText: '待确认队列为空。到「筛选」把想联系的岗位加入队列。',
+    emptyNode: queueEmptyNode('待确认队列为空。到「筛选」把想联系的岗位加入队列。'),
     className: 'data-table-wide'
   });
 
@@ -4430,13 +4467,12 @@ function renderQueue(snapshot) {
       greetingStatusBadge(row.greeting),
       deliveryStatusBadge(row.delivery),
       planBadge(row.plan),
-      badge('已通过，可以联系', 'good', '✓'),
       reviewButton
     ];
   });
   renderTable(dom.queueApprovedTable, {
     caption: '表：已确认可人工投递',
-    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '状态', '核对'],
+    columns: ['选择', '公司', '岗位', '评分', '渠道', '招呼语', '投递', '今日安排', '核对'],
     rows: approvedRows,
     emptyText: '还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。',
     emptyNode: queueEmptyNode('还没有已确认的岗位。「已通过」只表示你同意联系，不代表已经投递。'),
@@ -4558,6 +4594,7 @@ function updateQueueApprovedSelectionUI() {
     dom.queueApprovedSelectAll.checked = allSelected;
     dom.queueApprovedSelectAll.indeterminate = selected > 0 && !allSelected;
   }
+  if (dom.queueApprovedDelete) dom.queueApprovedDelete.disabled = selected === 0;
   if (dom.queueGenerateGreetings) {
     dom.queueGenerateGreetings.disabled = selected === 0
       || selected > 10
@@ -5039,6 +5076,7 @@ function renderMails(snapshot) {
 /* Render: HR conversations（页面内单条回复，发送前必须确认） */
 
 const HR_REPLY_CONFIRM_PHRASE = '确认发送这条回复';
+const HR_CARD_CONFIRM_PHRASES = { agree: '确认同意发送简历', refuse: '确认拒绝简历请求' };
 
 function hrConversationById(id) {
   const key = String(id || '');
@@ -5797,7 +5835,99 @@ function hrMessageNode(message, conversation, startOfGroup) {
   const textNode = el('p', { className: 'hr-message-text', text: shortText });
   if (shortText !== fullText) textNode.title = fullText;
   bubble.append(textNode);
+  if (message && message.card && message.card.kind === 'resume_request') {
+    bubble.classList.add('hr-message-card');
+    bubble.append(hrResumeCardNode(message.card, conversation));
+  }
   return bubble;
+}
+
+// HR 的「想要一份你的简历，你是否同意？」卡片：和平台一样给出按钮，点击后由工作台在平台页面点同意/拒绝，
+// 简历由平台自己发出（用的是你在该平台账户里的简历）。点第一下只展开确认，确认后才真的点。
+function hrResumeCardNode(card, conversation) {
+  const box = el('div', { className: 'hr-card' });
+  const thread = state.hrThread || {};
+  if (!card.pending) {
+    box.append(el('p', { className: 'hr-card-note', text: '这条简历请求已处理。' }));
+    return box;
+  }
+  if (card.attach) {
+    box.append(el('p', {
+      className: 'hr-card-note',
+      text: '对方要的是附件简历。平台要求手动上传文件，工作台不能代点，请到平台处理。'
+    }));
+    return box;
+  }
+  if (!thread.reply_allowed) {
+    box.append(el('p', {
+      className: 'hr-card-note',
+      text: String(thread.reply_block_reason || '当前不能在工作台处理，请到平台点击。')
+    }));
+    return box;
+  }
+  const actions = el('div', { className: 'hr-card-actions' });
+  const note = el('p', { className: 'hr-card-note', props: { hidden: true } });
+  const agree = el('button', {
+    className: 'button button-small', text: '同意并发送简历', attrs: { type: 'button' }
+  });
+  const refuse = el('button', {
+    className: 'button button-quiet button-small', text: '拒绝', attrs: { type: 'button' }
+  });
+  const confirmRow = el('div', { className: 'hr-card-actions', props: { hidden: true } });
+  const confirmButton = el('button', {
+    className: 'button button-small', text: '确认', attrs: { type: 'button' }
+  });
+  const cancel = el('button', {
+    className: 'button button-quiet button-small', text: '取消', attrs: { type: 'button' }
+  });
+  confirmRow.append(confirmButton, cancel);
+  let choice = 'agree';
+  const ask = (picked) => {
+    choice = picked;
+    note.textContent = picked === 'agree'
+      ? `确认同意？平台会把你在${channelLabel(conversation.platform)}账户里的简历发给 ${conversation.hr_name || 'HR'}。`
+      : '确认拒绝这条简历请求？';
+    note.hidden = false;
+    actions.hidden = true;
+    confirmRow.hidden = false;
+    confirmButton.focus();
+  };
+  agree.addEventListener('click', () => ask('agree'));
+  refuse.addEventListener('click', () => ask('refuse'));
+  cancel.addEventListener('click', () => {
+    note.hidden = true;
+    confirmRow.hidden = true;
+    actions.hidden = false;
+  });
+  confirmButton.addEventListener('click', () => submitHrResumeCard(conversation, choice, [confirmButton, cancel], note));
+  actions.append(agree, refuse);
+  box.append(actions, note, confirmRow);
+  return box;
+}
+
+async function submitHrResumeCard(conversation, choice, buttons, note) {
+  if (state.hrReplyBusy) return;
+  state.hrReplyBusy = true;
+  buttons.forEach((button) => { button.disabled = true; });
+  note.textContent = '正在平台上点击，请稍候…';
+  try {
+    const data = await postAction('offerpilot-resume-request', {
+      conversation_id: String(conversation.id),
+      choice,
+      confirm: HR_CARD_CONFIRM_PHRASES[choice],
+      risk_acknowledged: true
+    });
+    setStatus((data && data.message) || '已处理。', 'ok');
+    state.hrReplyBusy = false;
+    await loadHrConversations();
+    if (state.hrSelectedId) await loadHrThread(state.hrSelectedId, { quiet: true, force: true });
+  } catch (error) {
+    state.hrReplyBusy = false;
+    const message = friendlyError(error);
+    note.textContent = message;
+    buttons.forEach((button) => { button.disabled = false; });
+    setStatus(message, 'error');
+  }
 }
 
 function appendHrMessages(rows, allMessages, offset, conversation) {
@@ -5860,7 +5990,8 @@ function renderHrThread() {
   const signatures = messages.map((message) => JSON.stringify([
     String((message && message.sender) || 'system'),
     String((message && message.time) || ''),
-    String((message && message.text) || '')
+    String((message && message.text) || ''),
+    message && message.card ? JSON.stringify(message.card) : ''
   ]));
   const previousMessages = state.hrThreadRenderedKey === key
     && Array.isArray(state.hrThreadRenderedMessages)
@@ -6157,7 +6288,7 @@ function jumpToHrJob(conversation) {
       && cells[2].textContent.includes(title);
   });
   if (!row) {
-    setStatus('已打开岗位池；当前列表里没有找到对应岗位，可能被筛选或已删除。', 'warn');
+    setStatus('已打开「筛选」；当前列表里没有找到对应岗位，可能被筛选或已删除。', 'warn');
     return;
   }
   row.classList.add('hr-target-row');
@@ -8835,6 +8966,16 @@ function bindEvents() {
       updateQueueApprovedSelectionUI();
     });
   }
+  if (dom.queuePendingDelete) {
+    dom.queuePendingDelete.addEventListener('click', () => {
+      queueDeleteSelected(state.queueSelection, dom.queuePendingDelete, '待确认');
+    });
+  }
+  if (dom.queueApprovedDelete) {
+    dom.queueApprovedDelete.addEventListener('click', () => {
+      queueDeleteSelected(state.queueApprovedSelection, dom.queueApprovedDelete, '已通过');
+    });
+  }
   if (dom.queueGenerateGreetings) {
     dom.queueGenerateGreetings.addEventListener('click', () => {
       generateQueueGreetings(dom.queueGenerateGreetings);
@@ -8873,7 +9014,7 @@ function bindEvents() {
 
   if (dom.jobsSelectAll) {
     dom.jobsSelectAll.addEventListener('change', () => {
-      const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
+      const jobs = poolJobs(state.snapshot);
       if (dom.jobsSelectAll.checked) jobs.forEach((job) => state.jobsSelection.add(String(job.id)));
       else state.jobsSelection.clear();
       renderJobs(state.snapshot || {});
@@ -8881,7 +9022,7 @@ function bindEvents() {
   }
   if (dom.jobsBulkEnqueue) {
     dom.jobsBulkEnqueue.addEventListener('click', () => {
-      const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
+      const jobs = poolJobs(state.snapshot);
       const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
       if (!selected.length) return;
       // 与后端一致：没有文档评分、必备条件不满足或已关闭的岗位需要手动加入。
@@ -8900,7 +9041,7 @@ function bindEvents() {
   }
   if (dom.jobsBulkDelete) {
     dom.jobsBulkDelete.addEventListener('click', () => {
-      const jobs = (state.snapshot && Array.isArray(state.snapshot.jobs)) ? state.snapshot.jobs : [];
+      const jobs = poolJobs(state.snapshot);
       const selected = jobs.filter((job) => state.jobsSelection.has(String(job.id)));
       if (!selected.length) return;
       jobsDeleteSelected(selected, dom.jobsBulkDelete);

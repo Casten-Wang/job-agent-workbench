@@ -2308,22 +2308,59 @@ def _zhilian_conversation_items(rows: list[dict[str, Any]], *, with_params: bool
     return items
 
 
+_UNSUPPORTED_CARD_TEXT = "当前版本不支持显示该内容"
+_CARD_PLACEHOLDER = "[卡片消息，工作台不支持预览，请在平台内查看]"
+
+
 def _zhilian_custom_text(message: dict[str, Any]) -> str:
-    """A custom card carries its text as JSON; keep only a safe fallback."""
+    """A custom NIM card keeps its readable words in a few known fields.
+
+    Real shape (2026-11-18): ``{"content": {...}, "fallbackText": {"receiverText",
+    "senderText"}, "lastMessage": {"receiverText", "senderText"}}``.  Incoming
+    cards read ``receiverText``; our own cards read ``senderText``.
+    """
     raw = message.get("content") or message.get("custom")
     data = _json_object(raw) if isinstance(raw, str) else None
-    if isinstance(data, dict):
-        for key in ("fallbackText", "text"):
-            value = data.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        last = data.get("lastMessage")
-        if isinstance(last, dict):
-            for key in ("receiverText", "senderText"):
-                value = last.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-    return "[卡片消息，工作台不支持预览，请在平台内查看]"
+    if not isinstance(data, dict):
+        return _CARD_PLACEHOLDER
+    outgoing = str(message.get("flow") or "") == "out"
+    keys = ("senderText", "receiverText") if outgoing else ("receiverText", "senderText")
+
+    def usable(value: Any) -> str:
+        text = value.strip() if isinstance(value, str) else ""
+        return "" if not text or text.startswith(_UNSUPPORTED_CARD_TEXT) else text
+
+    for key in ("fallbackText", "text"):
+        value = data.get(key)
+        if isinstance(value, str) and usable(value):
+            return usable(value)
+        if isinstance(value, dict):
+            for field in keys:
+                if usable(value.get(field)):
+                    return usable(value.get(field))
+    last = data.get("lastMessage")
+    if isinstance(last, dict):
+        for field in keys:
+            if usable(last.get(field)):
+                return usable(last.get(field))
+    content = data.get("content")
+    if isinstance(content, dict):
+        job = str(content.get("jobTitle") or "").strip()
+        company = str(content.get("companyName") or "").strip()
+        if content.get("title") == "当前沟通" and job:
+            return f"当前沟通职位：{job}"
+        if content.get("title") == "在线简历":
+            return "已发送在线简历" if outgoing else "对方的在线简历"
+        if job:
+            note = str(content.get("receiverText") or "").strip()
+            head = f"{note}：" if note else "职位沟通："
+            return f"{head}{job}" + (f"（{company}）" if company else "")
+        if isinstance(content.get("resume"), dict):
+            return "在线简历卡片"
+        for key in ("msgc", "msgb"):
+            if usable(content.get(key)):
+                return usable(content.get(key))
+    return _CARD_PLACEHOLDER
 
 
 def _zhilian_history_messages(raw: Any) -> list[dict[str, Any]] | None:
@@ -2335,7 +2372,9 @@ def _zhilian_history_messages(raw: Any) -> list[dict[str, Any]] | None:
     if not isinstance(rows, list):
         return None
     messages: list[dict[str, Any]] = []
-    for row in rows:
+    # The history is requested newest first (asc=false); read it oldest first so
+    # messages sharing one minute keep their real order after the time sort.
+    for row in reversed(rows):
         if not isinstance(row, dict):
             continue
         flow = str(row.get("flow") or "")
@@ -2874,6 +2913,48 @@ def _read_thread_messages(
     return _get_platform_thread(entry, platform)
 
 
+# --- Resume-request cards ------------------------------------------------------
+#
+# HR "想要一份你的简历，你是否同意？" arrives as a platform card with 同意/拒绝
+# buttons.  The card is derived from the message text at read time (never
+# stored), so threads stored before this feature get it too.  ``pending`` is a
+# hint: the real authority is the button that must exist on the platform page
+# when the action runs.
+_RESUME_REQUEST_RE = re.compile(r"(想要|索要|希望获取|请求|需要).{0,10}简历.{0,10}(同意|发送|吗|？|\?)")
+_RESUME_REQUEST_SENTENCE_RE = re.compile(r"我想要一份你的(附件)?简历，?你是否同意[？?]?")
+_RESUME_SENT_RE = re.compile(r"^(已发送在线简历|在线简历|已同意|简历已发送|已发送.{0,6}简历)")
+
+
+def _annotate_cards(messages: list[dict[str, Any]], platform: str) -> list[dict[str, Any]]:
+    """Attach ``card`` to resume requests; only the latest unanswered one is pending."""
+    messages = [dict(message) if isinstance(message, dict) else message for message in messages]
+    last_request: int | None = None
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict) or message.get("sender") == "me":
+            continue
+        text = str(message.get("text") or "")
+        exact = _RESUME_REQUEST_SENTENCE_RE.search(text)
+        if not exact and not (len(text) <= 80 and _RESUME_REQUEST_RE.search(text)):
+            continue
+        if exact:
+            message["text"] = exact.group(0)
+        message["card"] = {
+            "kind": "resume_request",
+            "attach": "附件" in text,
+            "pending": False,
+        }
+        last_request = index
+    if last_request is not None:
+        answered = any(
+            isinstance(later, dict)
+            and later.get("sender") == "me"
+            and _RESUME_SENT_RE.search(str(later.get("text") or ""))
+            for later in messages[last_request + 1:]
+        )
+        messages[last_request]["card"]["pending"] = not answered
+    return messages
+
+
 def _thread_response(
     entry: dict[str, Any],
     platform: str,
@@ -2911,7 +2992,7 @@ def _thread_response(
         "conversation_id": entry["id"],
         "company": entry.get("company") or "",
         "title": entry.get("title") or "",
-        "messages": messages,
+        "messages": _annotate_cards(messages, platform),
         "stale": bool(stale),
         "reply_allowed": allowed,
         "reply_block_reason": None if allowed else reason,
@@ -4096,7 +4177,7 @@ def _open_and_store_thread(entry: dict[str, Any], platform: str) -> dict[str, An
         _hr_signature({**entry, "platform": platform}),
     )
     response = dict(thread)
-    response["messages"] = messages
+    response["messages"] = _annotate_cards(messages, platform)
     response["stale"] = False
     return response
 
@@ -4446,7 +4527,7 @@ def _get_boss_thread(
         "conversation_id": entry["id"],
         "company": entry.get("company") or "",
         "title": entry.get("title") or "",
-        "messages": messages,
+        "messages": _annotate_cards(messages, "boss"),
         "reply_allowed": allowed,
         "reply_block_reason": None if allowed else reason,
     }
@@ -4790,4 +4871,253 @@ def send_reply(
         "company": entry.get("company") or "",
         "chars": len(cleaned),
         "message": message,
+    }
+
+
+# --- Answer a platform resume-request card -------------------------------------
+
+CARD_CONFIRM_PHRASES = {"agree": "确认同意发送简历", "refuse": "确认拒绝简历请求"}
+CARD_BUTTON_LABELS = {"agree": "同意", "refuse": "拒绝"}
+
+_ZHILIAN_CARD_OPEN = r"""
+(() => {
+    const hr = __HR_NAME__;
+    const company = __COMPANY__;
+    const items = Array.from(document.querySelectorAll('.im-session-item')).filter((el) => {
+        const text = el.innerText || '';
+        return text.includes(hr) && (!company || text.includes(company));
+    });
+    if (items.length !== 1) return JSON.stringify({ok: false, reason: items.length ? 'ambiguous' : 'not_found'});
+    items[0].click();
+    return JSON.stringify({ok: true});
+})()
+"""
+
+# A card still waiting for an answer keeps its buttons; the newest such card
+# holding the wanted button is the only one ever clicked.
+_CARD_CLICK_BODY = r"""
+    const label = __LABEL__;
+    const wantedHr = __HR_NAME__;
+    if (wantedHr && !String(scopeText() || '').includes(wantedHr)) {
+        return JSON.stringify({ok: false, reason: 'wrong_contact'});
+    }
+    const wrap = pendingCard();
+    if (!wrap) return JSON.stringify({ok: false, reason: 'no_pending_card'});
+    const cardText = String(wrap.innerText || '');
+    const button = Array.from(wrap.querySelectorAll('button, a, [role="button"]')).filter(visible)
+        .find((el) => String(el.innerText || '').replace(/\s+/g, '') === label);
+    if (!button) {
+        return JSON.stringify({ok: false, reason: cardText.includes('附件') ? 'needs_upload' : 'no_button'});
+    }
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const still = Array.from(wrap.querySelectorAll('button, a, [role="button"]')).filter(visible)
+        .some((el) => String(el.innerText || '').replace(/\s+/g, '') === label);
+    return JSON.stringify({ok: true, answered: !wrap.isConnected || !still});
+"""
+
+_CARD_VISIBLE = r"""
+    const visible = (el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+"""
+
+
+def _card_replace(script: str, entry: dict[str, Any], choice: str) -> str:
+    script = script.replace("__LABEL__", json.dumps(CARD_BUTTON_LABELS[choice], ensure_ascii=False))
+    script = script.replace("__HR_NAME__", json.dumps(entry.get("hr_name") or "", ensure_ascii=False))
+    return script.replace("__COMPANY__", json.dumps(entry.get("company") or "", ensure_ascii=False))
+
+
+def _zhilian_card_click_expression(entry: dict[str, Any], choice: str) -> str:
+    """Zhilian: ``.im-msg-11-wrap`` cards (verified 2026-11-18) in the open session."""
+    script = (
+        "(async () => {\n" + _CARD_VISIBLE + r"""
+    const scopeText = () => {
+        const active = document.querySelector('.im-session-item.is-active');
+        return active ? active.innerText : '';
+    };
+    const pendingCard = () => {
+        const wraps = Array.from(document.querySelectorAll('.im-msg-11-wrap'))
+            .filter((el) => String(el.innerText || '').includes('简历') && el.querySelector('button'));
+        return wraps[wraps.length - 1] || null;
+    };
+"""
+        + _CARD_CLICK_BODY + "\n})()\n"
+    )
+    return _card_replace(script, entry, choice)
+
+
+def _generic_card_click_expression(entry: dict[str, Any], choice: str, scope_selector: str) -> str:
+    """Boss / Liepin: the newest visible 同意/拒绝 control inside a resume-request block.
+
+    Not verified on a real card yet (no such request was pending when this was written);
+    the click only happens when the page really shows such a control.
+    """
+    script = (
+        "(async () => {\n" + _CARD_VISIBLE + r"""
+    const scope = document.querySelector(__SCOPE__) || document.body;
+    const scopeText = () => scope.innerText || '';
+    const pendingCard = () => {
+        const label = __LABEL__;
+        const hits = [];
+        for (const el of Array.from(scope.querySelectorAll('button, a, [role="button"], span, div'))) {
+            if (!visible(el) || String(el.innerText || '').replace(/\s+/g, '') !== label) continue;
+            let block = el.parentElement;
+            for (let depth = 0; block && depth < 5; depth += 1, block = block.parentElement) {
+                const text = String(block.innerText || '');
+                if (text.length > 400) { block = null; break; }
+                if (text.includes('简历')) break;
+            }
+            if (block) hits.push(block);
+        }
+        return hits[hits.length - 1] || null;
+    };
+"""
+        + _CARD_CLICK_BODY + "\n})()\n"
+    )
+    script = script.replace("__SCOPE__", json.dumps(scope_selector))
+    return _card_replace(script, entry, choice)
+
+
+def _click_zhilian_card(entry: dict[str, Any], choice: str, config: dict[str, Any]) -> dict[str, Any]:
+    monitor = _monitor()
+    deadline = _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    tab, owned = _acquire_chat_tab(monitor, config, deadline, "zhilian")
+    if not tab:
+        raise OfferPilotUnavailable("无法打开智联招聘聊天页面，请检查登录状态")
+    try:
+        monitor._inspect_monitor_page(tab, config)
+        opened = _json_object(_chat_evaluate(
+            monitor, tab, _card_replace(_ZHILIAN_CARD_OPEN, entry, choice), deadline,
+        ))
+        if not opened or not opened.get("ok"):
+            raise ValueError("无法在智联聊天列表里唯一定位该会话，请到平台处理")
+        if monitor._wait_or_stop(config, 3):
+            return {"ok": False, "reason": "stopped"}
+        return _json_object(_chat_evaluate(
+            monitor, tab, _zhilian_card_click_expression(entry, choice), deadline,
+        )) or {"ok": False, "reason": "no_answer"}
+    finally:
+        if owned:
+            monitor.close_tab(tab)
+
+
+def _click_liepin_card(entry: dict[str, Any], choice: str, config: dict[str, Any]) -> dict[str, Any]:
+    monitor = _monitor()
+    params = _liepin_history_params.get(str(entry.get("id") or ""))
+    deadline = _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+    tab, owned = _acquire_chat_tab(monitor, config, deadline, "liepin")
+    if not tab:
+        raise OfferPilotUnavailable("无法打开猎聘聊天页面，请检查登录状态")
+    try:
+        monitor._inspect_monitor_page(tab, config)
+        opened = _json_object(_chat_evaluate(monitor, tab, JS_LIEPIN_ENSURE_DRAWER_WWW, deadline))
+        if not opened or not opened.get("available"):
+            raise OfferPilotUnavailable("无法打开猎聘聊天面板，请检查登录状态")
+        if opened.get("opened") and monitor._wait_or_stop(config, 3):
+            return {"ok": False, "reason": "stopped"}
+        clicked = _json_object(
+            _chat_evaluate(monitor, tab, _liepin_open_expression(entry, params), deadline)
+        )
+        if not clicked or not clicked.get("ok"):
+            raise ValueError("无法在猎聘聊天列表里唯一定位该会话，请到平台处理")
+        if monitor._wait_or_stop(config, 2):
+            return {"ok": False, "reason": "stopped"}
+        return _json_object(_chat_evaluate(
+            monitor, tab,
+            _generic_card_click_expression(entry, choice, ".im-ui-basic-chat-modal"),
+            deadline,
+        )) or {"ok": False, "reason": "no_answer"}
+    finally:
+        if owned:
+            monitor.close_tab(tab)
+
+
+def _click_boss_card(entry: dict[str, Any], choice: str, config: dict[str, Any]) -> dict[str, Any]:
+    monitor = _monitor()
+    target_id = monitor._open_conversation_from_chat_list(
+        {"hr_name": entry.get("hr_name") or "", "company": entry.get("company") or ""},
+        config,
+        background=True,
+        allow_company_only=False,
+    )
+    if not target_id:
+        raise OfferPilotUnavailable("无法打开该会话，请重新读取会话列表")
+    try:
+        deadline = _ChatReadDeadline(CHAT_THREAD_TIMEOUT_SECONDS)
+        return _json_object(_chat_evaluate(
+            monitor, target_id, _generic_card_click_expression(entry, choice, "body"), deadline,
+        )) or {"ok": False, "reason": "no_answer"}
+    finally:
+        monitor.close_tab(target_id)
+
+
+_CARD_FAILURES = {
+    "no_pending_card": "平台页面上已经没有待回答的简历请求（可能已在平台处理过）",
+    "no_button": "简历请求卡片上没有找到对应按钮，请到平台处理",
+    "needs_upload": "对方要的是附件简历，平台要求手动上传文件，工作台无法代点，请到平台处理",
+    "wrong_contact": "平台页面打开的不是这位 HR，已停止，请到平台处理",
+    "stopped": "操作已停止",
+}
+
+
+def respond_resume_request(
+    conversation_id: Any,
+    choice: Any,
+    *,
+    confirm: Any = None,
+    risk_acknowledged: Any = False,
+) -> dict[str, Any]:
+    """Click the platform's own 同意/拒绝 on a resume-request card, once.
+
+    Same guards as ``send_reply`` (confirmation phrase, risk acknowledgement,
+    stop request, risk locks, no running background task, a recent unambiguous
+    conversation).  Agreeing makes the platform itself send the resume stored in the
+    user's account; nothing is uploaded or composed here.
+    """
+    choice = str(choice or "").strip()
+    if choice not in CARD_BUTTON_LABELS:
+        raise ValueError("请选择同意或拒绝")
+    if confirm != CARD_CONFIRM_PHRASES[choice]:
+        raise ValueError(f"请先输入确认短语：{CARD_CONFIRM_PHRASES[choice]}")
+    if risk_acknowledged is not True:
+        raise ValueError("操作前必须确认风险提示")
+    server = load_backend()
+    config = _runtime_config(server)
+    if _stop_requested(server, config):
+        raise ValueError("当前任务已请求停止")
+    lock_reason = _risk_lock_reason(server, config)
+    if lock_reason:
+        raise ValueError(lock_reason)
+    if _background_task_running(server):
+        raise ValueError("后台任务运行中，结束后再操作")
+    entry = _cached_conversation(conversation_id)
+    platform = str(entry.get("platform") or "boss")
+    if platform not in REPLY_PLATFORMS:
+        raise ValueError("该平台没有站内聊天，工作台不支持处理简历请求")
+    if not str(entry.get("hr_name") or "").strip():
+        raise ValueError("该会话缺少 HR 姓名，无法安全定位，请到平台处理")
+    if entry.get("ambiguous"):
+        raise ValueError("同一公司有同名 HR，无法安全定位，请到平台处理")
+    label = PLATFORM_CHAT_LABELS.get(platform, platform)
+    if platform == "zhilian":
+        result = _click_zhilian_card(entry, choice, config)
+    elif platform == "liepin":
+        result = _click_liepin_card(entry, choice, config)
+    else:
+        result = _click_boss_card(entry, choice, config)
+    if not result.get("ok"):
+        reason = str(result.get("reason") or "")
+        raise ValueError(_CARD_FAILURES.get(reason) or f"{label}没有确认这次操作，请到平台核实")
+    if not result.get("answered"):
+        raise ValueError(f"已点击「{CARD_BUTTON_LABELS[choice]}」，但{label}页面没有给出回应，请到平台核实，避免重复操作")
+    return {
+        "ok": True,
+        "conversation_id": entry["id"],
+        "company": entry.get("company") or "",
+        "platform": platform,
+        "choice": choice,
     }

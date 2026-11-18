@@ -96,7 +96,7 @@ class JobsTableTests(unittest.TestCase):
         cls.script = _read(APP)
 
     def test_action_column_has_a_fixed_width_and_stacks_buttons(self):
-        self.assertIn("body.offer-ui .jobs-table th:nth-child(13) { width: 176px; }", self.theme)
+        self.assertIn("body.offer-ui .jobs-table th:nth-child(12) { width: 176px; }", self.theme)
         actions = _between(self.theme, "body.offer-ui .jobs-actions {", "}")
         self.assertIn("flex-direction: column", actions)
         buttons = self.theme[
@@ -106,12 +106,12 @@ class JobsTableTests(unittest.TestCase):
         self.assertIn("white-space: normal", buttons)
         self.assertIn("width: 100%", buttons)
 
-    def test_status_and_approval_columns_do_not_overlap(self):
+    def test_status_column_does_not_overlap(self):
         self.assertIn("body.offer-ui .jobs-table th:nth-child(10) { width: 96px; }", self.theme)
-        self.assertIn("body.offer-ui .jobs-table th:nth-child(11) { width: 104px; }", self.theme)
+        self.assertIn("body.offer-ui .jobs-table th:nth-child(11) { width: 60px; }", self.theme)
         state = _between(self.theme, "body.offer-ui .jobs-state {", "}")
         self.assertIn("white-space: normal", state)
-        approval = _between(self.theme, "body.offer-ui .jobs-approval,", "}")
+        approval = _between(self.theme, "body.offer-ui .jobs-hard-filter,", "}")
         self.assertIn("flex-direction: column", approval)
         badge = _between(self.theme, "body.offer-ui .badge {", "}")
         self.assertIn("white-space: normal", badge)

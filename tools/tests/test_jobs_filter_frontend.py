@@ -89,7 +89,7 @@ class JobsFilterSourceTests(unittest.TestCase):
     # #4 ------------------------------------------------------------------
     def test_reason_text_is_used_everywhere_reasons_are_shown(self) -> None:
         self.assertIn("function reasonText(items)", self.script)
-        node_helper = _between(self.script, "function hardFilterNode(", "function approvalNode(")
+        node_helper = _between(self.script, "function hardFilterNode(", "/* jobs-dossier:start")
         self.assertIn("reasonText(reasons)", node_helper)
         jobs_block = _between(self.script, "function renderJobs(", "function renderQueue(")
         self.assertIn("reasonText(warnings)", jobs_block)

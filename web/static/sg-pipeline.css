@@ -195,7 +195,7 @@ body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table {
   min-width: 1520px;
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(12) {
   width: 440px;
 }
 
@@ -280,7 +280,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 }
 
 /* 岗位池里三组徽标原本是纵向堆叠，保持堆叠但不再换行 */
-body.offer-ui:not(#wa-theme-off) #view-jobs :is(.jobs-risk, .jobs-hard-filter, .jobs-approval) .badge {
+body.offer-ui:not(#wa-theme-off) #view-jobs :is(.jobs-risk, .jobs-hard-filter) .badge {
   white-space: nowrap;
 }
 
@@ -606,23 +606,23 @@ body.offer-ui:not(#wa-theme-off) #view-jobs :is(.jobs-city, .jobs-salary, .jobs-
 }
 
 /* 动作列固定右侧：横向滚动时按钮和状态下拉不会滑出视口 */
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13),
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(12),
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(12) {
   position: sticky;
   right: 0;
   background: var(--surface);
   box-shadow: inset 1px 0 0 var(--line);
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(12) {
   z-index: 3;
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(12) {
   z-index: 1;
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table tbody tr:hover td:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table tbody tr:hover td:nth-child(12) {
   background: var(--accent-soft);
 }
 

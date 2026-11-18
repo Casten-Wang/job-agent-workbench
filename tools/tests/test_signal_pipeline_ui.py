@@ -47,8 +47,8 @@ class SignalPipelineCssTests(unittest.TestCase):
         self.assertIn("bottom: 16px", CSS)
 
     def test_jobs_actions_column_sticks_and_compact_columns(self):
-        self.assertIn("#view-jobs .jobs-table td:nth-child(13)", CSS)
-        self.assertIn("#view-jobs .jobs-table th:nth-child(13)", CSS)
+        self.assertIn("#view-jobs .jobs-table td:nth-child(12)", CSS)
+        self.assertIn("#view-jobs .jobs-table th:nth-child(12)", CSS)
         self.assertIn("right: 0", CSS)
         for column in (4, 5, 6):
             self.assertIn(f":nth-child({column})", CSS)

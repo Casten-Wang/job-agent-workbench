@@ -483,15 +483,15 @@ body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-actions .terminal-note {
   line-height: 1.5;
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table td:nth-child(12) {
   background: var(--mj-paper);
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table th:nth-child(12) {
   background: var(--mj-paper-2);
 }
 
-body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table tbody tr:hover td:nth-child(13) {
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-table tbody tr:hover td:nth-child(12) {
   background: var(--mj-brand-soft);
 }
 
@@ -1901,4 +1901,31 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
   body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node {
     transition: none;
   }
+}
+
+/* HR 简历请求卡片：气泡内的按钮区 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-actions[hidden],
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note[hidden] {
+  display: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note {
+  margin: 0;
+  color: var(--mj-text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
 }

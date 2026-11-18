@@ -2405,9 +2405,8 @@ body.hr-modal-open {
 .jobs-table th:nth-child(8) { width: 68px; }
 .jobs-table th:nth-child(9) { width: 60px; }
 .jobs-table th:nth-child(10) { width: 54px; }
-.jobs-table th:nth-child(11) { width: 78px; }
-.jobs-table th:nth-child(12) { width: 50px; }
-.jobs-table th:nth-child(13) { width: 236px; }
+.jobs-table th:nth-child(11) { width: 50px; }
+.jobs-table th:nth-child(12) { width: 236px; }
 
 .jobs-table td {
   vertical-align: top;
@@ -2458,8 +2457,7 @@ body.hr-modal-open {
 }
 
 .jobs-hard-filter,
-.jobs-risk,
-.jobs-approval {
+.jobs-risk {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3159,9 +3157,8 @@ body.offer-ui .jobs-table th:nth-child(7) { width: 64px; }
 body.offer-ui .jobs-table th:nth-child(8) { width: 72px; }
 body.offer-ui .jobs-table th:nth-child(9) { width: 64px; }
 body.offer-ui .jobs-table th:nth-child(10) { width: 96px; }
-body.offer-ui .jobs-table th:nth-child(11) { width: 104px; }
-body.offer-ui .jobs-table th:nth-child(12) { width: 60px; }
-body.offer-ui .jobs-table th:nth-child(13) { width: 176px; }
+body.offer-ui .jobs-table th:nth-child(11) { width: 60px; }
+body.offer-ui .jobs-table th:nth-child(12) { width: 176px; }
 
 body.offer-ui .jobs-table td {
   vertical-align: top;
@@ -3174,7 +3171,6 @@ body.offer-ui .jobs-state {
   line-height: 1.5;
 }
 
-body.offer-ui .jobs-approval,
 body.offer-ui .jobs-hard-filter,
 body.offer-ui .jobs-risk {
   display: flex;
