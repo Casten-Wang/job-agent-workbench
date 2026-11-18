@@ -30,12 +30,14 @@ const BOUNDARY_LABELS = {
   external_api: '外部 API',
   real_imap: '真实 IMAP',
   real_feishu_http: '真实飞书 HTTP',
-  real_asr: '真实 ASR'
+  real_asr: '真实 ASR',
+  offerpilot_integration: '岗位自动化组件'
 };
 const BOUNDARY_VALUES = {
   embedded_offerpilot_only: '岗位自动化（仅本机、人工确认投递）',
   not_implemented_offline_build: '未实现（离线版本）',
   dry_run_only: '只生成预览',
+  embedded: '内嵌，已就绪',
   unavailable: '不可用'
 };
 const OFFERPILOT_MODE_LABELS = {
@@ -72,6 +74,25 @@ const HUB_FOR_VIEW = {
   interview: 'interview',
   data: 'data',
   push: 'push'
+};
+const VIEW_TITLES = {
+  workbench: '首页',
+  agent: '对话助理',
+  collect: '岗位流水线 · 采集',
+  jobs: '岗位流水线 · 筛选',
+  queue: '岗位流水线 · 通过',
+  mail: '岗位流水线 · 回复',
+  profile: '个人资料',
+  resume: '定制简历',
+  interview: '模拟面试',
+  push: '信息推送',
+  data: '设置'
+};
+const AI_PROVIDER_DEFAULTS = {
+  anthropic: { model: 'claude-sonnet-5-5', base_url: 'https://api.anthropic.com' },
+  deepseek: { model: '', base_url: 'https://api.deepseek.com' },
+  doubao: { model: '', base_url: 'https://ark.cn-beijing.volces.com/api/v3' },
+  custom: { model: '', base_url: '' }
 };
 const OFFERPILOT_IMPORTED_TASKS_KEY = 'offerpilot.importedTasks';
 const OFFERPILOT_PACE = {
@@ -220,12 +241,20 @@ const dom = {
   generatedAt: document.getElementById('generated-at'),
   loadingNote: document.getElementById('loading-note'),
   refreshButton: document.getElementById('refresh-button'),
+  topbarTitle: document.getElementById('topbar-title'),
   homeDate: document.getElementById('home-date'),
   homeLede: document.getElementById('home-lede'),
   homeJobsCount: document.getElementById('home-jobs-count'),
   homeGreetingsCount: document.getElementById('home-greetings-count'),
   homeRepliesCount: document.getElementById('home-replies-count'),
+  homeRepliesSub: document.getElementById('home-replies-sub'),
   homeSendSummary: document.getElementById('home-send-summary'),
+  sgHomeDay: document.getElementById('sg-home-day'),
+  sgHomeLiveText: document.getElementById('sg-home-live-text'),
+  sgPipeTotal: document.getElementById('sg-pipe-total'),
+  sgPipeList: document.getElementById('sg-pipe-list'),
+  sgActivityCount: document.getElementById('sg-activity-count'),
+  sgHomeActivity: document.getElementById('sg-home-activity'),
   belt: document.getElementById('belt'),
   beltFocus: document.getElementById('belt-focus'),
   pipeline: document.getElementById('pipeline'),
@@ -636,10 +665,25 @@ function todayIso() {
 
 /* Status, loading and API */
 
+let statusToastTimer = null;
+
 function setStatus(message, kind = 'ok') {
   const safeKind = ['ok', 'warn', 'error', 'info'].includes(kind) ? kind : 'info';
-  dom.status.textContent = String(message || '');
+  const text = String(message || '');
+  if (statusToastTimer) {
+    window.clearTimeout(statusToastTimer);
+    statusToastTimer = null;
+  }
+  dom.status.textContent = text;
   dom.status.className = `status status-${safeKind}`;
+  if (!text) return;
+  // 错误常驻，直到下一次操作覆盖；其余三类 3 秒后自动消失。
+  if (safeKind === 'error') return;
+  statusToastTimer = window.setTimeout(() => {
+    dom.status.textContent = '';
+    dom.status.className = 'status status-info';
+    statusToastTimer = null;
+  }, 3000);
 }
 
 function setRefreshing(active) {
@@ -828,6 +872,7 @@ function applyTheme(choice) {
 
 function showView(name) {
   const hub = HUB_FOR_VIEW[name] || name;
+  if (dom.topbarTitle) dom.topbarTitle.textContent = VIEW_TITLES[name] || '首页';
   dom.navItems.forEach((button) => {
     const active = button.dataset.hub === hub;
     button.classList.toggle('is-active', active);
@@ -1342,23 +1387,101 @@ function homeDeliveryLine(snapshot, now) {
 }
 /* home-today:end */
 
+const SG_MONTHS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'];
+
+function homePipelineStageCount(snapshot, key) {
+  const stages = snapshot && snapshot.pipeline && Array.isArray(snapshot.pipeline.stages)
+    ? snapshot.pipeline.stages
+    : [];
+  const stage = stages.find((row) => row && row.key === key);
+  const count = stage ? Number(stage.count) : 0;
+  return Number.isFinite(count) ? Math.trunc(count) : 0;
+}
+
+function homeShortTime(value) {
+  const date = new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function homeQuietAction(id, count) {
+  const button = document.getElementById(id);
+  if (!button) return;
+  button.classList.toggle('button-quiet', count === 0);
+}
+
+function renderHomeSide(snapshot) {
+  if (!dom.sgPipeList) return;
+  clear(dom.sgPipeList);
+  [
+    ['采集', 'intake'],
+    ['筛选', 'screening'],
+    ['通过', 'approval'],
+    ['回复', 'monitor']
+  ].forEach(([label, key]) => {
+    const item = el('li', { className: 'sg-side-row' });
+    item.append(el('span', { text: label }));
+    item.append(el('span', { className: 'sg-side-num', text: String(homePipelineStageCount(snapshot, key)) }));
+    dom.sgPipeList.append(item);
+  });
+  if (dom.sgPipeTotal) {
+    const jobs = snapshot && Array.isArray(snapshot.jobs) ? snapshot.jobs.length : 0;
+    dom.sgPipeTotal.textContent = `岗位池 ${jobs} 个`;
+  }
+  const rows = snapshot && Array.isArray(snapshot.activity) ? snapshot.activity.slice(0, 5) : [];
+  if (dom.sgActivityCount) dom.sgActivityCount.textContent = rows.length ? `最近 ${rows.length} 条` : '';
+  if (!dom.sgHomeActivity) return;
+  clear(dom.sgHomeActivity);
+  if (!rows.length) {
+    dom.sgHomeActivity.append(el('li', {
+      className: 'sg-side-empty',
+      text: '还没有操作记录。采集岗位后会出现在这里。'
+    }));
+    return;
+  }
+  rows.forEach((row) => {
+    const item = el('li', { className: 'sg-activity-row' });
+    item.append(el('span', { className: 'sg-activity-time', text: homeShortTime(row && row.at) }));
+    item.append(el('span', {
+      className: 'sg-activity-title',
+      text: String((row && (row.title || row.action)) || '操作')
+    }));
+    dom.sgHomeActivity.append(item);
+  });
+}
+
 function renderHomeToday(snapshot) {
   const counts = homeTaskCounts(snapshot);
-  if (dom.homeDate) {
-    const now = new Date();
-    const weekday = '日一二三四五六'[now.getDay()];
-    dom.homeDate.textContent = `${now.getMonth() + 1} 月 ${now.getDate()} 日，星期${weekday}`;
+  const now = new Date();
+  const weekday = '日一二三四五六'[now.getDay()];
+  const total = counts.jobs + counts.greetings + counts.replies;
+  if (dom.homeDate) dom.homeDate.textContent = `${SG_MONTHS[now.getMonth()]}月 · 星期${weekday}`;
+  if (dom.sgHomeDay) dom.sgHomeDay.textContent = String(now.getDate());
+  if (dom.sgHomeLiveText) {
+    dom.sgHomeLiveText.textContent = total
+      ? `本机在线 · 还有 ${total} 件待办`
+      : '本机在线 · 今天没有待办';
   }
   if (dom.homeJobsCount) dom.homeJobsCount.textContent = `${counts.jobs} 个`;
   if (dom.homeGreetingsCount) dom.homeGreetingsCount.textContent = `${counts.greetings} 条`;
   if (dom.homeRepliesCount) dom.homeRepliesCount.textContent = `${counts.replies} 封`;
+  homeQuietAction('home-jobs-action', counts.jobs);
+  homeQuietAction('home-greetings-action', counts.greetings);
+  homeQuietAction('home-replies-action', counts.replies);
+  if (dom.homeRepliesSub) {
+    const summary = state.hrSummary && typeof state.hrSummary === 'object' ? state.hrSummary : null;
+    const unread = summary ? Number(summary.unread_total) || 0 : null;
+    dom.homeRepliesSub.textContent = unread === null
+      ? '平台会话在「回复」页；本地邮件按意图计'
+      : `平台会话未读 ${unread} 条；本地邮件 ${counts.replies} 封待回`;
+  }
   if (dom.homeLede) {
-    const total = counts.jobs + counts.greetings + counts.replies;
     dom.homeLede.textContent = total
       ? `还有 ${total} 件待办，先做下面这些。`
       : '今天没有待办，可以去采集新岗位。';
   }
   if (dom.homeSendSummary) dom.homeSendSummary.textContent = homeDeliveryLine(snapshot);
+  renderHomeSide(snapshot);
 }
 
 /* 六段契约只在前端合并成用户要做的四步：后端 PIPELINE_STAGES 与 /api/pipeline 的键都不变。 */
@@ -7735,6 +7858,28 @@ function renderAiSettings(settings) {
   dom.aiSettingsBadge.className = `badge ${settings.key_configured ? 'badge-good' : 'badge-warn'}`;
 }
 
+function applyAiProviderDefaults() {
+  if (!dom.aiSettingsService) return;
+  const service = dom.aiSettingsService.value;
+  const defaults = AI_PROVIDER_DEFAULTS[service] || AI_PROVIDER_DEFAULTS.custom;
+  // 切换服务商时联动 Base URL；只有已知默认模型时才覆盖模型名，手填内容保留。
+  if (service !== 'custom') {
+    if (dom.aiSettingsBaseUrl) dom.aiSettingsBaseUrl.value = defaults.base_url || '';
+    if (defaults.model && dom.aiSettingsModel) dom.aiSettingsModel.value = defaults.model;
+  }
+  if (!dom.aiSettingsResult) return;
+  const label = dom.aiSettingsService.selectedOptions[0]
+    ? dom.aiSettingsService.selectedOptions[0].textContent
+    : service;
+  showInline(
+    dom.aiSettingsResult,
+    service === 'custom'
+      ? '自定义接口：请填写模型名与 Base URL，保存后生效。'
+      : `已填入 ${label} 的常用 Base URL${defaults.model ? '与默认模型' : ''}，保存后生效。`,
+    'info'
+  );
+}
+
 async function loadAiSettings() {
   if (!dom.aiSettingsForm) return;
   try {
@@ -8440,6 +8585,7 @@ function bindEvents() {
   if (dom.aiSettingsForm) {
     dom.aiSettingsForm.addEventListener('submit', saveAiSettings);
     if (dom.aiSettingsTest) dom.aiSettingsTest.addEventListener('click', testAiSettings);
+    if (dom.aiSettingsService) dom.aiSettingsService.addEventListener('change', applyAiProviderDefaults);
     loadAiSettings();
   }
   
