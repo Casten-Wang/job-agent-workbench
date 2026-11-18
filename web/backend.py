@@ -1591,7 +1591,9 @@ def start_offerpilot_conversations_sync(payload: dict[str, Any] | None = None) -
         raise ApiError(str(exc), 409) from exc
 
 
-def get_offerpilot_conversation(mode: str, conversation_id: str, platform: Any = "boss") -> dict[str, Any]:
+def get_offerpilot_conversation(
+    mode: str, conversation_id: str, platform: Any = "boss", force: bool = False,
+) -> dict[str, Any]:
     """Read one conversation's messages; the thread stays in memory.
 
     With ``platform="all"`` the runtime resolves the platform from the cached
@@ -1602,6 +1604,8 @@ def get_offerpilot_conversation(mode: str, conversation_id: str, platform: Any =
     if not CONVERSATION_ID_RE.fullmatch(text):
         raise ApiError("会话 id 无效")
     try:
+        if force:
+            return offerpilot_runtime.get_thread(text, platform, force=True)
         return offerpilot_runtime.get_thread(text, platform)
     except offerpilot_runtime.OfferPilotUnavailable as exc:
         raise ApiError(str(exc), 503) from exc
@@ -1904,6 +1908,19 @@ def start_offerpilot_deliver(payload: dict[str, Any]) -> dict[str, Any]:
     if invalid:
         raise ApiError(
             "只有已确认且来自采集结果的岗位可以发送；请检查：" + "、".join(invalid[:5]),
+            409,
+        )
+    send_blocked = {"zhilian": "智联招聘", "51job": "前程无忧", "liepin": "猎聘"}
+    unsupported = [
+        job_id for job_id in job_ids
+        if str((jobs.get(job_id) or {}).get("source_channel") or "") in send_blocked
+    ]
+    if unsupported:
+        names = "、".join(sorted({
+            send_blocked[str((jobs.get(job_id) or {}).get("source_channel"))] for job_id in unsupported
+        }))
+        raise ApiError(
+            f"{names} 暂不支持在工作台发送；请取消勾选这些岗位，把招呼语复制到平台里自己发送",
             409,
         )
 
@@ -2459,6 +2476,7 @@ def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
     task_id = str(payload.get("task_id") or "").strip()
     if task_id and not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", task_id):
         raise ApiError("任务 id 无效")
+    min_score = _clean_min_score(payload.get("min_score"))
     raw_ids = payload.get("ids")
     if raw_ids is not None:
         if not isinstance(raw_ids, list) or not all(isinstance(item, str) for item in raw_ids):
@@ -2501,11 +2519,11 @@ def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
     queued: dict[str, Any] = {
         "approved": [], "dropped": [], "duplicate": [], "risk_blocked": [],
         "city_blocked": [], "mandatory_blocked": [], "closed_blocked": [],
-        "incomplete": [], "unscored": [], "recent_duplicates": [],
+        "incomplete": [], "unscored": [], "recent_duplicates": [], "below_min_score": [],
         "message": "没有需要入队的岗位",
     }
     if candidates:
-        queued = enqueue({"mode": "user", "ids": candidates})
+        queued = enqueue({"mode": "user", "ids": candidates, "min_score": min_score})
 
     greeting: dict[str, Any] = {
         "requested": 0, "task": None, "already_ready": 0, "deferred": 0, "error": None,
@@ -2555,6 +2573,9 @@ def run_offerpilot_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
         f"自动流程已停在最终确认门：导入 {len(imported['added'])} 条，"
         f"入队 {approved_count} 条，生成招呼语 {greeting['requested']} 条；尚未发送任何消息"
     )
+    below_count = len(queued.get("below_min_score") or [])
+    if below_count and min_score is not None:
+        message += f"；{below_count} 条低于合格线 {min_score:g} 分，未自动入队"
     if greeting["error"]:
         message += f"；招呼语暂未生成：{greeting['error']}"
     if greeting["deferred"]:
@@ -3381,12 +3402,28 @@ def _append_manual_queue(store: Store, entries: list[dict[str, Any]], reason: st
 
 
 @_serialized_store_write
+def _clean_min_score(value: Any) -> float | None:
+    """合格线：0–100 的数字；缺省表示不设合格线（沿用文档规则）。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ApiError("合格线必须是 0–100 的数字")
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ApiError("合格线必须是 0–100 的数字") from None
+    if not (0 <= number <= 100):
+        raise ApiError("合格线必须是 0–100 的数字")
+    return number
+
+
 def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "user")
     ids = payload.get("ids")
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
         raise ApiError("ids 必须是字符串数组")
     allow_low = payload.get("allow_low_score") is True
+    min_score = _clean_min_score(payload.get("min_score"))
     # 手动加入低分/未评分岗位必须带原因；校验放在读写队列之前，失败时不改动任何数据。
     override_reason = _clean_override_reason(payload.get("override_reason")) if allow_low else ""
     store = get_store(mode)
@@ -3403,6 +3440,7 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     mandatory_blocked: list[dict[str, Any]] = []
     closed_blocked: list[dict[str, Any]] = []
     zero_score_held: list[dict[str, Any]] = []
+    below_min_score: list[dict[str, Any]] = []
     incomplete: list[dict[str, Any]] = []
     unscored: list[str] = []
     risk_map = _job_risk_map(list(jobs.values()))
@@ -3468,6 +3506,12 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         if not not_recommended and score is not None and float(score) <= 0:
             not_recommended = "文档评分为 0，各项都不匹配"
             zero_score_held.append({"id": job_id, "reason": not_recommended})
+            if not allow_low:
+                continue
+        # 合格线（可选）：低于线的岗位不自动通过，和零分一样只能手动加入。
+        if not not_recommended and min_score is not None and score is not None and float(score) < min_score:
+            not_recommended = f"评分 {float(score):g} 分，低于合格线 {min_score:g} 分"
+            below_min_score.append({"id": job_id, "score": float(score), "reason": not_recommended})
             if not allow_low:
                 continue
         if not_recommended:
@@ -3537,6 +3581,8 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
     result["mandatory_blocked"] = mandatory_blocked
     result["closed_blocked"] = closed_blocked
     result["zero_score_held"] = zero_score_held
+    result["below_min_score"] = below_min_score
+    result["min_score"] = min_score
     result["incomplete"] = incomplete
     result["unscored"] = unscored
     result["recent_duplicates"] = recent_duplicates
@@ -3553,6 +3599,8 @@ def enqueue(payload: dict[str, Any]) -> dict[str, Any]:
         message = f"{len(approved)} 条已按文档规则评分并通过筛选，已自动通过"
     if manual:
         message += f"；{len(manual)} 条未自动通过，已按你的选择手动加入（标记为已通过）"
+    if below_min_score:
+        message += f"；{len(below_min_score)} 条评分低于合格线 {min_score:g} 分，未自动通过（可在「筛选」里手动加入）"
     if risk_blocked:
         message += f"；{len(risk_blocked)} 条疑似高风险岗位（收费/承诺类），已拦截不入队"
     if city_blocked:

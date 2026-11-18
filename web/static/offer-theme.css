@@ -5097,6 +5097,61 @@ body.offer-ui .hr-nav-unread[hidden] { display: none; }
   body.offer-ui .hr-key-hint { display: none; }
 }
 
+/* 采集页：一行初筛条件、高级设置折叠 */
+.collect-criteria-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2, rgba(127, 127, 127, 0.08)); font-size: 13px; }
+.collect-criteria-line > span { flex: 1 1 240px; color: var(--muted, #667085); }
+.collect-score-details, .collect-advanced { margin: 10px 0; }
+
+/* HR 会话：对话框观感（头像、气泡、输入区）。只追加 hr- 前缀规则。 */
+body.offer-ui .hr-layout { height: clamp(520px, calc(100dvh - 300px), 840px); }
+body.offer-ui .hr-thread-head { justify-content: flex-start; gap: 12px; padding: 12px 20px; background: var(--surface); }
+body.offer-ui .hr-thread-title { flex: 1 1 auto; }
+body.offer-ui .hr-thread-job { margin-left: auto; }
+body.offer-ui .hr-avatar {
+  display: inline-grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+body.offer-ui .hr-messages { gap: 4px; padding: 20px 24px; background: color-mix(in srgb, var(--ink) 3%, var(--bg)); }
+body.offer-ui .hr-message {
+  max-width: min(72%, 600px);
+  padding: 10px 14px 8px;
+  border: 0;
+  border-radius: 16px 16px 16px 4px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+body.offer-ui .hr-message-me {
+  border-radius: 16px 16px 4px 16px;
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+body.offer-ui .hr-message-me .hr-message-meta { color: color-mix(in srgb, var(--accent-ink) 62%, transparent); }
+body.offer-ui .hr-message-system { max-width: min(92%, 520px); margin-block: 6px; padding: 5px 14px; box-shadow: none; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+body.offer-ui .hr-message-text { font-size: 14px; line-height: 1.65; }
+body.offer-ui .hr-message-meta { order: 2; margin: 4px 0 0; font-size: 11px; }
+body.offer-ui .hr-message:not(.hr-message-system) { display: flex; flex-direction: column; }
+body.offer-ui .hr-message-hr .hr-message-meta { text-align: left; }
+body.offer-ui .hr-message-system .hr-message-meta { display: none; }
+body.offer-ui .hr-composer { margin: 0; padding: 12px 20px 14px; border: 0; border-top: .5px solid var(--line); border-radius: 0; background: var(--surface); }
+body.offer-ui .hr-composer:focus-within { border-top-color: var(--line); }
+body.offer-ui:not(#wa-theme-off) .hr-composer textarea { min-height: 56px; padding: 10px 12px; border: .5px solid var(--line); border-radius: 12px; background: var(--bg); }
+body.offer-ui:not(#wa-theme-off) .hr-composer textarea:focus { border: .5px solid var(--wa-focus, var(--ink)); }
+body.offer-ui .hr-composer-actions { padding-top: 4px; border-top: 0; }
+body.offer-ui .hr-open-platform:not([hidden]) ~ .hr-key-hint { display: none; }
+body.offer-ui .hr-block-reason { margin: 0; }
+body.offer-ui .hr-platform-row-detail { white-space: nowrap; }
+body.offer-ui .hr-preview-retry { align-self: flex-start; margin-top: 6px; }
+
 /* 首页：今天要做的事 ---------------------------------------------------------- */
 
 .home-today {

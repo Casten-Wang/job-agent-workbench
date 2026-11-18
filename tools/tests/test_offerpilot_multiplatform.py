@@ -277,19 +277,58 @@ class LiepinParserContractTests(unittest.TestCase):
 
 
 class FullModePlatformGateTests(unittest.TestCase):
-    def test_full_mode_still_rejects_platforms_without_deliver(self):
+    def _raw(self, platform):
+        return {
+            "platform_order": [platform],
+            "platforms": {platform: {"keywords": ["产品经理"], "cities": ["上海"], "max_pages": 1}},
+            "auto_score": False,
+            "pace": "cautious",
+        }
+
+    def test_full_mode_allows_platforms_with_score_and_greet(self):
         config = {"collection": {"platforms": {}}}
-        for platform in ("zhilian", "51job", "liepin"):
+        for platform in ("boss", "zhilian", "51job", "liepin"):
             with self.subTest(platform=platform):
-                raw = {
-                    "platform_order": [platform],
-                    "platforms": {platform: {"keywords": ["产品经理"], "cities": ["上海"], "max_pages": 1}},
-                    "auto_score": False,
-                    "pace": "cautious",
-                }
-                with self.assertRaises(ValueError) as ctx:
-                    offerpilot_runtime._task_options("full", config, raw)
-                self.assertIn("只能单独采集", str(ctx.exception))
+                options = offerpilot_runtime._task_options("full", config, self._raw(platform))
+                self.assertEqual(options["platform_order"], [platform])
+                self.assertTrue(options["auto_score"])
+
+    def test_full_mode_rejects_platforms_missing_score_or_greet(self):
+        config = {"collection": {"platforms": {}}}
+        with patch("offerpilot.collection.capabilities.platform_supports", return_value=False):
+            with self.assertRaises(ValueError) as ctx:
+                offerpilot_runtime._task_options("full", config, self._raw("liepin"))
+        self.assertIn("只采集", str(ctx.exception))
+
+
+class FullModePreflightPlatformTests(unittest.TestCase):
+    def test_full_mode_browser_check_follows_the_selected_platform(self):
+        from offerpilot.collection.orchestrator import normalize_collection_options
+        from offerpilot.web import preflight
+
+        config = {"collection": {"platforms": {}}}
+        raw = {
+            "platform_order": ["liepin"],
+            "platforms": {"liepin": {"keywords": ["产品经理"], "cities": ["上海"], "max_pages": 1}},
+            "auto_score": True,
+            "pace": "cautious",
+        }
+        seen = {}
+
+        def fake_browser(_config, collection_options=None):
+            seen["order"] = (collection_options or {}).get("platform_order")
+            return []
+
+        with patch.object(preflight, "_configuration_checks", return_value=[]), \
+                patch.object(preflight, "_collection_city_checks", return_value=[]), \
+                patch.object(preflight, "check_ai_connection", return_value=[]), \
+                patch.object(preflight, "check_browser_connection", side_effect=fake_browser):
+            checks = preflight.collect_preflight_checks(
+                "full", config, normalize_collection_options(config, raw)
+            )
+        self.assertEqual(seen["order"], ["liepin"])
+        flow = next(item for item in checks if item["id"] == "full_flow_platform")
+        self.assertNotIn("只有支持投递", flow["detail"])
 
 
 class BackendChatDispatchTests(unittest.TestCase):

@@ -1195,6 +1195,40 @@ class ApprovalGateTests(SeededStoreTestCase):
         self.assertTrue(row["manual_override"])
         self.assertEqual(row["status"], "approved")
 
+    def test_min_score_line_holds_low_scores_but_not_when_omitted(self):
+        self._add_imported_job("line-demo-job", score=49, score_raw=49)
+        held = backend.enqueue({"mode": "user", "ids": ["line-demo-job"], "min_score": 60})
+        self.assertEqual(held["accepted"], [])
+        self.assertEqual(held["below_min_score"][0]["id"], "line-demo-job")
+        self.assertEqual(held["min_score"], 60.0)
+        self.assertIn("低于合格线 60 分", held["message"])
+        self.assertFalse(any(row["id"] == "line-demo-job" for row in backend.get_store("user").queue()))
+
+        passed = backend.enqueue({"mode": "user", "ids": ["line-demo-job"], "min_score": 40})
+        self.assertEqual(passed["below_min_score"], [])
+        self.assertIn("line-demo-job", passed["accepted"])
+
+    def test_min_score_line_can_be_overridden_manually(self):
+        self._add_imported_job("line-manual-job", score=30, score_raw=30)
+        manual = backend.enqueue({
+            "mode": "user",
+            "ids": ["line-manual-job"],
+            "min_score": 80,
+            "allow_low_score": True,
+            "override_reason": "值得沟通，人工判断",
+        })
+        self.assertIn("line-manual-job", manual["manual"])
+
+    def test_min_score_must_be_a_number_between_zero_and_one_hundred(self):
+        for bad in (-1, 101, "abc", True):
+            with self.subTest(value=bad):
+                with self.assertRaises(backend.ApiError):
+                    backend._clean_min_score(bad)
+        self.assertIsNone(backend._clean_min_score(None))
+        self.assertIsNone(backend._clean_min_score(""))
+        self.assertEqual(backend._clean_min_score("65"), 65.0)
+        self.assertEqual(backend._clean_min_score(0), 0.0)
+
     def test_pending_mandatory_condition_is_not_excluded(self):
         self._add_imported_job(
             "pending-mandatory-demo-job",
@@ -1400,6 +1434,31 @@ class DeliveryActionTests(unittest.TestCase):
         self.assertEqual(batch["items"][0]["job_id"], "job-approved")
         self.assertEqual(batch["items"][0]["offerpilot_id"], "vendor-1")
         self.assertEqual(store.deliveries()[0]["batch_id"], batch["batch_id"])
+
+    def test_deliver_is_blocked_for_platforms_without_send_support(self):
+        for channel in ("zhilian", "51job", "liepin"):
+            with self.subTest(channel=channel):
+                store = self._store()
+                store.jobs = lambda channel=channel: [{
+                    "id": "job-approved",
+                    "offerpilot_id": "vendor-1",
+                    "company": "示例公司",
+                    "title": "示例岗位",
+                    "source_channel": channel,
+                }]
+                with patch.object(backend, "get_store", return_value=store), patch.object(
+                    backend.offerpilot_runtime, "start_deliver_task"
+                ) as start:
+                    with self.assertRaises(backend.ApiError) as ctx:
+                        backend.start_offerpilot_deliver({
+                            "mode": "user",
+                            "ids": ["job-approved"],
+                            "confirm": "确认发送本批 1 条",
+                            "risk_acknowledged": True,
+                        })
+                start.assert_not_called()
+                self.assertEqual(ctx.exception.status, 409)
+                self.assertEqual(store.deliveries(), [])
 
     def test_deliver_start_failure_is_recorded(self):
         store = self._store()
@@ -2877,7 +2936,9 @@ class SecurityTests(SeededStoreTestCase):
         self.assertIn('value="1"', tag)
         self.assertIn('min="1"', tag)
         self.assertIn('max="10"', tag)
-        self.assertIn("每次都从第 1 页开始；已抓过的岗位会自动跳过，不会重复。想看到更多新岗位，就多翻几页。", html)
+        self.assertIn("从第 1 页开始，已抓过的岗位自动跳过；想要更多新岗位就多翻几页。", html)
+        self.assertIn('id="collect-min-score"', html)
+        self.assertIn("怎么打分", html)
         self.assertIn('id="collect-criteria"', html)
         self.assertIn("本次初筛条件", html)
         self.assertIn('data-view-link="profile"', html)

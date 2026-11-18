@@ -39,6 +39,13 @@ def collect_preflight_checks(mode: str, config: dict, options: dict | None = Non
 			checks.extend(_collection_city_checks(collection_options))
 	else:
 		checks = _configuration_checks(mode, config, options)
+		if mode == "full":
+			# 全流程也要按所选平台做浏览器检查（否则一律按 Boss 检查）。
+			# 参数不合法时由下方 full_flow_platform 检查报告原因。
+			try:
+				collection_options = normalize_collection_options(config, options)
+			except ValueError:
+				collection_options = None
 	if mode not in VALID_MODES:
 		return checks
 	ai_required = mode in {"full", "rescore"} or (
@@ -98,7 +105,7 @@ def collect_preflight_checks(mode: str, config: dict, options: dict | None = Non
 					"全流程平台能力",
 					"pass",
 					"已选择的平台均接入全流程",
-					f"执行顺序：{' → '.join(full_options.get('platform_order', []))}；只有支持投递的平台可进入全流程。",
+					f"执行顺序：{' → '.join(full_options.get('platform_order', []))}；全流程到发送确认前为止，不会自动发送。",
 				)
 			)
 	return checks

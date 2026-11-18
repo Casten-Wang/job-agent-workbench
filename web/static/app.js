@@ -103,9 +103,9 @@ const OFFERPILOT_PACE = {
   fast: { label: '快速', multiplier: 1.0 }
 };
 const OFFERPILOT_MODE_HINTS = {
-  collect: '采集岗位并按你的简历评分，不投递、不发消息。',
-  monitor: '只检查已有会话中的 HR 回复，不采集新岗位、不发送消息。',
-  full: '采集后自动评分、放进待确认队列并生成招呼语，停在发送确认前；发送仍需你确认。'
+  collect: '只采集并打分，岗位进入岗位池，由你自己挑。',
+  monitor: '只读取已有会话里的 HR 回复，不采集、不发送。',
+  full: '采集后按简历打分，达到合格线的自动进入「通过」并生成招呼语；发送前仍由你确认。'
 };
 const OFFERPILOT_JOB_STATUS_LABELS = {
   pending: '待评分',
@@ -325,6 +325,7 @@ const dom = {
   collectPace: document.getElementById('collect-pace'),
   collectPlatform: document.getElementById('collect-platform'),
   collectPlatformHint: document.getElementById('collect-platform-hint'),
+  collectMinScore: document.getElementById('collect-min-score'),
   collectAutoScore: document.getElementById('collect-auto-score'),
   collectResumeFile: document.getElementById('collect-resume-file'),
   collectResumeUpload: document.getElementById('collect-resume-upload'),
@@ -422,6 +423,8 @@ const dom = {
   hrDetailMeta: document.getElementById('hr-detail-meta'),
   hrDetailJob: document.getElementById('hr-detail-job'),
   hrMessages: document.getElementById('hr-messages'),
+  hrDetailAvatar: document.getElementById('hr-detail-avatar'),
+  hrOpenPlatform: document.getElementById('hr-open-platform'),
   hrReplyBlockReason: document.getElementById('hr-reply-block-reason'),
   hrReplyForm: document.getElementById('hr-reply-form'),
   hrReplyInput: document.getElementById('hr-reply-input'),
@@ -3350,11 +3353,12 @@ function collectNeedsSearch(mode) {
   return mode === 'collect' || mode === 'full';
 }
 
-// 采集平台：四个平台都能单独采集；「完整流程」会进入投递，目前只有 Boss 直聘开放投递，所以锁定 Boss。
+// 采集平台：四个平台都可以选；采集、打分、生成招呼语对四个平台一致，发送目前只有 Boss直聘 开放。
 const COLLECT_PLATFORMS = ['boss', 'zhilian', '51job', 'liepin'];
+const COLLECT_MIN_SCORE_KEY = 'offerpilot.collectMinScore';
+const COLLECT_MIN_SCORE_DEFAULT = 60;
 
 function collectPlatform() {
-  if (collectMode() === 'full') return 'boss';
   const value = dom.collectPlatform ? dom.collectPlatform.value : 'boss';
   return COLLECT_PLATFORMS.includes(value) ? value : 'boss';
 }
@@ -3398,16 +3402,18 @@ function renderCollectCriteria() {
     dom.collectCities.placeholder = intent.cities.length ? intent.cities.slice(0, 5).join(', ') : '北京';
   }
   if (dom.collectCriteria) {
-    clear(dom.collectCriteria);
-    dom.collectCriteria.append(offerpilotMetaRow('求职类型', intent.jobType || '未设置'));
-    dom.collectCriteria.append(offerpilotMetaRow('期望月薪', collectSalaryText(intent)));
-    dom.collectCriteria.append(offerpilotMetaRow('目标城市', intent.cities.length ? intent.cities.join('、') : '未设置'));
-    dom.collectCriteria.append(offerpilotMetaRow('目标岗位', intent.titles.length ? intent.titles.join('、') : '未设置'));
+    const parts = [
+      intent.jobType || '求职类型未设置',
+      `月薪 ${collectSalaryText(intent)}`,
+      intent.cities.length ? intent.cities.join('、') : '城市未设置',
+      intent.titles.length ? intent.titles.join('、') : '岗位未设置'
+    ];
+    dom.collectCriteria.textContent = parts.join(' · ');
   }
   if (dom.collectCriteriaHint) {
     const incomplete = !intent.jobType || (intent.salaryMin === null && intent.salaryMax === null);
     dom.collectCriteriaHint.hidden = !incomplete;
-    dom.collectCriteriaHint.textContent = incomplete ? '去个人资料补全求职类型和期望月薪后，初筛会更准；不补全也可以直接开始采集。' : '';
+    dom.collectCriteriaHint.textContent = incomplete ? '补全求职类型和期望月薪后，筛得更准；不补也能直接开始。' : '';
   }
 }
 
@@ -3430,6 +3436,22 @@ function collectFormKey() {
     dom.collectPace ? dom.collectPace.value : 'cautious',
     dom.collectAutoScore && dom.collectAutoScore.checked ? '1' : '0'
   ].join('|');
+}
+
+/* 合格线：采集后自动打分，低于该分数的岗位不会自动通过；0 表示不设线。输入会记在本机浏览器里。 */
+function collectMinScore() {
+  const raw = dom.collectMinScore ? String(dom.collectMinScore.value).trim() : '';
+  if (raw === '') return COLLECT_MIN_SCORE_DEFAULT;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return COLLECT_MIN_SCORE_DEFAULT;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function restoreCollectMinScore() {
+  if (!dom.collectMinScore || dom.collectMinScore.dataset.restored) return;
+  dom.collectMinScore.dataset.restored = '1';
+  const saved = safeLocalGet(COLLECT_MIN_SCORE_KEY);
+  if (saved !== null && saved !== '' && Number.isFinite(Number(saved))) dom.collectMinScore.value = String(Math.min(100, Math.max(0, Math.round(Number(saved)))));
 }
 
 function buildOfferPilotOptions(silent = false) {
@@ -3471,9 +3493,8 @@ function renderCollectSummary() {
       const pace = OFFERPILOT_PACE[options.pace] || OFFERPILOT_PACE.cautious;
       const low = (2 * pace.multiplier).toFixed(1);
       const high = (5 * pace.multiplier).toFixed(1);
-      text += ` 将在 ${collectPlatformLabel(options.platform)} 搜索「${options.keywords.join('、')}」，城市「${options.cities.join('、')}」，每个关键词最多 ${options.max_pages} 页。`;
-      text += ` 节奏「${pace.label}」：每次翻页/读详情前随机等待 ${low}–${high} 秒。`;
-      text += ' 采集后会按你的简历自动评分。';
+      text += ` 在${collectPlatformLabel(options.platform)}搜「${options.keywords.join('、')}」，${options.cities.join('、')}，每词最多 ${options.max_pages} 页，每步随机等待 ${low}–${high} 秒。`;
+      if (mode === 'full') text += ` 合格线 ${collectMinScore()} 分。`;
     }
   }
   dom.collectSummary.textContent = text;
@@ -3530,18 +3551,17 @@ function syncCollectModeUI() {
     node.hidden = !needsSearch;
   });
   if (dom.offerpilotStart) {
-    dom.offerpilotStart.textContent = mode === 'monitor' ? '开始监控' : mode === 'full' ? '开始完整流程' : '开始采集';
+    dom.offerpilotStart.textContent = mode === 'monitor' ? '开始监控' : mode === 'full' ? '开始采集并打分' : '开始采集';
   }
+  document.querySelectorAll('[data-collect-score]').forEach((node) => {
+    node.hidden = !needsSearch || mode !== 'full';
+  });
   if (dom.collectPlatform) {
-    const locked = mode === 'full';
-    if (locked) dom.collectPlatform.value = 'boss';
-    dom.collectPlatform.disabled = locked;
+    dom.collectPlatform.disabled = false;
     if (dom.collectPlatformHint) {
-      dom.collectPlatformHint.textContent = locked
-        ? '完整流程会进入投递，目前只有 Boss直聘 开放投递；其他平台请选「仅采集」。'
-        : collectPlatform() === 'boss'
-          ? ''
-          : `${collectPlatformLabel(collectPlatform())} 目前只能采集、评分和生成招呼语，投递与回复监控暂未开放。`;
+      dom.collectPlatformHint.textContent = collectPlatform() === 'boss'
+        ? ''
+        : `${collectPlatformLabel(collectPlatform())} 可采集、打分、生成招呼语；发送请自己复制到平台。`;
     }
   }
   renderCollectSummary();
@@ -4006,7 +4026,7 @@ async function maybeAutoImportCollected(task) {
     for (const chunk of chunkList(ids)) {
       try {
         const payload = full
-          ? { ids: chunk, data_mode: state.mode, task_id: String(task.id || '') }
+          ? { ids: chunk, data_mode: state.mode, task_id: String(task.id || ''), min_score: collectMinScore() }
           : { ids: chunk, data_mode: state.mode };
         const data = await postAction(full ? 'offerpilot-automate' : 'offerpilot-import', payload);
         if (!data || data.ok === false) {
@@ -5286,7 +5306,7 @@ function renderHrPlatformStatus(unavailable) {
     ]));
     node.append(el('span', {
       className: 'hr-platform-row-detail',
-      text: row.error ? (hasCache ? cacheText : '未读取') : String(row.count)
+      text: row.error ? (hasCache ? '缓存' : '未读取') : String(row.count)
     }));
     dom.hrPlatformStatus.append(node);
   });
@@ -5762,7 +5782,9 @@ function hrMessageNode(message, conversation, startOfGroup) {
   // HR 的气泡需要标出是谁；自己的消息只留时间，省掉“我，”这种多余前缀。
   bubble.append(el('p', {
     className: 'hr-message-meta',
-    text: kind === 'hr' ? (stamp ? `${who}，${stamp}` : who) : (stamp || who)
+    text: (message && message.preview)
+      ? `${who}，最新一条（完整对话没读到，可点「刷新这个会话」）`
+      : kind === 'hr' ? (stamp ? `${who}，${stamp}` : who) : (stamp || who)
   }));
   const fullText = String((message && message.text) || '');
   // 系统提示常是一大段平台原话；列表里只留摘要，完整内容放在 title。
@@ -5816,6 +5838,7 @@ function renderHrThread() {
   }
   const key = String(conversation.id || '');
   dom.hrDetailTitle.textContent = String(conversation.hr_name || 'HR');
+  if (dom.hrDetailAvatar) dom.hrDetailAvatar.textContent = Array.from(String(conversation.hr_name || 'HR'))[0] || 'H';
   dom.hrDetailMeta.textContent = [
     conversation.platform ? channelLabel(conversation.platform) : '',
     conversation.hr_title
@@ -5862,7 +5885,7 @@ function renderHrThread() {
         text: '刷新这个会话',
         attrs: { type: 'button' }
       });
-      refresh.addEventListener('click', () => loadHrThread(String(conversation.id)));
+      refresh.addEventListener('click', () => loadHrThread(String(conversation.id), { force: true }));
       empty.append(refresh);
     }
     dom.hrMessages.append(empty);
@@ -5874,6 +5897,15 @@ function renderHrThread() {
     clear(dom.hrMessages);
     appendHrMessages(messages, messages, 0, conversation);
     state.hrThreadRenderedMessages = signatures;
+    if (messages.length === 1 && messages[0] && messages[0].preview) {
+      const retry = el('button', {
+        className: 'button button-quiet button-small hr-preview-retry',
+        text: '刷新这个会话',
+        attrs: { type: 'button' }
+      });
+      retry.addEventListener('click', () => loadHrThread(String(conversation.id), { force: true }));
+      dom.hrMessages.append(retry);
+    }
   }
   if (viewport) {
     const switching = state.hrThreadRenderedKey !== key;
@@ -5906,6 +5938,25 @@ function renderHrThread() {
     dom.hrReplyInput.value = draft;
   }
   updateHrComposerState();
+  syncHrOpenPlatform(conversation, allowed);
+}
+
+// 不能在工作台里发送的平台（智联、猎聘）：给一个直达该平台官网的按钮，回复在平台里发。
+const HR_PLATFORM_HOMES = {
+  boss: 'https://www.zhipin.com/web/geek/chat',
+  zhilian: 'https://i.zhaopin.com/',
+  liepin: 'https://c.liepin.com/'
+};
+
+function syncHrOpenPlatform(conversation, allowed) {
+  const button = dom.hrOpenPlatform;
+  if (!button) return;
+  const platform = conversation ? String(conversation.platform || '') : '';
+  const url = HR_PLATFORM_HOMES[platform];
+  const show = Boolean(conversation && url && !allowed && !state.hrThreadLoading);
+  button.hidden = !show;
+  button.dataset.hrPlatformUrl = show ? url : '';
+  button.textContent = show ? `去${channelLabel(platform)}回复` : '去平台回复';
 }
 
 function updateHrComposerState() {
@@ -6028,7 +6079,7 @@ async function loadHrThread(id, options = {}) {
   if (!options.quiet) renderHrThread();
   try {
     const data = await hrRequestJson(
-      `/api/offerpilot/conversation?platform=${encodeURIComponent(platform)}&mode=${encodeURIComponent(mode)}&id=${encodeURIComponent(key)}`,
+      `/api/offerpilot/conversation?platform=${encodeURIComponent(platform)}&mode=${encodeURIComponent(mode)}&id=${encodeURIComponent(key)}${options.force ? '&force=1' : ''}`,
       { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' }
     );
     if (state.mode !== mode || String(state.hrSelectedId) !== key) return;
@@ -8717,6 +8768,14 @@ function bindEvents() {
     input.addEventListener('input', syncCollectModeUI);
     input.addEventListener('change', syncCollectModeUI);
   });
+  if (dom.collectMinScore) {
+    restoreCollectMinScore();
+    dom.collectMinScore.addEventListener('change', () => {
+      dom.collectMinScore.value = String(collectMinScore());
+      safeLocalSet(COLLECT_MIN_SCORE_KEY, dom.collectMinScore.value);
+      syncCollectModeUI();
+    });
+  }
   if (dom.collectPreflight) {
     dom.collectPreflight.addEventListener('click', () => runOfferPilotPreflight(dom.collectPreflight));
   }
@@ -9023,6 +9082,12 @@ function bindEvents() {
     dom.hrReplyForm.addEventListener('submit', (event) => {
       event.preventDefault();
       openHrReplyModal(dom.hrReplySend);
+    });
+  }
+  if (dom.hrOpenPlatform) {
+    dom.hrOpenPlatform.addEventListener('click', () => {
+      const url = dom.hrOpenPlatform.dataset.hrPlatformUrl;
+      if (url && /^https:\/\//.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
     });
   }
   if (dom.hrReplyInput) {

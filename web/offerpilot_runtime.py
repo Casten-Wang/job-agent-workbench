@@ -594,12 +594,14 @@ def _task_options(mode: str, config: dict[str, Any], raw_options: dict[str, Any]
     # Resume is a hard prerequisite for collect/full, so scoring is always on.
     options["auto_score"] = True
     if mode == "full":
-        collection_only = [
+        # 完整流程 = 采集 + 评分 + 自动筛选入队 + 生成招呼语，停在发送确认前；
+        # 只需要平台支持采集、评分与招呼语。发送另有一道门（目前仅 Boss直聘）。
+        unsupported = [
             platform for platform in options["platform_order"]
-            if not platform_supports(platform, "deliver")
+            if not (platform_supports(platform, "score") and platform_supports(platform, "greet"))
         ]
-        if collection_only:
-            raise ValueError("智联、前程无忧和猎聘只能单独采集，不能进入投递全流程")
+        if unsupported:
+            raise ValueError("所选平台暂不支持评分与招呼语，请改用「只采集」")
         options["auto_score"] = True
     return options
 
@@ -1392,6 +1394,21 @@ def _hr_signature(row: dict[str, Any]) -> str:
 
 def _hr_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
+
+
+HR_EMPTY_BODY_RETRY_SECONDS = 300.0
+
+
+def _hr_now_dt() -> "_dt.datetime":
+    return _dt.datetime.now(_dt.timezone.utc)
+
+
+def _parse_hr_time(value: Any) -> "_dt.datetime | None":
+    try:
+        parsed = _dt.datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=_dt.timezone.utc)
 
 
 def _stored_body_signature(record: dict[str, Any]) -> str | None:
@@ -2959,6 +2976,12 @@ def _stored_body_for(entry: dict[str, Any], platform: str) -> dict[str, Any] | N
         return None
     if not (record.get("messages") or record.get("body_read")):
         return None
+    if platform != "boss" and not record.get("messages") and str(entry.get("last_message") or "").strip():
+        # 列表里有消息、存下来的正文却是空的：多半是上次没读到，隔一会儿再试一次，
+        # 但不要每次点开都重读（5 分钟内直接用存储）。
+        fetched = _parse_hr_time(record.get("fetched_at"))
+        if fetched is None or (_hr_now_dt() - fetched).total_seconds() > HR_EMPTY_BODY_RETRY_SECONDS:
+            return None
     # The stored messages must reach the listing the caller just saw.  When
     # they do not (a new message is waiting), open this one conversation once
     # instead of showing an old body.
@@ -3968,7 +3991,7 @@ def start_conversations_sync(platform: Any = "all") -> dict[str, Any]:
         return result
 
 
-def get_thread(conversation_id: Any, platform: Any = "boss") -> dict[str, Any]:
+def get_thread(conversation_id: Any, platform: Any = "boss", force: bool = False) -> dict[str, Any]:
     """Return one conversation's messages, read-only.
 
     A body already stored for the same listing signature is served without
@@ -3991,10 +4014,37 @@ def get_thread(conversation_id: Any, platform: Any = "boss") -> dict[str, Any]:
         platform = _chat_platform(requested)
         if str(entry.get("platform") or "boss") != platform:
             raise ValueError("会话不属于所选平台，请重新读取该平台的会话列表")
-    stored = _stored_body_for(entry, platform)
+    stored = None if force else _stored_body_for(entry, platform)
     if stored is not None:
-        return _store_response(stored, platform, stale=False, error=None)
-    return _open_and_store_thread(entry, platform)
+        return _with_preview_fallback(_store_response(stored, platform, stale=False, error=None), entry, platform)
+    return _with_preview_fallback(_open_and_store_thread(entry, platform), entry, platform)
+
+
+def _with_preview_fallback(response: dict[str, Any], entry: dict[str, Any], platform: str) -> dict[str, Any]:
+    """读不到正文时，至少把列表里那条最新消息当作一条摘要消息展示（不写入存储）。
+
+    只用于智联、猎聘这类靠网页读取的平台；Boss 走接口，空历史就是空。
+
+    列表明明显示有一条消息，而会话正文读成空时（平台页面结构变化、只读到摘要），
+    界面不能显示成「这个会话还没有消息」。摘要消息带 ``preview: True``，不可回复。
+    """
+    if platform == "boss" or not response.get("ok") or response.get("messages"):
+        return response
+    text = _redact_contacts(entry.get("last_message"))[:HR_MESSAGE_MAX_CHARS]
+    if not text.strip():
+        return response
+    sender = "me" if str(entry.get("last_direction") or "") == "me" else "hr"
+    return {
+        **response,
+        "messages": [{
+            "sender": sender,
+            "text": text,
+            "time": str(entry.get("last_message_at") or "")[:40],
+            "platform": platform,
+            "preview": True,
+        }],
+        "preview_only": True,
+    }
 
 
 def _open_and_store_thread(entry: dict[str, Any], platform: str) -> dict[str, Any]:

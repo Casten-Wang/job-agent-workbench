@@ -148,7 +148,7 @@ class HrPageLayoutTests(unittest.TestCase):
     def test_empty_thread_points_to_the_next_step(self):
         self.assertIn("这个会话还没有消息。", self.hr)
         self.assertIn("'刷新这个会话'", self.hr)
-        self.assertIn("loadHrThread(String(conversation.id))", self.hr)
+        self.assertIn("loadHrThread(String(conversation.id)", self.hr)
         self.assertIn("hr-empty-block", self.theme)
 
     def test_reply_block_reason_sits_inside_the_composer(self):

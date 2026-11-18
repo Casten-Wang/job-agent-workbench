@@ -146,7 +146,7 @@
         <section class="view" id="view-collect" data-view-panel="collect" aria-labelledby="collect-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="collect-title">采集岗位</h2>
-            <p class="view-lede">按关键词和城市采集岗位，不会自动投递或发消息。</p>
+            <p class="view-lede">选平台、填关键词和城市，自动采集并按简历打分；不会替你发消息。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab is-active" type="button" data-view="collect" aria-current="page">1 采集</button>
               <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
@@ -157,18 +157,6 @@
 
           <div class="sg-collect-grid">
             <div class="sg-collect-main">
-          <section class="panel collect-criteria-panel" aria-labelledby="collect-criteria-title">
-            <div class="panel-head">
-              <div>
-                <h3 id="collect-criteria-title">本次初筛条件</h3>
-                <p class="panel-note">来自个人资料，初筛会按这些条件判断岗位是否符合。</p>
-              </div>
-              <button class="button button-quiet button-small" type="button" id="collect-criteria-edit" data-view-link="profile">去修改</button>
-            </div>
-            <dl class="integration-meta" id="collect-criteria"></dl>
-            <p class="notice notice-accent" id="collect-criteria-hint" hidden></p>
-          </section>
-
           <section class="panel offerpilot-panel" aria-labelledby="offerpilot-title">
             <div class="panel-head">
               <div>
@@ -180,18 +168,25 @@
               </div>
             </div>
 
+            <div class="collect-criteria-line" aria-labelledby="collect-criteria-title">
+              <strong id="collect-criteria-title">本次初筛条件</strong>
+              <span id="collect-criteria"></span>
+              <button class="button button-quiet button-small" type="button" id="collect-criteria-edit" data-view-link="profile">去修改</button>
+            </div>
+            <p class="notice notice-accent" id="collect-criteria-hint" hidden></p>
+
             <form class="offerpilot-form collect-form" id="offerpilot-form">
               <div class="form-grid">
                 <div class="form-field">
-                  <label for="offerpilot-mode">任务类型</label>
+                  <label for="offerpilot-mode">做什么</label>
                   <select id="offerpilot-mode">
-                    <option value="collect">仅采集</option>
-                    <option value="monitor">仅监控 HR 回复</option>
-                    <option value="full" selected>完整流程（推荐）：采集后自动评分、放进待确认队列并生成招呼语，最后停在发送确认</option>
+                    <option value="full" selected>采集 + 打分 + 筛选（推荐）</option>
+                    <option value="collect">只采集</option>
+                    <option value="monitor">只监控 HR 回复</option>
                   </select>
                 </div>
                 <div class="form-field" data-collect-search>
-                  <label for="collect-platform">采集平台</label>
+                  <label for="collect-platform">平台</label>
                   <select id="collect-platform">
                     <option value="boss" selected>Boss直聘</option>
                     <option value="zhilian">智联招聘</option>
@@ -201,32 +196,27 @@
                   <p class="hint" id="collect-platform-hint"></p>
                 </div>
                 <div class="form-field" data-collect-search>
-                  <label for="collect-pace">采集节奏</label>
-                  <select id="collect-pace">
-                    <option value="cautious" selected>稳健（推荐）：每次随机等待 6–15 秒</option>
-                    <option value="standard">标准：每次随机等待 3–7.5 秒</option>
-                    <option value="fast">快速：每次随机等待 2–5 秒</option>
-                  </select>
-                </div>
-                <div class="form-field" data-collect-search>
-                  <label for="collect-keywords">搜索关键词（逗号分隔）</label>
+                  <label for="collect-keywords">关键词（逗号分隔）</label>
                   <input id="collect-keywords" type="text" autocomplete="off" placeholder="产品经理, AI产品经理">
                 </div>
                 <div class="form-field" data-collect-search>
                   <label for="collect-cities">城市（逗号分隔）</label>
                   <input id="collect-cities" type="text" autocomplete="off" placeholder="北京">
                 </div>
-                <div class="form-field" data-collect-search>
-                  <label for="collect-pages">每个关键词最多翻几页（1–10）</label>
-                  <input id="collect-pages" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
-                  <p class="hint collect-pages-hint" id="collect-pages-hint">每次都从第 1 页开始；已抓过的岗位会自动跳过，不会重复。想看到更多新岗位，就多翻几页。</p>
+                <div class="form-field" data-collect-search data-collect-score>
+                  <label for="collect-min-score">合格线（满分 100）</label>
+                  <input id="collect-min-score" type="number" min="0" max="100" step="5" value="60" inputmode="numeric">
+                  <p class="hint" id="collect-min-score-hint">低于合格线的岗位不会自动通过，仍可在「筛选」里手动加入。</p>
                 </div>
               </div>
+              <details class="offerpilot-details collect-score-details" data-collect-search>
+                <summary>怎么打分</summary>
+                <p class="hint">按你的简历和岗位 JD 逐项打分，满分 100：核心职责 30、项目成果 25、技能工具 15、职级复杂度 10、地点安排 10、薪资偏好 10。必备条件明确不满足、岗位已关闭、疑似高风险、城市不符、30 天内重复投过的岗位，不论分数都不会自动通过。</p>
+              </details>
               <div class="collect-resume resume-dropzone" id="collect-resume-drop" data-collect-search role="group" aria-label="拖入评分简历">
                 <div class="collect-resume-main">
-                  <strong>评分简历（必传）</strong>
+                  <strong>评分简历</strong>
                   <p id="collect-resume-status">尚未读取简历状态。</p>
-                  <p>将简历拖到这里，或点击「上传简历」；支持 PDF、DOCX、Markdown，最大 5 MB。</p>
                   <p class="resume-drop-status" aria-live="polite"></p>
                 </div>
                 <div class="collect-resume-actions">
@@ -234,20 +224,28 @@
                   <button class="button button-quiet button-small" type="button" id="collect-resume-upload">上传简历</button>
                 </div>
               </div>
+              <details class="offerpilot-details collect-advanced" data-collect-search>
+                <summary>高级设置</summary>
+                <div class="form-grid">
+                  <div class="form-field">
+                    <label for="collect-pages">每个关键词最多翻几页（1–10）</label>
+                    <input id="collect-pages" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
+                    <p class="hint collect-pages-hint" id="collect-pages-hint">从第 1 页开始，已抓过的岗位自动跳过；想要更多新岗位就多翻几页。</p>
+                  </div>
+                  <div class="form-field">
+                    <label for="collect-pace">节奏</label>
+                    <select id="collect-pace">
+                      <option value="cautious" selected>稳健（推荐）：等待 6–15 秒</option>
+                      <option value="standard">标准：等待 3–7.5 秒</option>
+                      <option value="fast">快速：等待 2–5 秒</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
               <label class="checkbox-label" hidden><input type="checkbox" id="collect-auto-score"> 采集后自动评分</label>
               <div class="collect-summary" id="collect-summary" aria-live="polite"></div>
             </form>
             <div class="action-result" id="offerpilot-result" hidden></div>
-
-            <details class="offerpilot-details collect-explain-details">
-              <summary>会采集什么、不会做什么</summary>
-              <ul class="collect-explain">
-                <li><strong>会：</strong>在你选的平台（Boss直聘、智联招聘、前程无忧、猎聘）搜索上述关键词与城市，读取岗位卡片和详情：标题、公司、城市、薪资、经验/学历与 JD 文本。</li>
-                <li><strong>会：</strong>写入本机 <code>web/data/user/offerpilot/data/offerpilot.db</code>，任务完成后自动导入岗位池。</li>
-                <li><strong>完整流程会：</strong>自动评分、把符合岗位要求的岗位加入审批队列（城市、30 天内重复、高风险与必备条件照旧拦截），并为已通过的岗位生成招呼语；之后停在发送确认前，等你核对。</li>
-                <li><strong>不会：</strong>不发送招呼语、不投递、不读取聊天记录、不上传简历；只有开启 AI 评分时才会调用你配置的模型。</li>
-              </ul>
-            </details>
 
             <section class="offerpilot-card" aria-labelledby="offerpilot-task-title">
               <h4 id="offerpilot-task-title">任务状态</h4>
@@ -259,7 +257,7 @@
               <div class="panel-head">
                 <div>
                   <h4 id="offerpilot-jobs-title">采集结果</h4>
-                  <p class="panel-note">任务完成后会自动导入岗位池；下面是本机岗位的只读列表。没有按岗位文档评分、或明确不满足必备条件的岗位，不会自动进入审批队列。</p>
+                  <p class="panel-note">任务结束后自动进入岗位池；评分达标的岗位会进入「通过」。</p>
                 </div>
                 <p class="panel-count" id="offerpilot-jobs-count">尚未读取</p>
               </div>
@@ -284,10 +282,10 @@
                 <div class="panel-head">
                   <div>
                     <h4 id="collect-check-title">启动前检查</h4>
-                    <p class="panel-note">有问题时会阻止启动；改完条件会自动重新检查。</p>
+                    <p class="panel-note">有问题会阻止启动。</p>
                   </div>
                 </div>
-                <div class="collect-checks" id="collect-checks"><p class="hint">填写条件后会自动检查，也可以点击「检查环境」重新检查。</p></div>
+                <div class="collect-checks" id="collect-checks"><p class="hint">填好条件后自动检查。</p></div>
                 <div class="sg-preflight-actions">
                   <label class="checkbox-label"><input type="checkbox" id="offerpilot-risk" checked> 我知道自动化操作可能导致账号被平台限制</label>
                   <label class="checkbox-label"><input type="checkbox" id="offerpilot-confirm"> 确认启动</label>
@@ -566,7 +564,7 @@
         <section class="view" id="view-mail" data-view-panel="mail" aria-labelledby="mail-title" hidden>
           <header class="view-head">
             <h2 class="view-title" id="mail-title">HR 回复</h2>
-            <p class="view-lede">各平台 HR 的消息都在这里按时间排在同一个收件箱，点开就能像聊天一样查看和回复；发送前必须在确认框里确认。</p>
+            <p class="view-lede">Boss直聘、智联、猎聘的 HR 消息汇总成一个收件箱；读过的会话存在本机，只有新消息才会重新读取。</p>
             <nav class="ui-hub-tabs" aria-label="岗位流水线">
               <button class="ui-hub-tab" type="button" data-view="collect">1 采集</button>
               <button class="ui-hub-tab" type="button" data-view="jobs">2 筛选</button>
@@ -579,7 +577,7 @@
             <header class="hr-topbar">
               <div class="hr-topbar-title">
                 <h3 id="hr-panel-title">HR 会话</h3>
-                <p class="hr-topbar-note">从本机 Chrome 读取各平台会话（BOSS、智联、猎聘）；回复一次只发一条，每条都要你确认。</p>
+                <p class="hr-topbar-note">读取在后台静默进行，不打断你；回复一次一条，发送前需确认。</p>
               </div>
               <div class="hr-topbar-actions">
                 <p class="hr-sync" id="hr-sync-status" role="status" aria-live="polite" data-state="idle">
@@ -617,6 +615,7 @@
               <section class="hr-thread" id="hr-thread" aria-label="当前 HR 会话">
                 <div class="hr-thread-head">
                   <button class="hr-mobile-back" type="button" id="hr-mobile-back">← 会话列表</button>
+                  <span class="hr-avatar" id="hr-detail-avatar" aria-hidden="true">HR</span>
                   <div class="hr-thread-title">
                     <h4 id="hr-detail-title">选择一个 HR 会话</h4>
                     <p class="hr-thread-meta" id="hr-detail-meta"></p>
@@ -629,6 +628,7 @@
                   <label class="hr-composer-label" for="hr-reply-input">回复</label>
                   <textarea id="hr-reply-input" rows="3" aria-label="回复内容" placeholder="输入回复内容；发送前会再确认一次。" disabled></textarea>
                   <div class="hr-composer-actions">
+                    <button class="button button-quiet button-small hr-open-platform" type="button" id="hr-open-platform" hidden>去平台回复</button>
                     <span class="hr-key-hint" id="hr-key-hint">Ctrl / ⌘ + Enter 打开确认</span>
                     <span class="hr-draft-count" id="hr-draft-count">0 字</span>
                     <button class="button" type="submit" id="hr-reply-send" disabled>发送</button>

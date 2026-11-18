@@ -256,8 +256,9 @@ class JobAgentHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/offerpilot/conversation":
                 mode = query.get("mode", "user")
+                extra = {"force": True} if query.get("force") == "1" else {}
                 self._json(backend.get_offerpilot_conversation(
-                    mode, query.get("id", ""), query.get("platform", "boss")
+                    mode, query.get("id", ""), query.get("platform", "boss"), **extra
                 ))
                 return
             if path == "/api/pipeline":

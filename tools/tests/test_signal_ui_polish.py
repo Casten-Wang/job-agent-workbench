@@ -204,22 +204,35 @@ class SignalScriptTests(unittest.TestCase):
         self.assertEqual(_read(INDEX).count('id="activity-data"'), 1)
         self.assertIn("renderActivity(dom.activityData, snapshot.activity)", self.script)
 
-    def test_collect_wizard_offers_four_platforms_and_locks_boss_for_full_flow(self):
+    def test_collect_wizard_offers_four_platforms_for_every_mode(self):
         html = _read(INDEX)
         select = _between(html, 'id="collect-platform"', "</select>")
         for value in ("boss", "zhilian", "51job", "liepin"):
             self.assertIn(f'value="{value}"', select)
         self.assertNotIn("BOSS 直聘岗位采集", html)
-        # 前端不再把平台写死成 boss；完整流程（会进入投递）才锁定 Boss。
         self.assertNotIn("platform: 'boss',", self.script)
         self.assertIn("platform: collectPlatform(),", self.script)
+        # 平台不再因为「完整流程」被锁定成 Boss。
         picker = _between(self.script, "function collectPlatform()", "function collectPlatformLabel(")
-        self.assertIn("collectMode() === 'full'", picker)
-        self.assertIn("return 'boss'", picker)
+        self.assertNotIn("collectMode()", picker)
+        sync = _between(self.script, "function syncCollectModeUI()", "function syncCollectResumeUI()")
+        self.assertNotIn("dom.collectPlatform.disabled = locked", sync)
+        self.assertNotIn("目前只有 Boss直聘 开放投递", self.script)
         self.assertIn("COLLECT_PLATFORMS", self.script)
-        # 平台进入预检缓存键，换平台后必须重新检查。
         key = _between(self.script, "function collectFormKey()", "function buildOfferPilotOptions(")
         self.assertIn("collectPlatform()", key)
+
+    def test_collect_page_has_pass_line_and_short_scoring_explainer(self):
+        html = _read(INDEX)
+        self.assertIn('id="collect-min-score"', html)
+        self.assertIn("合格线", html)
+        for weight in ("核心职责 30", "项目成果 25", "技能工具 15"):
+            self.assertIn(weight, html)
+        self.assertNotIn("会采集什么、不会做什么", html)
+        # 合格线随自动流程一起发给后端，并记在本机浏览器里。
+        auto = _between(self.script, "async function maybeAutoImportCollected(", "async function uploadOfferPilotResume(")
+        self.assertIn("min_score: collectMinScore()", auto)
+        self.assertIn("COLLECT_MIN_SCORE_KEY", self.script)
 
     def test_collect_platform_picker_behaviour(self):
         node = shutil.which("node")
@@ -234,7 +247,7 @@ class SignalScriptTests(unittest.TestCase):
 const out = {};
 out.collect_liepin = collectPlatform();
 dom.collectPlatform.value = 'bad'; out.bad = collectPlatform();
-dom.collectPlatform.value = 'zhilian'; dom.offerpilotMode.value = 'full'; out.full_locks_boss = collectPlatform();
+dom.collectPlatform.value = 'zhilian'; dom.offerpilotMode.value = 'full'; out.full_keeps_choice = collectPlatform();
 out.label = collectPlatformLabel('51job');
 process.stdout.write(JSON.stringify(out));
 """
@@ -243,7 +256,7 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(done.returncode, 0, done.stderr[:500])
         self.assertEqual(
             json.loads(done.stdout),
-            {"collect_liepin": "liepin", "bad": "boss", "full_locks_boss": "boss", "label": "前程无忧"},
+            {"collect_liepin": "liepin", "bad": "boss", "full_keeps_choice": "zhilian", "label": "前程无忧"},
         )
 
     def test_collect_count_explains_gap_to_job_pool(self):
