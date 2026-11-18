@@ -62,9 +62,26 @@ class SignalBaseStylesTests(unittest.TestCase):
         self.assertIn("var(--sg-num)", day)
 
     def test_settings_system_board_is_collapsed(self):
-        self.assertIn("#view-data .sg-system > summary", self.css)
+        self.assertIn("#view-data .sg-fold > summary", self.css)
         self.assertIn("#view-data .sg-legacy-activity", self.css)
         self.assertIn("#view-data .sg-system-body", self.css)
+
+    def test_inputs_are_styled_without_a_form_field_wrapper(self):
+        selector = (
+            'input:not([type="checkbox"]):not([type="radio"])'
+            ':not([type="range"]):not([type="file"])'
+        )
+        self.assertIn(selector, self.css)
+        self.assertIn(f"body.offer-ui:not(#wa-theme-off) {selector}:focus-visible", self.css)
+        self.assertIn("outline: 2px solid var(--sg)", self.css)
+
+    def test_belt_wraps_instead_of_clipping(self):
+        self.assertIn("#view-data .belt-node {", self.css)
+        node = _between(self.css, "#view-data .belt-node {", "}")
+        self.assertIn("flex: 1 1 0", node)
+        self.assertIn("min-width: 88px", node)
+        belt = _between(self.css, "#view-data .belt {", "}")
+        self.assertIn("flex-wrap: wrap", belt)
 
     def test_motion_is_short_and_reduced_motion_disables_it(self):
         self.assertIn("--sg-dur-mid: 320ms", self.css)
@@ -102,12 +119,19 @@ class SignalMarkupTests(unittest.TestCase):
         self.assertIn("面经怎么用", self.html)
         self.assertIn("检查更新", self.html)
 
+    def test_ai_test_button_explains_saved_config(self):
+        view = self.html[self.html.index('id="view-data"'):]
+        self.assertIn('id="ai-settings-test-note"', view)
+        self.assertIn("测试的是已保存的配置，改动后请先保存", view)
+
     def test_settings_puts_ai_first_and_folds_the_board(self):
         view = self.html[self.html.index('id="view-data"'):]
         self.assertLess(view.index('id="ai-settings-panel"'), view.index('id="ops-title"'))
         self.assertIn('class="sg-help"', view)
-        self.assertIn('id="sg-system"', view)
-        self.assertIn("运行看板与操作记录", view)
+        self.assertIn('class="sg-fold" id="sg-system"', view)
+        self.assertIn("系统信息（四步流程、岗位状态、计数、图表）", view)
+        # 最近操作日志留在折叠之外，便于先看。
+        self.assertLess(view.index('id="activity-data"'), view.index('id="sg-system"'))
         # 看板与日志仍在 DOM 中，只收进 details，不删除任何 id。
         for marker in ('id="pipeline"', 'id="belt"', 'id="kpi-row"', 'id="activity-data"'):
             with self.subTest(marker=marker):
@@ -146,8 +170,35 @@ class SignalScriptTests(unittest.TestCase):
         )
 
     def test_boundary_labels_include_the_embedded_component(self):
-        self.assertIn("offerpilot_integration: '岗位自动化组件'", self.script)
-        self.assertIn("embedded: '内嵌，已就绪'", self.script)
+        self.assertIn("offerpilot_integration: '内嵌岗位自动化'", self.script)
+        self.assertIn("embedded: '已内嵌'", self.script)
+
+    def test_ai_defaults_only_use_supported_services(self):
+        block = _between(self.script, "const AI_PROVIDER_DEFAULTS = {", "};")
+        for service in ("anthropic", "deepseek", "doubao", "custom"):
+            with self.subTest(service=service):
+                self.assertIn(f"{service}: {{", block)
+        self.assertIn("claude-sonnet-4-6", block)
+        self.assertNotIn("claude-sonnet-5-5", block)
+
+    def test_activity_rows_merge_adjacent_duplicates(self):
+        block = _between(self.script, "function renderActivity(", "function renderDefinitionList(")
+        self.assertIn("/；?\\s*auto_submit=\\w+/g", block)
+        self.assertIn("last.count += 1", block)
+        self.assertIn("×${group.count}", block)
+
+    def test_home_replies_add_platform_unread_and_change_zero_buttons(self):
+        block = _between(self.script, "function renderHomeToday(", "/* 六段契约")
+        self.assertIn("state.hrUnreadTotal", block)
+        self.assertIn("counts.replies + hrUnread", block)
+        self.assertIn("'去采集岗位'", block)
+        self.assertIn("'去看收件箱'", block)
+
+    def test_switching_views_scrolls_and_focuses_the_heading(self):
+        view = _between(self.script, "function showView(", "\nfunction ")
+        self.assertIn("dom.views.scrollTop = 0", view)
+        self.assertIn("heading.focus({ preventScroll: true })", view)
+        self.assertIn("heading.setAttribute('tabindex', '-1')", view)
 
     def test_home_renderer_fills_the_side_column(self):
         block = _between(self.script, "function renderHomeSide(", "function renderHomeToday(")

@@ -31,13 +31,13 @@ const BOUNDARY_LABELS = {
   real_imap: '真实 IMAP',
   real_feishu_http: '真实飞书 HTTP',
   real_asr: '真实 ASR',
-  offerpilot_integration: '岗位自动化组件'
+  offerpilot_integration: '内嵌岗位自动化'
 };
 const BOUNDARY_VALUES = {
   embedded_offerpilot_only: '岗位自动化（仅本机、人工确认投递）',
   not_implemented_offline_build: '未实现（离线版本）',
   dry_run_only: '只生成预览',
-  embedded: '内嵌，已就绪',
+  embedded: '已内嵌',
   unavailable: '不可用'
 };
 const OFFERPILOT_MODE_LABELS = {
@@ -88,8 +88,10 @@ const VIEW_TITLES = {
   push: '信息推送',
   data: '设置'
 };
+// 与 web/backend.py 的默认模型、vendor/offerpilot 的 AI_SERVICE_PRESETS 保持一致；
+// 没有预设模型的服务商留空，由用户填写。
 const AI_PROVIDER_DEFAULTS = {
-  anthropic: { model: 'claude-sonnet-5-5', base_url: 'https://api.anthropic.com' },
+  anthropic: { model: 'claude-sonnet-4-6', base_url: '' },
   deepseek: { model: '', base_url: 'https://api.deepseek.com' },
   doubao: { model: '', base_url: 'https://ark.cn-beijing.volces.com/api/v3' },
   custom: { model: '', base_url: '' }
@@ -913,6 +915,14 @@ function showView(name) {
     ensureHrConversationsLoaded();
     hrEnterPage();
   }
+  // 会话区自身也是一个滚动容器，切页时一并回到顶部，并把焦点交给新页标题。
+  if (dom.views) dom.views.scrollTop = 0;
+  const panel = dom.viewPanels.find((item) => item.dataset.viewPanel === name);
+  const heading = panel ? panel.querySelector('h2') : null;
+  if (heading) {
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+  }
 }
 
 const INTERVIEW_MODULES = ['chat', 'worksheet', 'debrief', 'library'];
@@ -1415,10 +1425,13 @@ function homeShortTime(value) {
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function homeQuietAction(id, count) {
+function homeTaskAction(id, count, active, quiet) {
   const button = document.getElementById(id);
   if (!button) return;
+  const target = count === 0 ? quiet : active;
   button.classList.toggle('button-quiet', count === 0);
+  if (button.textContent !== target.label) button.textContent = target.label;
+  if (button.dataset.viewLink !== target.view) button.dataset.viewLink = target.view;
 }
 
 function renderHomeSide(snapshot) {
@@ -1463,9 +1476,12 @@ function renderHomeSide(snapshot) {
 
 function renderHomeToday(snapshot) {
   const counts = homeTaskCounts(snapshot);
+  // 第三行是「HR 消息」：本地待回邮件 + 平台未读会话，与左侧导航徽标同一数据源。
+  const hrUnread = Math.max(0, Number(state.hrUnreadTotal) || 0);
+  const replies = counts.replies + hrUnread;
   const now = new Date();
   const weekday = '日一二三四五六'[now.getDay()];
-  const total = counts.jobs + counts.greetings + counts.replies;
+  const total = counts.jobs + counts.greetings + replies;
   if (dom.homeDate) dom.homeDate.textContent = `${SG_MONTHS[now.getMonth()]}月 · 星期${weekday}`;
   if (dom.sgHomeDay) dom.sgHomeDay.textContent = String(now.getDate());
   if (dom.sgHomeLiveText) {
@@ -1475,10 +1491,25 @@ function renderHomeToday(snapshot) {
   }
   if (dom.homeJobsCount) dom.homeJobsCount.textContent = `${counts.jobs} 个`;
   if (dom.homeGreetingsCount) dom.homeGreetingsCount.textContent = `${counts.greetings} 条`;
-  if (dom.homeRepliesCount) dom.homeRepliesCount.textContent = `${counts.replies} 封`;
-  homeQuietAction('home-jobs-action', counts.jobs);
-  homeQuietAction('home-greetings-action', counts.greetings);
-  homeQuietAction('home-replies-action', counts.replies);
+  if (dom.homeRepliesCount) dom.homeRepliesCount.textContent = `${replies} 条`;
+  homeTaskAction(
+    'home-jobs-action',
+    counts.jobs,
+    { label: '去确认', view: 'queue' },
+    { label: '去采集岗位', view: 'collect' }
+  );
+  homeTaskAction(
+    'home-greetings-action',
+    counts.greetings,
+    { label: '去发送', view: 'queue' },
+    { label: '去发送', view: 'queue' }
+  );
+  homeTaskAction(
+    'home-replies-action',
+    replies,
+    { label: '去回复', view: 'mail' },
+    { label: '去看收件箱', view: 'mail' }
+  );
   if (dom.homeRepliesSub) {
     const summary = state.hrSummary && typeof state.hrSummary === 'object' ? state.hrSummary : null;
     const unread = summary ? Number(summary.unread_total) || 0 : null;
@@ -7787,21 +7818,34 @@ function renderActivity(container, activity) {
     container.append(el('p', { className: 'empty-state', text: '暂无操作记录。' }));
     return;
   }
-  const list = el('ul', { className: 'activity-list' });
+  // 相邻且标题、详情完全相同的记录合并成一行，用 ×N 表示次数；
+  // 详情里的 auto_submit 参数只对调试有用，渲染时去掉。
+  const groups = [];
   rows.forEach((row) => {
+    const title = String(row.title || row.action || '操作');
+    const detail = String(row.detail || '').replace(/；?\s*auto_submit=\w+/g, '').trim();
+    const last = groups[groups.length - 1];
+    if (last && last.title === title && last.detail === detail) {
+      last.count += 1;
+      return;
+    }
+    groups.push({ row, title, detail, count: 1 });
+  });
+  const list = el('ul', { className: 'activity-list' });
+  groups.forEach((group) => {
     const item = el('li', { className: 'activity-item' });
-    item.append(el('span', { className: 'activity-time', text: formatDateTime(row.at) }));
+    item.append(el('span', { className: 'activity-time', text: formatDateTime(group.row.at) }));
     item.append(el('span', {
       className: 'activity-title',
-      text: String(row.title || row.action || '操作')
+      text: group.count > 1 ? `${group.title} ×${group.count}` : group.title
     }));
-    const statusBadge = row.ok === false
+    const statusBadge = group.row.ok === false
       ? badge('拒绝', 'bad', '×')
       : badge('完成', 'good', '✓');
     statusBadge.classList.add('activity-state');
     item.append(statusBadge);
-    if (row.detail) {
-      item.append(el('span', { className: 'activity-detail', text: String(row.detail) }));
+    if (group.detail) {
+      item.append(el('span', { className: 'activity-detail', text: group.detail }));
     }
     list.append(item);
   });
@@ -7861,6 +7905,7 @@ function renderConfig(snapshot) {
 function renderAiSettings(settings) {
   if (!dom.aiSettingsForm || !settings) return;
   dom.aiSettingsService.value = settings.service || 'anthropic';
+  dom.aiSettingsService.dataset.previousService = dom.aiSettingsService.value;
   dom.aiSettingsModel.value = settings.model || '';
   dom.aiSettingsBaseUrl.value = settings.base_url || '';
   dom.aiSettingsKey.value = '';
@@ -7873,22 +7918,44 @@ function applyAiProviderDefaults() {
   if (!dom.aiSettingsService) return;
   const service = dom.aiSettingsService.value;
   const defaults = AI_PROVIDER_DEFAULTS[service] || AI_PROVIDER_DEFAULTS.custom;
-  // 切换服务商时联动 Base URL；只有已知默认模型时才覆盖模型名，手填内容保留。
-  if (service !== 'custom') {
-    if (dom.aiSettingsBaseUrl) dom.aiSettingsBaseUrl.value = defaults.base_url || '';
-    if (defaults.model && dom.aiSettingsModel) dom.aiSettingsModel.value = defaults.model;
+  const previous = dom.aiSettingsService.dataset.previousService || '';
+  const previousDefaults = AI_PROVIDER_DEFAULTS[previous] || { model: '', base_url: '' };
+  // 只有仍是上一家默认值（或为空）时才替换，手填的值保留。
+  if (dom.aiSettingsBaseUrl) {
+    const current = dom.aiSettingsBaseUrl.value.trim();
+    if (!current || current === previousDefaults.base_url) {
+      dom.aiSettingsBaseUrl.value = defaults.base_url || '';
+    }
   }
+  if (dom.aiSettingsModel) {
+    const current = dom.aiSettingsModel.value.trim();
+    if (!current || current === previousDefaults.model) {
+      dom.aiSettingsModel.value = defaults.model || '';
+    }
+  }
+  dom.aiSettingsService.dataset.previousService = service;
   if (!dom.aiSettingsResult) return;
   const label = dom.aiSettingsService.selectedOptions[0]
     ? dom.aiSettingsService.selectedOptions[0].textContent
     : service;
-  showInline(
-    dom.aiSettingsResult,
-    service === 'custom'
-      ? '自定义接口：请填写模型名与 Base URL，保存后生效。'
-      : `已填入 ${label} 的常用 Base URL${defaults.model ? '与默认模型' : ''}，保存后生效。`,
-    'info'
-  );
+  const baseUrl = dom.aiSettingsBaseUrl ? dom.aiSettingsBaseUrl.value.trim() : '';
+  const model = dom.aiSettingsModel ? dom.aiSettingsModel.value.trim() : '';
+  if (!baseUrl || !model) {
+    showInline(dom.aiSettingsResult, '请填写 Base URL 与模型名', 'info');
+    return;
+  }
+  if (!defaults.base_url && !defaults.model) {
+    showInline(dom.aiSettingsResult, `已切到 ${label}，保存后生效。`, 'info');
+    return;
+  }
+  if (defaults.model && model !== defaults.model) {
+    showInline(dom.aiSettingsResult, `已填入 ${label} 的 Base URL；模型名沿用当前值，保存前请确认。`, 'info');
+    return;
+  }
+  const parts = [];
+  if (defaults.base_url) parts.push('Base URL');
+  if (defaults.model) parts.push('模型名');
+  showInline(dom.aiSettingsResult, `已填入 ${label} 的默认 ${parts.join('与')}，保存后生效。`, 'info');
 }
 
 async function loadAiSettings() {

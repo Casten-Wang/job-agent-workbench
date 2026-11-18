@@ -371,6 +371,22 @@ body.offer-ui:not(#wa-theme-off) .form-field :is(input, select, textarea):focus-
   outline: none;
 }
 
+/* 输入框不依赖 .form-field 包裹：AI 配置、搜索与筛选里的 input 保持同样高度与外观。 */
+body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--sg-radius-input);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus-visible {
+  outline: 2px solid var(--sg);
+  outline-offset: 1px;
+}
+
 body.offer-ui:not(#wa-theme-off) .form-grid {
   gap: 16px 20px;
 }
@@ -885,25 +901,30 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-composer:focus-within {
 /* ==========================================================================
  * 8. 设置：AI 接口最前、控件补齐、看板默认收起、状态带不裁切
  * ========================================================================== */
-body.offer-ui:not(#wa-theme-off) #view-data .sg-ai-help {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-ai-help,
+body.offer-ui:not(#wa-theme-off) #view-data .sg-ai-test-note {
   margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.55;
   color: var(--mute);
 }
 
+body.offer-ui:not(#wa-theme-off) #view-data .sg-ai-test-note {
+  margin: 6px 0 0;
+}
+
 body.offer-ui:not(#wa-theme-off) #view-data .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-body.offer-ui:not(#wa-theme-off) #view-data .sg-system {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-fold {
   margin-top: 6px;
   border-radius: var(--sg-radius-panel);
   background: var(--surface);
   box-shadow: inset 0 0 0 .5px var(--line);
 }
 
-body.offer-ui:not(#wa-theme-off) #view-data .sg-system > summary {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -915,11 +936,11 @@ body.offer-ui:not(#wa-theme-off) #view-data .sg-system > summary {
   font-weight: 650;
 }
 
-body.offer-ui:not(#wa-theme-off) #view-data .sg-system > summary::-webkit-details-marker {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary::-webkit-details-marker {
   display: none;
 }
 
-body.offer-ui:not(#wa-theme-off) #view-data .sg-system > summary::after {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary::after {
   content: "展开";
   margin-left: auto;
   font-size: 12px;
@@ -927,11 +948,11 @@ body.offer-ui:not(#wa-theme-off) #view-data .sg-system > summary::after {
   color: var(--mute);
 }
 
-body.offer-ui:not(#wa-theme-off) #view-data .sg-system[open] > summary {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-fold[open] > summary {
   border-bottom: .5px solid var(--line);
 }
 
-body.offer-ui:not(#wa-theme-off) #view-data .sg-system[open] > summary::after {
+body.offer-ui:not(#wa-theme-off) #view-data .sg-fold[open] > summary::after {
   content: "收起";
 }
 
@@ -960,18 +981,13 @@ body.offer-ui:not(#wa-theme-off) #view-data .chart-panel {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .belt {
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-body.offer-ui:not(#wa-theme-off) #view-data .belt::-webkit-scrollbar {
-  display: block;
-  height: 6px;
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .belt-node {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 88px;
   padding: 10px 12px;
 }
 

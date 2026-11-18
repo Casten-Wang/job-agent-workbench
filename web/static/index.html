@@ -103,7 +103,7 @@
                   <button class="button button-small" type="button" id="home-greetings-action" data-view-link="queue">去发送</button>
                 </li>
                 <li class="home-task">
-                  <span class="home-task-label">待回复的 HR 邮件<span class="sg-home-task-sub" id="home-replies-sub">平台会话看未读，本地邮件看意图</span></span>
+                  <span class="home-task-label">待回复的 HR 消息<span class="sg-home-task-sub" id="home-replies-sub">平台会话看未读，本地邮件看意图</span></span>
                   <span class="home-task-count" id="home-replies-count">0 封</span>
                   <button class="button button-small" type="button" id="home-replies-action" data-view-link="mail">去回复</button>
                 </li>
@@ -1282,6 +1282,7 @@
                 <div class="form-field"><label for="ai-settings-key">API Key</label><input id="ai-settings-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="留空表示不修改已保存的密钥"></div>
               </div>
               <div class="button-row"><button class="button" type="submit" id="ai-settings-save">保存 AI 接口</button><button class="button button-quiet" type="button" id="ai-settings-test">测试连接</button></div>
+              <p class="sg-ai-test-note" id="ai-settings-test-note">测试的是已保存的配置，改动后请先保存</p>
             </form>
             <p class="sg-ai-help" id="ai-settings-hint">切换服务商会填入常用模型名与 Base URL，填过的值不会被覆盖。测试连接只发一条最小请求，失败时会说明是哪一项没通过。</p>
             <div class="action-result" id="ai-settings-result" hidden></div>
@@ -1324,9 +1325,6 @@
             <div id="config-summary"></div>
           </section>
 
-          <details class="sg-system" id="sg-system">
-            <summary>运行看板与操作记录</summary>
-            <div class="sg-system-body">
           <section class="panel" aria-labelledby="activity-data-title">
             <div class="panel-head">
               <div>
@@ -1337,6 +1335,9 @@
             <div id="activity-data"></div>
           </section>
 
+          <details class="sg-fold" id="sg-system">
+            <summary>系统信息（四步流程、岗位状态、计数、图表）</summary>
+            <div class="sg-system-body">
           <h3 class="section-label" id="system-title">系统</h3>
           <p class="view-lede">运行看板和图表只展示本地数据，不影响上面的操作。</p>
 
