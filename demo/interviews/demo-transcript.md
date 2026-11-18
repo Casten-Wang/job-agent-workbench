@@ -33,7 +33,7 @@
 ```json
 {
   "interview_id": "demo-transcript",
-  "created_at": "2026-11-14T17:40:31.090148+08:00",
+  "created_at": "2026-11-17T23:04:12.572443+08:00",
   "interviewer_questions": [
     "请解释一次需求分析？",
     "如何复盘量化不足与逻辑漏洞？"

@@ -133,6 +133,28 @@ class TaskShellStructureTests(unittest.TestCase):
         self.assertIn(".ui-hub-tabs:not(.iv-mode-tabs)", STYLE)
         self.assertIn('class="ui-hub-tabs iv-mode-tabs"', HTML)
 
+    def test_every_capability_has_an_icon_and_a_tool_group(self):
+        from importlib import import_module
+        import sys
+        sys.path.insert(0, str(STATIC.parents[1]))
+        catalog = import_module("interview_agent.workbench_catalog")
+        icons = set(re.findall(r"^\s{4}(\w+):\[", SCRIPT[SCRIPT.index("const ICON_PATHS="):SCRIPT.index("function icon(")], re.M))
+        cap_icon = dict(re.findall(r"(\w+):'(\w+)'", re.search(r"const CAP_ICON=\{(.*?)\};", SCRIPT, re.S).group(1)))
+        groups = SCRIPT[SCRIPT.index("const TOOL_GROUPS="):SCRIPT.index("];", SCRIPT.index("const TOOL_GROUPS="))]
+        for key, *_ in catalog.CAPABILITIES:
+            with self.subTest(capability=key):
+                self.assertIn(cap_icon.get(key), icons)
+                self.assertIn(f"'{key}'", groups)
+
+    def test_icons_are_built_without_inline_markup(self):
+        maker = SCRIPT[SCRIPT.index("  function icon("):SCRIPT.index("  const CAP_ICON=")]
+        self.assertIn("createElementNS", maker)
+        self.assertIn("aria-hidden", maker)
+        self.assertIsNone(re.search(r"\.innerHTML\s*=", SCRIPT))
+        # 只剩图标的窄屏底部入口仍有可读名称
+        for element_id, label in (("wb-nav-profile", "我的资料"), ("wb-all-tools", "全部功能"), ("wb-settings-button", "设置")):
+            self.assertIn(f'id="{element_id}" class="wb-foot-link" aria-label="{label}"', HTML)
+
     def test_ids_stay_unique(self):
         ids = re.findall(r'\bid="([^"]+)"', HTML)
         self.assertEqual(len(ids), len(set(ids)))

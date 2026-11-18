@@ -1,6 +1,6 @@
 # 离线端到端演示报告（全部为测试数据）
 
-- 生成时间：2026-11-14T17:40:31.078217+08:00
+- 生成时间：2026-11-17T23:04:12.553617+08:00
 - 数据来源：demo/ 下显式标注的虚构 JD、邮件与逐字稿。
 - 边界：不联网、不读取真实邮箱/飞书、不采集音频、不投递、不提交任何申请。
 
@@ -107,7 +107,7 @@
 {
   "debrief": {
     "interview_id": "demo-transcript",
-    "created_at": "2026-11-14T17:40:31.090148+08:00",
+    "created_at": "2026-11-17T23:04:12.572443+08:00",
     "interviewer_questions": [
       "请解释一次需求分析？",
       "如何复盘量化不足与逻辑漏洞？"
@@ -134,7 +134,7 @@
     ],
     "engine": "offline-deterministic-rules",
     "evidence_note": "空字段表示逐字稿没有显式证据；未对候选人做实质性能力评价。",
-    "out": "/Users/casten/Documents/程序开发/求职/demo/interviews/demo-transcript.md"
+    "out": "D:\\上海虹桥黑客松\\offerpilot\\demo\\interviews\\demo-transcript.md"
   },
   "asr": {
     "ok": false,
@@ -243,19 +243,7 @@
 
 ```json
 {
-  "greeting": "您好，我想了解虚构星河科技有限公司的AI产品经理岗位。我的简历中有需求分析、用户调研、产品设计相关经验。方便进一步沟通吗？",
-  "length": 61,
-  "max_chars": 150,
-  "warnings": [],
-  "facts_used": [
-    "虚构星河科技有限公司",
-    "AI产品经理",
-    "需求分析",
-    "用户调研",
-    "产品设计"
-  ],
-  "source": "workspace/resume.md + structured local JD fields",
-  "send_status": "draft_only_not_sent"
+  "status": "unavailable"
 }
 ```
 
