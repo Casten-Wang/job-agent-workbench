@@ -67,6 +67,63 @@ class VisionFallbackFlowTests(unittest.TestCase):
         transcribe.assert_not_called()
 
 
+def png_bytes(size=(40, 30)):
+    import io
+    from PIL import Image
+    buffer = io.BytesIO()
+    Image.new("RGB", size, "white").save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+class ImageResumeTests(unittest.TestCase):
+    def setUp(self):
+        suggestion = backend.default_profile()
+        suggestion["basic"].update(name="测试同学")
+        patcher = patch("career_user_runtime.upstream", return_value={"profile": suggestion, "warnings": [], "generation": {}})
+        self.upstream = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_image_file_has_no_text_layer(self):
+        for name in ("a.png", "a.JPG", "a.jpeg", "a.webp"):
+            with self.subTest(name=name), self.assertRaises(profile_import.TextLayerUnusable):
+                profile_import.extract_resume_text(name, png_bytes())
+
+    def test_image_resume_is_transcribed_and_flagged(self):
+        with patch.object(resume_vision, "call_vision_model", return_value=RESUME) as model:
+            result = backend.import_profile_cv(payload("resume.png", png_bytes()))
+        sent = model.call_args.args[0]
+        self.assertTrue(sent.startswith(b"\xff\xd8"), "送给模型的应是规整后的 JPEG")
+        self.upstream.assert_called_once_with("POST", "/v1/career/profile-import", {"text": RESUME})
+        self.assertEqual(result["text_origin"], "image")
+        self.assertIn("图片简历", result["message"])
+        self.assertNotIn("PDF", result["message"])
+        self.assertFalse(result["profile"]["truth_confirmed"])
+        self.assertTrue(any("多页" in note for note in result["warnings"]))
+
+    def test_image_failures_are_clear_and_do_not_reach_the_agent(self):
+        with patch.object(resume_vision, "call_vision_model", side_effect=resume_vision.VisionUnavailable("模型读图失败，该模型可能不支持图片输入")):
+            with self.assertRaises(backend.ApiError) as caught:
+                backend.import_profile_cv(payload("resume.png", png_bytes()))
+        self.assertIn("模型读图失败", caught.exception.message)
+        self.upstream.assert_not_called()
+
+    def test_fake_or_oversized_images_are_rejected_before_the_model(self):
+        with patch.object(resume_vision, "call_vision_model") as model:
+            with self.assertRaises(resume_vision.VisionUnavailable):
+                resume_vision.prepare_image(b"not an image")
+            with patch.object(resume_vision, "MAX_IMAGE_PIXELS", 10):
+                with self.assertRaises(resume_vision.VisionUnavailable):
+                    resume_vision.prepare_image(png_bytes())
+        model.assert_not_called()
+
+    def test_wide_images_are_downscaled(self):
+        import io
+        from PIL import Image
+        out = resume_vision.prepare_image(png_bytes((resume_vision.RENDER_WIDTH + 400, 100)))
+        with Image.open(io.BytesIO(out)) as picture:
+            self.assertEqual(picture.width, resume_vision.RENDER_WIDTH)
+
+
 class TranscribeTests(unittest.TestCase):
     def test_pages_keep_order_and_truncation_is_reported(self):
         images = [b"a", b"b", b"c"]

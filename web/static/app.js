@@ -3098,7 +3098,7 @@ function renderProfile(profile) {
   }
   if (dom.profileImport) {
     dom.profileImport.disabled = state.mode !== 'user' || state.profileImportBusy;
-    dom.profileImport.title = state.mode === 'user' ? '选择本地 PDF、DOCX、Markdown 或 TXT 简历，核对后保存' : '演示模式不读取真实简历；请切换到「我的 user」';
+    dom.profileImport.title = state.mode === 'user' ? '选择本地 PDF、DOCX、Markdown、TXT 或 PNG/JPG 简历，核对后保存' : '演示模式不读取真实简历；请切换到「我的 user」';
   }
   dom.profileDrop.setAttribute('aria-disabled', String(state.mode !== 'user' || state.profileImportBusy));
 }
@@ -3707,8 +3707,8 @@ async function importProfileFromCv(file) {
     setStatus('演示模式不读取真实简历；请切换到「我的 user」。', 'warn');
     return;
   }
-  if (!/\.(pdf|docx|md|txt)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
-    showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD 或 TXT 文件，最大 5 MB。', 'error');
+  if (!/\.(pdf|docx|md|txt|png|jpe?g|webp)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
+    showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD、TXT 或 PNG/JPG 文件，最大 5 MB。', 'error');
     return;
   }
   const confirmedDirty = state.profileDirty

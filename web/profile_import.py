@@ -10,7 +10,12 @@ from xml.etree import ElementTree
 
 MAX_BYTES = 5 * 1024 * 1024
 MAX_TEXT = 60_000
-SUFFIXES = {".md", ".txt", ".docx", ".pdf"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+SUFFIXES = {".md", ".txt", ".docx", ".pdf"} | IMAGE_SUFFIXES
+
+
+def is_image_name(filename: str) -> bool:
+    return Path(filename).suffix.lower() in IMAGE_SUFFIXES
 
 
 class TextLayerUnusable(ValueError):
@@ -20,11 +25,13 @@ class TextLayerUnusable(ValueError):
 def extract_resume_text(filename: str, content: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix not in SUFFIXES:
-        raise ValueError("请选择 PDF、DOCX、Markdown 或 TXT 简历文件")
+        raise ValueError("请选择 PDF、DOCX、Markdown、TXT 或 PNG/JPG 图片简历文件")
     if not content:
         raise ValueError("简历文件为空，请重新选择")
     if len(content) > MAX_BYTES:
         raise ValueError("简历文件不能超过 5 MB")
+    if suffix in IMAGE_SUFFIXES:
+        raise TextLayerUnusable("这是一张图片简历，没有可直接读取的文字层。")
     if suffix == ".pdf":
         text = _pdf_text(content)
     elif suffix == ".docx":

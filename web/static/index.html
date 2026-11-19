@@ -888,7 +888,7 @@
               </div>
               <div class="profile-head-actions">
                 <button class="button button-quiet button-small" type="button" id="profile-import">从本地简历导入</button>
-                <input id="profile-import-file" type="file" accept=".pdf,.docx,.md,.txt" aria-label="选择本地简历文件" hidden>
+                <input id="profile-import-file" type="file" accept=".pdf,.docx,.md,.txt,.png,.jpg,.jpeg,.webp" aria-label="选择本地简历文件" hidden>
                 <span class="badge badge-neutral" id="profile-completeness-badge">未填写</span>
               </div>
             </div>
@@ -906,7 +906,7 @@
 
             <div class="resume-dropzone" id="profile-resume-drop" role="button" tabindex="0" aria-label="拖入简历或点击选择文件">
               <strong>将简历拖到这里，或点击选择文件</strong>
-              <p class="panel-note">支持 PDF、DOCX、Markdown、TXT，最大 5 MB。文件在本机读取，全文交由已配置的 Agent 解析；扫描件 PDF 请先转为文字。</p>
+              <p class="panel-note">支持 PDF、DOCX、Markdown、TXT 和 PNG/JPG 图片，最大 5 MB。文字在本机读取，全文交由已配置的 Agent 解析；扫描件、乱码 PDF 和图片会先用模型读图转写成文字，请重点核对。</p>
               <p class="resume-drop-status" aria-live="polite"></p>
             </div>
             <div class="action-result profile-import-status" id="profile-import-status" hidden></div>
@@ -984,7 +984,7 @@
             <dl class="integration-meta">
               <div><dt>读取</dt><dd><code>GET /api/profile?mode=user</code> 返回资料与完整度；不包含任何凭据</dd></div>
               <div><dt>写入</dt><dd><code>POST /api/action</code> → <code>{"action":"save-profile","mode":"user","profile":{...}}</code></dd></div>
-              <div><dt>导入</dt><dd><code>import-profile-cv</code> 支持上传 PDF、DOCX、MD、TXT（由 Agent 提取资料与经历），也可读取本机 <code>workspace/resume.md</code>；只返回建议，不自动保存</dd></div>
+              <div><dt>导入</dt><dd><code>import-profile-cv</code> 支持上传 PDF、DOCX、MD、TXT 和 PNG/JPG/WEBP 图片（由 Agent 提取资料与经历；文字层不可用时先读图转写），也可读取本机 <code>workspace/resume.md</code>；只返回建议，不自动保存</dd></div>
               <div><dt>边界</dt><dd>只在本机访问；联系方式不进入招呼语和题单；不自动投递</dd></div>
             </dl>
             <p><a class="button button-quiet button-small" href="/api/doc/profile-api" download="PROFILE-API.md">下载接口文档</a></p>

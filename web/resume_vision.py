@@ -69,6 +69,44 @@ def render_pdf_pages(content: bytes, max_pages: int = MAX_VISION_PAGES) -> tuple
         raise VisionUnavailable("PDF 页面渲染失败") from exc
 
 
+MAX_IMAGE_PIXELS = 40_000_000
+
+
+def prepare_image(content: bytes) -> bytes:
+    """校验并规整一张简历图片：限制像素、统一成 JPEG、宽度不超过渲染宽度。"""
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise VisionUnavailable("本机缺少 Pillow 依赖") from exc
+    try:
+        with Image.open(io.BytesIO(content)) as picture:
+            if picture.format not in {"PNG", "JPEG", "WEBP"}:
+                raise VisionUnavailable("只支持 PNG、JPG、WEBP 图片")
+            if picture.width * picture.height > MAX_IMAGE_PIXELS:
+                raise VisionUnavailable("图片尺寸过大，请缩小后再导入")
+            picture = picture.convert("RGB")
+            if picture.width > RENDER_WIDTH:
+                picture = picture.resize((RENDER_WIDTH, round(picture.height * RENDER_WIDTH / picture.width)))
+            buffer = io.BytesIO()
+            picture.save(buffer, "JPEG", quality=88)
+            return buffer.getvalue()
+    except VisionUnavailable:
+        raise
+    except Exception as exc:
+        raise VisionUnavailable("图片文件无法读取，请确认文件完整") from exc
+
+
+def transcribe_image(content: bytes) -> tuple[str, list[str]]:
+    """单张简历图片转写；长图建议拆成多张或改传 PDF。"""
+    from profile_import import MAX_TEXT, looks_garbled
+    text = call_vision_model(prepare_image(content), TRANSCRIBE_PROMPT).strip()
+    if not text:
+        raise VisionUnavailable("没有从图片中识别出文字")
+    if looks_garbled(text):
+        raise VisionUnavailable("图片识别的结果仍不可用")
+    return text[:MAX_TEXT], ["图片识别一次只读取一张图；如果简历有多页，请改传 PDF 或逐张导入。"]
+
+
 def call_vision_model(image_jpeg: bytes, prompt: str) -> str:
     """用设置里配置的模型读一张图，返回纯文本。失败抛 VisionUnavailable。"""
     try:

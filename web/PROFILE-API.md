@@ -103,7 +103,7 @@ POST /api/action
 {"action": "import-profile-cv", "mode": "user", "filename": "resume.pdf", "content_base64": "<文件原始字节的 Base64>"}
 ```
 
-页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后发送给已配置模型的 `profile_extract` 阶段解析，不保存原始文件。加密 PDF 暂不支持。PDF 文字层不可用（字体无标准编码导致的乱码，或纯图片扫描件）时，后端用 macOS 自带 `sips` 把前 6 页渲染成图片，交给已配置的多模态模型逐字转写（`web/resume_vision.py`，不保存图片），转写文字再走同一条抽取链路，响应 `text_origin` 为 `image`；没有渲染器或模型不支持图片时，返回原先的「文字层乱码/无文字，请重新导出」提示并附上失败原因。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
+页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT 和 PNG/JPG/WEBP 图片（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后发送给已配置模型的 `profile_extract` 阶段解析，不保存原始文件。加密 PDF 暂不支持。PDF 文字层不可用（字体无标准编码导致的乱码，或纯图片扫描件）时，后端用 macOS 自带 `sips` 把前 6 页渲染成图片，交给已配置的多模态模型逐字转写（`web/resume_vision.py`，不保存图片），转写文字再走同一条抽取链路，响应 `text_origin` 为 `image`；图片简历（PNG/JPG/WEBP，一次一张、宽度超过 1785 像素会缩小、不超过 4000 万像素）直接走同一条读图转写，响应会提示多页简历请改传 PDF；没有渲染器或模型不支持图片时，返回原先的「文字层乱码/无文字，请重新导出」提示并附上失败原因。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
 
 ### 3.1 长简历分段与原文核对
 

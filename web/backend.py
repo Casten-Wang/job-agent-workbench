@@ -1194,7 +1194,8 @@ def _profile_import_result(text: str, filename: str, extraction: dict[str, Any] 
     else:
         message = "Agent 已解析整份简历并填入资料及经历；请核对各项内容，确认真实性后保存。"
     if text_origin == "image":
-        message = "这份 PDF 的文字层不可用，已改用图片识别读取文字，个别字可能有误，请重点核对。" + message
+        lead = "这是一张图片简历，已用图片识别读取文字" if profile_import.is_image_name(filename) else "这份 PDF 的文字层不可用，已改用图片识别读取文字"
+        message = f"{lead}，个别字可能有误，请重点核对。" + message
     get_store("user").log("读取简历建议资料", "本地文件；未自动保存")
     return {
         "ok": True,
@@ -1237,7 +1238,10 @@ def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
         # 文字层乱码/纯图片：渲染页面交给已配置的多模态模型转写，再走同一条抽取链路。
         import resume_vision
         try:
-            text, vision_notes = resume_vision.transcribe_pdf(content)
+            if profile_import.is_image_name(filename):
+                text, vision_notes = resume_vision.transcribe_image(content)
+            else:
+                text, vision_notes = resume_vision.transcribe_pdf(content)
         except resume_vision.VisionUnavailable as vision_exc:
             raise ApiError(f"{exc}（自动图片识别没有成功：{vision_exc}）") from exc
         text_origin = "image"
