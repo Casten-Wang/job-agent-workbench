@@ -3,22 +3,22 @@
 body.offer-ui,
 body.wb-enabled,
 body:has(#view-workbench:not([hidden]) #wa-panel:not([hidden])) {
-  --bg: #f5f5f3;
-  --surface: #faf9f6;
-  --panel-bg: #ffffff;
-  --header-bg: #faf9f6;
-  --ink: #292825;
-  --ink-2: #55534d;
-  --mute: #737068;
-  --line: #deddd6;
-  --accent: #292825;
-  --accent-fill: #ad5132;
-  --accent-ink: #ffffff;
-  --accent-soft: #eeede8;
-  --pill: #eeede8;
-  --wa-elevated: #ffffff;
-  --wa-brand: #ad5132;
-  --wa-focus: #184f95;
+  --bg: #F2F3F0;
+  --surface: #FFFFFF;
+  --panel-bg: #FFFFFF;
+  --header-bg: #F7F8F5;
+  --ink: #0D0E0C;
+  --ink-2: #4A4C45;
+  --mute: #6B6D65;
+  --line: rgba(13, 14, 12, 0.10);
+  --accent: #0D0E0C;
+  --accent-fill: #0D0E0C;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E9EAE4;
+  --pill: #E9EAE4;
+  --wa-elevated: #FFFFFF;
+  --wa-brand: #0D0E0C;
+  --wa-focus: #0D0E0C;
   --wa-medium: 500;
   --wa-semibold: 600;
   --good: #166534;
@@ -27,8 +27,8 @@ body:has(#view-workbench:not([hidden]) #wa-panel:not([hidden])) {
   --warn-bg: #ffedd5;
   --bad: #991b1b;
   --bad-bg: #fee2e2;
-  --neutral-bg: #eeede8;
-  --code-bg: #eeede8;
+  --neutral-bg: #F7F8F5;
+  --code-bg: #F7F8F5;
   --radius-card: 12px;
   --shadow-card: none;
   --shadow-soft: none;
@@ -301,7 +301,7 @@ body.wb-enabled #view-workbench {
 .wa-workspace button { min-height:34px; border-radius:6px; font-size:12px; font-weight:var(--wa-medium,500); box-shadow:none; transition:background 120ms,color 120ms,transform 70ms; }
 .wa-workspace button:not(:disabled):active { transform:scale(.98); }
 .wa-workspace button:disabled { opacity:.45; cursor:not-allowed; }
-.wa-workspace :is(button,input,select,textarea,summary,a):focus-visible,.wa-tabs button:focus-visible { outline:2px solid var(--wa-focus,#184f95); outline-offset:2px; }
+.wa-workspace :is(button,input,select,textarea,summary,a):focus-visible,.wa-tabs button:focus-visible { outline:2px solid var(--wa-focus,#0D0E0C); outline-offset:2px; }
 .wa-workspace .button-quiet { background:transparent; color:var(--ink-2); border:.5px solid transparent; }
 .wa-workspace .button-quiet:not(:disabled):hover { background:var(--accent-soft); color:var(--ink); }
 .wa-sessions { display:flex; flex-direction:column; min-height:0; min-width:0; padding:16px 12px; border-right:.5px solid var(--line); background:color-mix(in srgb,var(--accent-soft) 38%,var(--surface)); }
@@ -377,8 +377,8 @@ body.wb-enabled #view-workbench {
 .wa-composer-actions { margin-top:10px; }
 .wa-key-hint { margin-left:auto; font-size:12px; color:var(--mute); }
 #wa-send,#wa-stop { margin-left:4px; border:0; border-radius:6px; padding:6px 12px; }
-#wa-send { background:var(--wa-brand,#ad5132); color:#fff; }
-#wa-send:not(:disabled):hover { background:color-mix(in srgb,var(--wa-brand,#ad5132) 88%,#000); }
+#wa-send { background:var(--wa-brand,#0D0E0C); color:var(--accent-ink,#FFFFFF); }
+#wa-send:not(:disabled):hover { background:color-mix(in srgb,var(--wa-brand,#0D0E0C) 88%,var(--accent-ink,#FFFFFF)); }
 #wa-stop { border:.5px solid var(--line); }
 .wa-context { margin-bottom:10px; font-size:12px; color:var(--mute); }
 .wa-context-scope { display:inline-flex; align-items:center; gap:6px; }
@@ -431,22 +431,22 @@ body.wb-enabled #view-workbench {
 @media(prefers-color-scheme:dark) {
   :root:not([data-theme]) body.offer-ui,
   :root:not([data-theme]) body.wb-enabled {
-    --bg: #20201e;
-    --surface: #262624;
-    --panel-bg: #30302d;
-    --header-bg: #262624;
-    --wa-elevated: #30302d;
-    --ink: #eeeeea;
-    --ink-2: #c4c2b9;
-    --mute: #aaa79e;
-    --line: #46453f;
-    --accent: #eeeeea;
-    --accent-fill: #e8a083;
-    --accent-ink: #20201e;
-    --accent-soft: #30302d;
-    --pill: #30302d;
-    --wa-brand: #e8a083;
-    --wa-focus: #8ab4ed;
+    --bg: #0A0B09;
+    --surface: #141512;
+    --panel-bg: #1B1C18;
+    --header-bg: #141512;
+    --wa-elevated: #1B1C18;
+    --ink: #F1F2EC;
+    --ink-2: #B0B2A8;
+    --mute: #9A9C92;
+    --line: rgba(241, 242, 236, 0.12);
+    --accent: #F1F2EC;
+    --accent-fill: #F1F2EC;
+    --accent-ink: #0B0C08;
+    --accent-soft: #23251C;
+    --pill: #23251C;
+    --wa-brand: #D2F53C;
+    --wa-focus: #D2F53C;
     --wa-medium: 400;
     --wa-semibold: 500;
     --good: #86efac;
@@ -455,30 +455,30 @@ body.wb-enabled #view-workbench {
     --warn-bg: #3b2514;
     --bad: #fca5a5;
     --bad-bg: #3b1c1c;
-    --neutral-bg: #30302d;
-    --code-bg: #20201e;
+    --neutral-bg: #1B1C18;
+    --code-bg: #1B1C18;
   }
-  :root:not([data-theme]) #wa-send { color: #262624; }
+  :root:not([data-theme]) #wa-send { color: #0B0C08; }
 }
 
 :root[data-theme="dark"] body.offer-ui,
 :root[data-theme="dark"] body.wb-enabled {
-  --bg: #20201e;
-  --surface: #262624;
-  --panel-bg: #30302d;
-  --header-bg: #262624;
-  --wa-elevated: #30302d;
-  --ink: #eeeeea;
-  --ink-2: #c4c2b9;
-  --mute: #aaa79e;
-  --line: #46453f;
-  --accent: #eeeeea;
-  --accent-fill: #e8a083;
-  --accent-ink: #20201e;
-  --accent-soft: #30302d;
-  --pill: #30302d;
-  --wa-brand: #e8a083;
-  --wa-focus: #8ab4ed;
+  --bg: #0A0B09;
+  --surface: #141512;
+  --panel-bg: #1B1C18;
+  --header-bg: #141512;
+  --wa-elevated: #1B1C18;
+  --ink: #F1F2EC;
+  --ink-2: #B0B2A8;
+  --mute: #9A9C92;
+  --line: rgba(241, 242, 236, 0.12);
+  --accent: #F1F2EC;
+  --accent-fill: #F1F2EC;
+  --accent-ink: #0B0C08;
+  --accent-soft: #23251C;
+  --pill: #23251C;
+  --wa-brand: #D2F53C;
+  --wa-focus: #D2F53C;
   --wa-medium: 400;
   --wa-semibold: 500;
   --good: #86efac;
@@ -487,10 +487,10 @@ body.wb-enabled #view-workbench {
   --warn-bg: #3b2514;
   --bad: #fca5a5;
   --bad-bg: #3b1c1c;
-  --neutral-bg: #30302d;
-  --code-bg: #20201e;
+  --neutral-bg: #1B1C18;
+  --code-bg: #1B1C18;
 }
-:root[data-theme="dark"] #wa-send { color: #262624; }
+:root[data-theme="dark"] #wa-send { color: #0B0C08; }
 
 @media(max-width:1180px) {
   .wa-workspace.wa-has-results { grid-template-columns:160px minmax(0,1fr); }
@@ -553,8 +553,8 @@ body.wb-enabled #view-workbench {
 /* 02 对话助理：全套复用队友云端版的沉浸式布局与配色，选择器限定在 #view-agent 显示时生效。 */
 body.offer-ui:not(#wa-theme-off) {
   --bg:#F2F3F0; --surface:#FFFFFF; --ink:#0D0E0C; --ink-2:#4A4C45;
-  --mute:#6B6D65; --line:rgba(13,14,12,.1); --accent-soft:#E7E9E1;
-  --wa-elevated:#fff; --wa-brand:#587400; --wa-focus:#184f95;
+  --mute:#6B6D65; --line:rgba(13,14,12,.1); --accent-soft:#E9EAE4;
+  --wa-elevated:#fff; --wa-brand:#0D0E0C; --wa-focus:#0D0E0C;
   --wa-medium:500; --wa-semibold:600; font-size:14px;
 }
 body.offer-ui:not(#wa-theme-off) :is(.ambient,.offer-ticker,.sidebar-boundary,.sidebar-block .hint,.nav-text small,.filter-bar,.nav__hl,.brand-sub) { display:none; }
@@ -583,9 +583,9 @@ body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-title { font-siz
 body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-lede { font-size:12px; margin:4px 0 0; color:var(--mute); }
 body.offer-ui:not(#wa-theme-off) .sidebar { overflow-y:auto; }
 @media(prefers-color-scheme:dark) {
-  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#A9ABA2; --mute:#8E9086; --line:rgba(241,242,236,.1); --accent-soft:#1B1C18; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#B0B2A8; --mute:#9A9C92; --line:rgba(241,242,236,.12); --accent-soft:#23251C; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
 }
-:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#A9ABA2; --mute:#8E9086; --line:rgba(241,242,236,.1); --accent-soft:#1B1C18; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#B0B2A8; --mute:#9A9C92; --line:rgba(241,242,236,.12); --accent-soft:#23251C; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
 
 /* 02 页与主站外壳适配（2026-11-18）
    1) 主站组件读 --op-* 令牌，这里在 02 页把它们指向本页调色，避免同页混用两套灰阶；

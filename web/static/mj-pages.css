@@ -1480,11 +1480,11 @@ body.offer-ui:not(#wa-theme-off) #view-resume .cu-preview-frame {
   background: var(--mj-paper-2);
 }
 
+/* A4 预览是一张纸：任何主题下都保持白底深字，只保留外框与圆角。
+   纸张自身的墨色/强调色由 career-resume.css 的 --resume-* 提供。 */
 body.offer-ui:not(#wa-theme-off) #view-resume .cu-document.resume-sheet {
   border: 1px solid var(--mj-line);
   border-radius: var(--mj-r-tag);
-  background: var(--mj-paper);
-  color: var(--mj-text);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dt {
@@ -1968,4 +1968,178 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 /* 折叠标题：与正文次级色一致，不再用更浅的一档灰 */
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) summary {
   color: var(--mj-text-2);
+}
+
+
+/* ==========================================================================
+ * 第 2 轮：定制简历卡片的信息层级
+ * 经历卡片：标题一行 / 类型+日期标签行 / 正文一段，三者不再挤在同一行；
+ * 生成结果卡片：每条「岗位相关 / 职责边界 / 待确认」改成「标签 + 一行说明」。
+ * 小字统一 12px、次级色（--mj-text-2），明暗两套主题都 ≥ AA。
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .cu-check > .cu-entry-body,
+body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .cu-check > .cu-claim-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-title {
+  display: block;
+  color: var(--mj-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-kind {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-period {
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-flag {
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-text {
+  display: block;
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-text.is-empty {
+  color: var(--mj-mute);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-text {
+  display: block;
+  color: var(--mj-text);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--sp-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-tag {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-note-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+
+/* ==========================================================================
+ * 第 2 轮：旧页面信息层级收口
+ * 统一页面副标题、卡片标题字重、表单标签与折叠标题的档位；
+ * 只改字号/字重/颜色，不动结构与交互。既有规则多数带一个页面 id，
+ * 这里也带 id，避免只靠出现顺序取胜。
+ * ========================================================================== */
+
+/* 页面副标题一律用正文档（14px）：原来推送 / 个人资料 / 定制简历 / 设置是 13，
+   岗位池 / 审批 / HR 回复是 14，同一层信息两种字号。 */
+body.offer-ui:not(#wa-theme-off) .view-lede {
+  font-size: var(--fs-body);
+}
+
+/* 卡片标题一律 600：本地旧首页有一半卡片标题是 500，和同屏 600 的卡片混排。 */
+body.offer-ui:not(#wa-theme-off) #view-workbench h3 {
+  font-weight: 600;
+}
+
+/* 「运行状态总览 / 关键指标」是 12px 的小节标签，和其它 13px 的小节标题差一档。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .section-label {
+  font-size: var(--fs-label);
+}
+
+/* HR 面板头：会话标题 16px 是全站唯一的 16px 面板标题，抬到区块标题 20px。 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar h3 {
+  font-size: var(--fs-section);
+}
+
+/* 「平台」筛选是表单标签，跟其它标签一样 13px / 次级色。 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-filter {
+  color: var(--mj-text-2);
+  font-size: var(--fs-label);
+  font-weight: 500;
+}
+
+/* 筛选工具栏里的「选择理由」标签同理，原来 12px 与同行 13px 的复选标签不齐。 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason-label {
+  color: var(--mj-text-2);
+  font-size: var(--fs-label);
+  font-weight: 500;
+}
+
+/* 「这页怎么用」的折叠标题与正文统一 13px，不再低一档。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .sg-help > summary,
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .sg-help > p {
+  font-size: var(--fs-label);
+}
+
+/* 个人资料的导入面板标题是面板内的动作标题，和大节标题同级 16/600；
+   原来 14/600 与下面的说明只差一档，看不出层次。 */
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone > strong {
+  display: block;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+
+/* ==========================================================================
+ * 第 2 轮补充：深色导航未读角标的对比度
+ * 白字压品牌粉：浅色 4.15:1、深色 2.49:1；改用 --mj-bad 底 + --mj-brand-ink 字。
+ * 底色与字色都随主题明暗成对翻转，浅色 / 深色 / 跟随系统三套都 ≥5.8:1。
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) .sidebar .hr-nav-unread {
+  background: var(--mj-bad);
+  color: var(--mj-brand-ink);
 }

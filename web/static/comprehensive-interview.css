@@ -29,8 +29,8 @@
   font-weight: var(--wa-medium, 500);
   padding: 4px 10px;
   border-radius: 999px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
-  background: var(--bg, #f5f5f3);
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
+  background: var(--bg, #F2F3F0);
   color: var(--ink-2);
 }
 
@@ -40,9 +40,9 @@
 }
 
 .ci-timer.is-qa {
-  border-color: var(--wa-brand, #ad5132);
-  background: var(--accent-soft, rgba(173, 81, 50, 0.1));
-  color: var(--wa-brand, #ad5132);
+  border-color: var(--wa-brand, #0D0E0C);
+  background: var(--accent-soft, rgba(13, 14, 12, 0.06));
+  color: var(--wa-brand, #0D0E0C);
 }
 
 .ci-knowledge-list {
@@ -68,15 +68,15 @@
   scrollbar-gutter: stable;
   padding: 16px;
   margin: 12px 0;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
   border-radius: 12px;
-  background: var(--bg, #f5f5f3);
+  background: var(--bg, #F2F3F0);
 }
 
 .ci-msg {
   padding: 12px 14px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
   white-space: pre-wrap;
   line-height: 1.6;
   font-size: 14px;
@@ -92,8 +92,8 @@
 .ci-msg.is-user {
   align-self: flex-end;
   max-width: 82%;
-  background: var(--accent-soft, rgba(173, 81, 50, 0.08));
-  border-color: color-mix(in srgb, var(--wa-brand, #ad5132) 28%, var(--line, rgba(20, 20, 19, 0.12)));
+  background: var(--accent-soft, rgba(13, 14, 12, 0.05));
+  border-color: color-mix(in srgb, var(--wa-brand, #0D0E0C) 28%, var(--line, rgba(13, 14, 12, 0.12)));
 }
 
 .ci-msg-meta {
@@ -113,7 +113,7 @@
   flex-wrap: wrap;
   padding: 10px 14px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
   background: var(--warn-bg, rgba(154, 91, 19, 0.08));
   margin: 8px 0;
   font-size: 14px;
@@ -124,7 +124,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
   border-radius: 12px;
   background: var(--wa-elevated, var(--surface, #ffffff));
   margin-top: 12px;
@@ -170,7 +170,7 @@
   gap: 10px;
   padding: 14px 16px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
   background: var(--wa-elevated, var(--surface, #ffffff));
 }
 
@@ -193,7 +193,7 @@
 
 .ci-step-item.is-active {
   font-weight: var(--wa-medium, 500);
-  color: var(--wa-brand, #ad5132);
+  color: var(--wa-brand, #0D0E0C);
 }
 
 .ci-step-item.is-done {
@@ -206,7 +206,7 @@
   background: linear-gradient(
     90deg,
     rgba(128, 128, 128, 0.12),
-    rgba(173, 81, 50, 0.28),
+    rgba(128, 128, 128, 0.24),
     rgba(128, 128, 128, 0.12)
   );
   background-size: 200% 100%;
@@ -264,15 +264,15 @@
 .ci-card {
   padding: 14px 16px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
-  background: var(--bg, #f5f5f3);
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
+  background: var(--bg, #F2F3F0);
 }
 
 .ci-quote {
   font-size: 12px;
   line-height: 1.6;
   padding: 8px 12px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
   border-radius: 6px;
   background: var(--wa-elevated, var(--surface, #ffffff));
   color: var(--ink-2);
@@ -591,7 +591,7 @@ body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button {
   padding: 0 var(--sp-4);
   border: 1px solid transparent;
   border-radius: var(--r-control);
-  background: var(--mj-ink);
+  background: var(--mj-brand);
   color: var(--mj-brand-ink);
   font-size: var(--fs-label);
   font-weight: 600;
@@ -602,7 +602,7 @@ body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button {
 }
 
 body.offer-ui:not(#wa-theme-off) .button:hover:not(:disabled) {
-  background: var(--mj-brand);
+  background: color-mix(in srgb, var(--mj-brand) 88%, var(--mj-brand-ink));
   color: var(--mj-brand-ink);
 }
 
@@ -861,31 +861,35 @@ body.offer-ui:not(#wa-theme-off) .sidebar .nav-item:hover {
   color: var(--mj-ink);
 }
 
-/* 激活态只有一种：浅底 + 主色文字 + 2px 左指示条（不再有近黑胶囊与暗红边） */
+/* 激活态只有一种：整块实心（第 3 轮信号规范）——浅色近黑底白字、深色信号底近黑字，
+   不再有浅底胶囊与 2px 左指示条。 */
 body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active,
 body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item[aria-current="page"] {
-  background: var(--mj-brand-soft);
-  color: var(--mj-ink);
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
   font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--mj-brand);
+  box-shadow: none;
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index {
-  color: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  opacity: .72;
 }
 
 /* 深色下旧导航规则特异性 (1,5,1)，这里用同样的 :root 前缀 + 重复 :not() 压过 */
-:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active {
-  background: var(--mj-brand-soft);
-  color: var(--mj-ink);
-  box-shadow: inset 2px 0 0 var(--mj-brand);
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active,
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item[aria-current="page"] {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  box-shadow: none;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active {
-    background: var(--mj-brand-soft);
-    color: var(--mj-ink);
-    box-shadow: inset 2px 0 0 var(--mj-brand);
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active,
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item[aria-current="page"] {
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+    box-shadow: none;
   }
 }
 

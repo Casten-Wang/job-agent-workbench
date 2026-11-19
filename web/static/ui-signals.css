@@ -4,7 +4,8 @@
  * 复用来源：用户自有原型「信号」（设计原型 2026-11-12）。
  * 借用：统一的时长 / 弹簧 / soft 缓动 token、卡片错峰入场、悬停抬升、
  *       按压回弹、磨砂表面、胶囊控件、导航高亮滑块、轻提示反馈。
- * 不借用：原型荧光绿主色 #D2F53C；主色继续用工作台粉色 --offer-pink。
+ * 不借用：把荧光绿铺成大色块；--offer-pink 现已指向 --mj-spark，
+ * 本层只把它用在圆点/状态小标记上，文字与选中态走 --mj-brand / --mj-brand-ink。
  * 不引入任何图片 / 字体 / CDN / 构建工具；纯 CSS + 极少量原生 JS。
  *
  * 本文件是「信号」设计语言在工作台原生界面上的复用层，只做加法：
@@ -31,9 +32,9 @@
   --ui-shadow-float: 0 1px 2px rgba(10, 10, 10, 0.04),
     0 18px 46px -14px rgba(10, 10, 10, 0.20);
 
-  /* —— 信号主色：沿用工作台粉色，不照搬原型荧光绿—— */
+  /* —— 信号主色：跟随 --offer-pink（= --mj-spark），只做圆点与选中态 —— */
   --ui-signal: var(--offer-pink);
-  --ui-signal-ink: #ffffff;
+  --ui-signal-ink: var(--mj-brand-ink, #ffffff);
 }
 
 /* 深色下的磨砂实色回退（panel-bg 已是半透明，var 自动跟随主题） */
@@ -435,9 +436,9 @@ textarea {
 }
 
 .ui-hub-tab.is-active {
-  color: #fff;
-  background: var(--offer-pink);
-  box-shadow: 0 6px 18px -8px rgba(228, 136, 156, 0.75);
+  color: var(--mj-brand-ink, #ffffff);
+  background: var(--mj-brand);
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--mj-brand) 45%, transparent);
 }
 
 .ui-hub-tab:active {
@@ -448,7 +449,7 @@ textarea {
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--offer-pink);
+  color: var(--mj-brand);
   font: inherit;
   font-weight: 650;
   text-decoration: underline;
@@ -502,7 +503,7 @@ textarea {
   font-size: 20px;
   font-weight: 700;
   line-height: 1;
-  color: var(--offer-pink);
+  color: var(--mj-brand);
   opacity: 0.35;
 }
 
@@ -537,7 +538,7 @@ textarea {
   content: "＋";
   display: inline-block;
   margin-right: 8px;
-  color: var(--offer-pink);
+  color: var(--mj-brand);
 }
 
 .jobs-manual-entry[open] > summary::before {
@@ -877,7 +878,7 @@ textarea {
   content: "＋";
   display: inline-block;
   margin-right: 8px;
-  color: var(--offer-pink);
+  color: var(--mj-brand);
 }
 
 .offerpilot-details[open] summary::before,

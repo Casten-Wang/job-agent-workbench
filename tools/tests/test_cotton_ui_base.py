@@ -71,7 +71,8 @@ class CottonBaseStylesheetTests(unittest.TestCase):
         self.assertLess(HTML.index("/mj-base.css"), HTML.index("/mj-pages.css"))
 
     def test_no_legacy_colors_and_no_important(self):
-        for banned in ("#D2F53C", "#9BC21A", "#F2EEE4"):
+        # 第 3 轮改为「信号」中性暖灰 + 酸性黄绿：旧「墨靛」蓝紫一律不得回流。
+        for banned in ("#3B477A", "#1E2746", "#AEB9F0", "#ECEFFA", "#111629", "#F2EEE4"):
             self.assertNotIn(banned.lower(), self.bare.lower())
         self.assertEqual(self.bare.count("!important"), 0)
 
@@ -100,9 +101,11 @@ class CottonBaseStylesheetTests(unittest.TestCase):
         )
         self.assertIn("@media (prefers-color-scheme: dark)", self.bare)
         self.assertIn(":root:not([data-theme]) body.offer-ui:not(#wa-theme-off)", self.bare)
-        self.assertGreaterEqual(self.bare.count("#111629"), 3)
-        self.assertGreaterEqual(self.bare.count("#1A2140"), 3)
-        self.assertGreaterEqual(self.bare.count("#ECEFFA"), 3)
+        # 浅色画布 + 深色两处（[data-theme=dark] 与系统深色）各出现一次以上
+        self.assertGreaterEqual(self.bare.count("#F2F3F0"), 1)
+        self.assertGreaterEqual(self.bare.count("#0A0B09"), 2)
+        self.assertGreaterEqual(self.bare.count("#23251C"), 2)
+        self.assertGreaterEqual(self.bare.count("#D2F53C"), 2)
 
     def test_old_tokens_are_remapped_on_all_three_blocks(self):
         for name in ("--bg:", "--surface:", "--ink:", "--sg:", "--sg-sg-mark:",

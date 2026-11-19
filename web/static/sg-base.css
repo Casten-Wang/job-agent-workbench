@@ -14,26 +14,26 @@ body.offer-ui:not(#wa-theme-off) {
   --sg-dur-mid: 320ms;
   --sg-dur-slow: 560ms;
   --sg-sg-mark: #9BC21A;
-  --ink-2: #55574F;
-  --mute: #8D8F87;
-  --line: rgba(13, 14, 12, .08);
+  --ink-2: #4A4C45;
+  --mute: #6B6D65;
+  --line: rgba(13, 14, 12, .10);
   font-size: 14px;
   line-height: 1.6;
   letter-spacing: 0;
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) {
-  --ink-2: #A3A59C;
-  --mute: #6A6C64;
-  --line: rgba(241, 242, 236, .08);
+  --ink-2: #B0B2A8;
+  --mute: #9A9C92;
+  --line: rgba(241, 242, 236, .12);
   --sg-sg-mark: #D2F53C;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) {
-    --ink-2: #A3A59C;
-    --mute: #6A6C64;
-    --line: rgba(241, 242, 236, .08);
+    --ink-2: #B0B2A8;
+    --mute: #9A9C92;
+    --line: rgba(241, 242, 236, .12);
     --sg-sg-mark: #D2F53C;
   }
 }
@@ -571,7 +571,7 @@ body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
-  background: #1B1C18;
+  background: var(--mj-paper-2, #1B1C18);
   color: var(--ink);
   box-shadow: inset 0 0 0 .5px var(--line);
 }

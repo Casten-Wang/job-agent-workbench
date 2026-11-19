@@ -42,12 +42,12 @@ class SignalBaseStylesTests(unittest.TestCase):
                 self.assertIn(f"body.offer-ui:not(#wa-theme-off) {selector}", self.css)
 
     def test_tokens_are_calibrated_for_light_and_dark(self):
-        self.assertIn("--ink-2: #55574F", self.css)
-        self.assertIn("--mute: #8D8F87", self.css)
-        self.assertIn("--line: rgba(13, 14, 12, .08)", self.css)
+        self.assertIn("--ink-2: #4A4C45", self.css)
+        self.assertIn("--mute: #6B6D65", self.css)
+        self.assertIn("--line: rgba(13, 14, 12, .10)", self.css)
         self.assertIn(':root[data-theme="dark"] body.offer-ui:not(#wa-theme-off)', self.css)
-        self.assertIn("--ink-2: #A3A59C", self.css)
-        self.assertIn("--mute: #6A6C64", self.css)
+        self.assertIn("--ink-2: #B0B2A8", self.css)
+        self.assertIn("--mute: #9A9C92", self.css)
 
     def test_status_becomes_a_floating_toast(self):
         status = _between(self.css, "#status.status {", "}")

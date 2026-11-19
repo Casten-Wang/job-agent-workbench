@@ -252,14 +252,18 @@
       const label = node('label', undefined, 'cu-check');
       const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = item.checked !== false;
       checkbox.addEventListener('change', () => { item.checked = checkbox.checked; renderEntries(); });
-      const body = node('span');
-      body.append(node('strong', `${position + 1}. ${entryHeading(item, row) || '未命名条目'}${position === firstChecked ? '（本段会整理成要点）' : ''}`));
+      const body = node('span', undefined, 'cu-entry-body');
+      body.append(node('strong', `${position + 1}. ${entryHeading(item, row) || '未命名条目'}`, 'cu-entry-title'));
+      const meta = node('span', undefined, 'cu-entry-meta');
+      meta.append(node('span', item.section === 'experiences' ? '工作 / 实习' : '项目', 'cu-entry-kind'));
       const period = entryPeriod(row);
-      body.append(node('small', `${item.section === 'experiences' ? '工作 / 实习' : '项目'}${period ? ' · ' + period : ''}`, 'hint'));
+      if (period) meta.append(node('span', period, 'cu-entry-period'));
+      if (position === firstChecked) meta.append(node('span', '本段会整理成要点', 'cu-entry-flag'));
+      body.append(meta);
       const summary = String(row.summary || '').trim();
       body.append(summary
-        ? node('span', summary.split('\n').slice(0, 2).join(' '), 'career-message')
-        : node('span', '还没有说明；补充一句后才能用这段生成。', 'hint'));
+        ? node('span', summary.split('\n').slice(0, 2).join(' '), 'cu-entry-text')
+        : node('span', '还没有说明；补充一句后才能用这段生成。', 'cu-entry-text is-empty'));
       label.append(checkbox, body);
       card.append(label);
       const actions = node('div', undefined, 'career-actions');
@@ -449,9 +453,14 @@
     $('claims').replaceChildren();
     value.claims.forEach(claim => {
       const row=node('div',undefined,'career-task'); const label=node('label',undefined,'cu-check'); const input=node('input'); input.type='checkbox'; input.value=claim.claim_id; input.checked=selected.has(claim.claim_id);
-      const body=node('span',claim.pillar ? `${claim.pillar}：${claim.text}` : claim.text);
-      const notes=[claim.fit_reason ? `岗位相关：${claim.fit_reason}` : '', claim.boundary ? `职责边界：${claim.boundary}` : '', claim.risk ? `待确认：${claim.risk}` : ''].filter(Boolean).join(' / ');
-      if (notes) body.append(node('small',notes,'career-claim-note'));
+      const body=node('span',undefined,'cu-claim-body');
+      body.append(node('span',claim.pillar ? `${claim.pillar}：${claim.text}` : claim.text,'cu-claim-text'));
+      [['岗位相关',claim.fit_reason],['职责边界',claim.boundary],['待确认',claim.risk]].forEach(([label,value])=>{
+        if (!value) return;
+        const line=node('span',undefined,'cu-claim-note');
+        line.append(node('span',label,'cu-claim-tag'), node('span',value,'cu-claim-note-text'));
+        body.append(line);
+      });
       label.append(input,body); row.append(label);
       const evidence=(value.evidence || []).filter(item=>claim.evidence_ids.includes(item.evidence_id));
       if (evidence.length) {

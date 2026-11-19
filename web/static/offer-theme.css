@@ -21,17 +21,17 @@
   --accent-soft: #f4f4f5;
   --pill: #f4f4f5;
   --on-ink: #ffffff;
-  --offer-pink: #e4889c;
+  --offer-pink: #9BC21A;
   --danger: #b42318;
   --focus-ring: rgba(10, 10, 10, 0.28);
-  --series-1: #0a0a0a;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #f5d0d8;
-  --stage-1: #efb3c1;
-  --stage-2: #e4889c;
-  --stage-3: #c96b80;
-  --stage-4: #a44d62;
+  --series-1: #0D0E0C;
+  --series-2: #9BC21A;
+  --series-3: #8D8F87;
+  --stage-0: #E6E8E0;
+  --stage-1: #C9CCBF;
+  --stage-2: #9EA293;
+  --stage-3: #6E7266;
+  --stage-4: #0D0E0C;
   --good: #17663a;
   --good-bg: #e9f7ef;
   --warn: #8a4b00;
@@ -91,14 +91,14 @@
     --accent-soft: #232327;
     --pill: #232327;
     --on-ink: #0a0a0a;
-    --series-1: #f5f5f7;
-    --series-2: #e4889c;
-    --series-3: #8aa4ff;
-    --stage-0: #5b3a44;
-    --stage-1: #7d4d5b;
-    --stage-2: #a35f71;
-    --stage-3: #c97b8d;
-    --stage-4: #e39aab;
+    --series-1: #F1F2EC;
+    --series-2: #D2F53C;
+    --series-3: #6A6C64;
+    --stage-0: #2A2C26;
+    --stage-1: #44463E;
+    --stage-2: #6B6E63;
+    --stage-3: #A3A59C;
+    --stage-4: #F1F2EC;
     --good: #7fe0bd;
     --good-bg: #12332a;
     --warn: #ffcf8a;
@@ -130,14 +130,14 @@
   --accent-soft: #232327;
   --pill: #232327;
   --on-ink: #0a0a0a;
-  --series-1: #f5f5f7;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #5b3a44;
-  --stage-1: #7d4d5b;
-  --stage-2: #a35f71;
-  --stage-3: #c97b8d;
-  --stage-4: #e39aab;
+  --series-1: #F1F2EC;
+  --series-2: #D2F53C;
+  --series-3: #6A6C64;
+  --stage-0: #2A2C26;
+  --stage-1: #44463E;
+  --stage-2: #6B6E63;
+  --stage-3: #A3A59C;
+  --stage-4: #F1F2EC;
   --good: #7fe0bd;
   --good-bg: #12332a;
   --warn: #ffcf8a;
@@ -1107,8 +1107,8 @@ textarea:focus-visible {
 }
 
 .pipeline-node.status-connected {
-  border-color: rgba(228, 136, 156, 0.55);
-  box-shadow: 0 12px 36px rgba(228, 136, 156, 0.14);
+  border-color: color-mix(in srgb, var(--mj-brand) 45%, transparent);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--mj-brand) 14%, transparent);
 }
 
 .pipeline-top {
@@ -1179,7 +1179,7 @@ textarea:focus-visible {
 }
 
 .pipeline-node.status-connected .pipeline-status {
-  background: rgba(228, 136, 156, 0.16);
+  background: color-mix(in srgb, var(--mj-brand) 12%, transparent);
   color: var(--ink);
 }
 
@@ -1231,7 +1231,7 @@ textarea:focus-visible {
 .integration-panel {
   border-style: dashed;
   background:
-    linear-gradient(135deg, rgba(228, 136, 156, 0.09), rgba(138, 164, 255, 0.09)),
+    linear-gradient(135deg, color-mix(in srgb, var(--mj-brand) 7%, transparent), color-mix(in srgb, var(--mj-spark) 7%, transparent)),
     var(--panel-bg);
 }
 
@@ -1833,7 +1833,7 @@ textarea:focus-visible {
 }
 
 .pipeline-node.workbench-stage.is-confirm {
-  border-color: rgba(228, 136, 156, 0.55);
+  border-color: color-mix(in srgb, var(--mj-brand) 45%, transparent);
 }
 
 .workbench-reason {
@@ -2593,9 +2593,9 @@ body.offer-ui {
   --focus-ring: rgba(43, 93, 69, 0.35);
   --code-bg: #edf0ec;
   --chart-grid: #dce2db;
-  --series-1: #2b5d45;
-  --series-2: #b0652f;
-  --series-3: #6b7fa8;
+  --series-1: #0D0E0C;
+  --series-2: #9BC21A;
+  --series-3: #8D8F87;
   --radius-card: 16px;
   --shadow-card: 0 1px 2px rgba(27, 34, 30, 0.05);
   --shadow-soft: none;
@@ -2630,9 +2630,9 @@ body.offer-ui {
     --focus-ring: rgba(143, 199, 169, 0.4);
     --code-bg: #202a24;
     --chart-grid: #2a342e;
-    --series-1: #8fc7a9;
-    --series-2: #d9a072;
-    --series-3: #93a8cf;
+    --series-1: #F1F2EC;
+    --series-2: #D2F53C;
+    --series-3: #6A6C64;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 }
@@ -2662,9 +2662,9 @@ body.offer-ui {
   --focus-ring: rgba(143, 199, 169, 0.4);
   --code-bg: #202a24;
   --chart-grid: #2a342e;
-  --series-1: #8fc7a9;
-  --series-2: #d9a072;
-  --series-3: #93a8cf;
+  --series-1: #F1F2EC;
+  --series-2: #D2F53C;
+  --series-3: #6A6C64;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
@@ -3909,15 +3909,15 @@ body.offer-ui {
   --focus-ring: rgba(10, 10, 10, 0.28);
   --code-bg: #f4f4f5;
   --chart-grid: rgba(10, 10, 10, 0.08);
-  --offer-pink: #e4889c;
-  --series-1: #0a0a0a;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #f5d0d8;
-  --stage-1: #efb3c1;
-  --stage-2: #e4889c;
-  --stage-3: #c96b80;
-  --stage-4: #a44d62;
+  --offer-pink: #9BC21A;
+  --series-1: #0D0E0C;
+  --series-2: #9BC21A;
+  --series-3: #8D8F87;
+  --stage-0: #E6E8E0;
+  --stage-1: #C9CCBF;
+  --stage-2: #9EA293;
+  --stage-3: #6E7266;
+  --stage-4: #0D0E0C;
   --radius-card: 6px;
   --shadow-card: none;
   --shadow-soft: none;
@@ -3949,14 +3949,14 @@ body.offer-ui {
     --focus-ring: rgba(245, 245, 247, 0.4);
     --code-bg: #232327;
     --chart-grid: rgba(255, 255, 255, 0.1);
-    --series-1: #f5f5f7;
-    --series-2: #e4889c;
-    --series-3: #8aa4ff;
-    --stage-0: #5b3a44;
-    --stage-1: #7d4d5b;
-    --stage-2: #a35f71;
-    --stage-3: #c97b8d;
-    --stage-4: #e39aab;
+    --series-1: #F1F2EC;
+    --series-2: #D2F53C;
+    --series-3: #6A6C64;
+    --stage-0: #2A2C26;
+    --stage-1: #44463E;
+    --stage-2: #6B6E63;
+    --stage-3: #A3A59C;
+    --stage-4: #F1F2EC;
   }
 }
 
@@ -3985,14 +3985,14 @@ body.offer-ui {
   --focus-ring: rgba(245, 245, 247, 0.4);
   --code-bg: #232327;
   --chart-grid: rgba(255, 255, 255, 0.1);
-  --series-1: #f5f5f7;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #5b3a44;
-  --stage-1: #7d4d5b;
-  --stage-2: #a35f71;
-  --stage-3: #c97b8d;
-  --stage-4: #e39aab;
+  --series-1: #F1F2EC;
+  --series-2: #D2F53C;
+  --series-3: #6A6C64;
+  --stage-0: #2A2C26;
+  --stage-1: #44463E;
+  --stage-2: #6B6E63;
+  --stage-3: #A3A59C;
+  --stage-4: #F1F2EC;
 }
 
 /* ---- 外壳：紧凑栏宽与排布 ------------------------------------------------ */
@@ -5158,7 +5158,7 @@ body.offer-ui .hr-nav-unread[hidden] { display: none; }
 
 /* 采集页：一行初筛条件、高级设置折叠 */
 .collect-criteria-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2, rgba(127, 127, 127, 0.08)); font-size: 13px; }
-.collect-criteria-line > span { flex: 1 1 240px; color: var(--muted, #667085); }
+.collect-criteria-line > span { flex: 1 1 240px; color: var(--mute, #6B6D65); }
 .collect-score-details, .collect-advanced { margin: 10px 0; }
 
 /* HR 会话：对话框观感（头像、气泡、输入区）。只追加 hr- 前缀规则。 */

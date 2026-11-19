@@ -35,6 +35,40 @@
   box-sizing: border-box;
 }
 
+/* 第 2 轮：设置页
+   外观区块的 control-label 只给下方面板组做无障碍名称，视觉上不再重复一次「外观」；
+   「使用原工作台」是整卡唯一的操作，按钮化后与同页其它操作同形。 */
+.wb-shell #wb-settings > section > .sidebar-block > #theme-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wb-shell #wb-settings > section > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--wa-elevated, var(--surface));
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.wb-shell #wb-settings > section > a:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
 /* Unified 52px Desktop PageHeader */
 .wb-toolbar,
 .wb-heading,
@@ -190,7 +224,7 @@
 
 /* Focus & Atomic Controls (Concentric Radius & Single Primary Hierarchy) */
 .wb-shell :is(button, input, select, textarea, a, summary):focus-visible {
-  outline: 2px solid var(--wa-focus, #184f95);
+  outline: 2px solid var(--wa-focus, #0D0E0C);
   outline-offset: 2px;
 }
 
@@ -199,21 +233,21 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px 14px;
-  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
   border: 0.5px solid transparent;
-  background: var(--wa-brand, #ad5132);
-  color: var(--accent-ink, #ffffff);
-  font-size: 14px;
-  font-weight: var(--wa-medium, 500);
+  background: var(--wa-brand, var(--mj-brand, #0d0e0c));
+  color: var(--mj-brand-ink);
+  font-size: 13px;
+  font-weight: 600;
   box-shadow: none !important;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 70ms ease;
 }
 
 .wb-shell .button:not(:disabled):hover {
-  background: color-mix(in srgb, var(--wa-brand, #ad5132) 88%, #000);
+  background: color-mix(in srgb, var(--wa-brand, var(--mj-brand, #0d0e0c)) 88%, var(--mj-brand-ink, #ffffff));
 }
 
 .wb-shell .button:not(:disabled):active {
@@ -227,8 +261,8 @@
 
 .wb-shell .button-small {
   min-height: 30px;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .wb-shell .button-quiet {
@@ -258,11 +292,12 @@
 .wb-shell textarea {
   min-width: 0;
   width: 100%;
+  min-height: 36px;
   padding: 8px 10px;
   border: 0.5px solid var(--line);
   background: var(--wa-elevated, var(--surface));
   color: var(--ink);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: none !important;
   transition: border-color 120ms ease;
 }
@@ -270,7 +305,7 @@
 .wb-shell input:not([type="checkbox"]):not([type="radio"]):focus,
 .wb-shell select:focus,
 .wb-shell textarea:focus {
-  border-color: var(--wa-focus, #184f95);
+  border-color: var(--wa-focus, #0D0E0C);
   outline: none;
 }
 
@@ -278,7 +313,7 @@
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  accent-color: var(--wa-brand, #ad5132);
+  accent-color: var(--wa-brand, var(--mj-brand, #0d0e0c));
 }
 
 /* Badges (80% Light Background + Dark Semantic Text) */
@@ -286,10 +321,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 8px;
   font-size: 12px;
-  font-weight: var(--wa-medium, 500);
+  font-weight: 600;
   background: var(--neutral-bg);
   color: var(--ink-2);
   border: 0.5px solid var(--line);
@@ -531,6 +567,14 @@
 
 .wb-heading :is(h2, h3) {
   margin: 0;
+}
+
+/* 第 2 轮：任务外壳的标题层级
+   同一屏里的卡片标题统一 600 字重（原来 500 与 600 混用，靠字号分主次）。 */
+.wb-shell .wb-heading > :is(h2, h3),
+.wb-shell .wb-start-side h3,
+.wb-shell #wb-settings > section > h3 {
+  font-weight: 600;
 }
 
 .wb-next {
@@ -1382,11 +1426,15 @@ body.wb-task-shell .wb-shell {
 }
 
 .wb-shell .wb-task-state {
-  padding: 2px 8px;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 8px;
   background: var(--accent-soft);
   color: var(--wa-brand);
   font-size: 12px;
+  font-weight: 600;
 }
 
 /* 上下文条与步骤条 */
@@ -1481,7 +1529,7 @@ body.wb-task-shell .wb-shell {
 .wb-step[data-state="done"] .wb-step-mark {
   border-color: var(--wa-brand);
   background: var(--wa-brand);
-  color: var(--accent-ink, #fff);
+  color: var(--mj-brand-ink);
 }
 
 .wb-step[data-state="done"] .wb-step-button {
@@ -1497,7 +1545,17 @@ body.wb-task-shell .wb-shell {
 .wb-step[data-state="current"] .wb-step-mark {
   border-color: var(--wa-brand);
   background: var(--wa-brand);
-  color: var(--accent-ink, #fff);
+  color: var(--mj-brand-ink);
+}
+
+/* 已完成的步骤把连接线也染成品牌色，进度一眼可见；最后一步不占剩余宽度，
+   步骤条在最后一个标签处收尾，不再拖一条空线到右边。 */
+.wb-step[data-state="done"]:not(:last-child)::after {
+  background: color-mix(in srgb, var(--wa-brand) 45%, transparent);
+}
+
+.wb-step:last-child {
+  flex: 0 0 auto;
 }
 
 /* 对话栏位于工作区左侧（概念稿：对话 330px + 工作区） */
@@ -2285,4 +2343,71 @@ body.wb-task-shell.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #v
     width: 20px;
     height: 20px;
   }
+}
+
+/* ==========================================================================
+   第 2 轮：任务外壳的组件收口（页签语言、小屏数据表）
+   ========================================================================== */
+
+/* 岗位来源这类页面级页签，与第 1 轮定下的胶囊页签同形：
+   brand-soft 轨道 + 当前项墨色底。workbench-agent.css 的 [role="tablist"]
+   下划线规则仍会命中，这里显式清掉。 */
+.wb-shell .wb-segment {
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.wb-shell .wb-segment-tab {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: calc(var(--mj-r-control) - 2px);
+  box-shadow: none;
+  color: var(--mj-text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wb-shell .wb-segment-tab:hover {
+  background: color-mix(in srgb, var(--mj-brand) 10%, transparent);
+  color: var(--mj-ink);
+}
+
+/* workbench-agent.css 的 [role="tablist"] 下划线规则带一个 id，
+   这里补上同样的一层 #wa-theme-off，才压得住它的 color 和 inset 阴影。 */
+body.offer-ui:not(#wa-theme-off) .wb-shell .wb-segment-tab[aria-selected="true"] {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .wb-shell .wb-segment-tab[aria-selected="true"] {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) .wb-shell .wb-segment-tab[aria-selected="true"] {
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+  }
+}
+
+/* 小屏下数据表改为横向滚动：原来 390 宽时每列被压到 40-60px，
+   职位名一字一行。给表一个最小宽度，单元格不折行，容器自己滚。 */
+@media (max-width: 640px) {
+  .wb-shell .wb-table {
+    min-width: 560px;
+  }
+  .wb-shell .wb-table :is(th, td) {
+    white-space: nowrap;
+  }
+}
+
+
+/* 第 2 轮补充：旧版侧栏选中项编号的深色对比度；第 3 轮改为信号底色上的近黑编号。 */
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index {
+  color: var(--mj-brand-ink);
+  opacity: .72;
 }
