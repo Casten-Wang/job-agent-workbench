@@ -9434,7 +9434,9 @@ function bindEvents() {
     button.addEventListener('click', () => showView(button.dataset.view));
   });
 
-  document.querySelectorAll('.ui-hub-tab').forEach((button) => {
+  // 只有带 data-view 的页签才是跨页跳转；页内页签（如模拟面试三个标签）由各自模块处理，
+  // 不能对它们调用 showView(undefined)，否则所有面板被隐藏、整页空白。
+  document.querySelectorAll('.ui-hub-tab[data-view]').forEach((button) => {
     button.addEventListener('click', () => showView(button.dataset.view));
   });
 
