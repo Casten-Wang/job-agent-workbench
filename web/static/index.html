@@ -884,7 +884,7 @@
             <div class="panel-head">
               <div>
                 <h3 id="profile-form-title">资料编辑</h3>
-                <p class="panel-note">只保存在本机。带 <strong>必填</strong> 的字段会影响后续流程：缺一项，「采集」「完整流程」都无法启动。</p>
+                <p class="panel-note">只保存在本机。带 <strong>必填</strong> 的字段会影响后续流程：缺一项，「采集」「完整流程」都无法启动。输入框里的灰字只是格式示例；已保存的资料会直接显示在框里，来自简历的值会标「来自简历」。</p>
               </div>
               <div class="profile-head-actions">
                 <button class="button button-quiet button-small" type="button" id="profile-import">从本地简历导入</button>
@@ -909,10 +909,14 @@
               <p class="panel-note">支持 PDF、DOCX、Markdown、TXT，最大 5 MB。文件在本机读取，全文交由已配置的 Agent 解析；扫描件 PDF 请先转为文字。</p>
               <p class="resume-drop-status" aria-live="polite"></p>
             </div>
+            <div class="action-result profile-import-status" id="profile-import-status" hidden></div>
             <details id="profile-import-preview" hidden>
-              <summary>查看解析出的简历原文</summary>
+              <summary>简历原文</summary>
+              <p class="hint">按空行分段；解析失败时也可以逐段复制，粘进下方表单，不用从零手输。</p>
+              <div class="profile-import-paragraphs" id="profile-import-paragraphs"></div>
               <pre id="profile-import-text" class="profile-import-text"></pre>
             </details>
+            <div class="notice notice-accent profile-cv-suggest" id="profile-cv-suggest" hidden></div>
 
             <form id="profile-form">
               <h4 class="profile-section-title" id="sg-profile-sec-basic">基本信息</h4>
@@ -922,15 +926,15 @@
                 <div class="form-field"><label for="profile-email">邮箱</label><input id="profile-email" type="email" autocomplete="email"><p class="sg-field-note">选填，影响完整度：填写会计入「基本信息」完整度；不填时这一节会显示未完成。</p></div>
                 <div class="form-field"><label for="profile-phone">电话</label><input id="profile-phone" type="tel" autocomplete="tel"></div>
                 <div class="form-field"><label for="profile-wechat">微信</label><input id="profile-wechat" type="text" autocomplete="off"></div>
-                <div class="form-field"><label for="profile-links">作品集 / GitHub / 链接</label><input id="profile-links" type="text" autocomplete="url" placeholder="多个链接用逗号分隔"></div>
+                <div class="form-field"><label for="profile-links">作品集 / GitHub / 链接</label><input id="profile-links" type="text" autocomplete="url" placeholder="多个链接用逗号分隔，例如 https://…"></div>
               </div>
 
               <h4 class="profile-section-title" id="sg-profile-sec-intent">求职偏好</h4>
               <div class="form-grid">
-                <div class="form-field"><label for="profile-titles">目标岗位 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-titles" type="text" placeholder="产品经理, 产品助理"></div>
-                <div class="form-field"><label for="profile-target-cities">目标城市 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-target-cities" type="text" placeholder="上海, 杭州"></div>
-                <div class="form-field"><label for="profile-salary-min">期望月薪下限</label><input id="profile-salary-min" type="number" min="0" step="1000" inputmode="numeric" placeholder="15000"></div>
-                <div class="form-field"><label for="profile-salary-max">期望月薪上限</label><input id="profile-salary-max" type="number" min="0" step="1000" inputmode="numeric" placeholder="25000"></div>
+                <div class="form-field"><label for="profile-titles">目标岗位 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-titles" type="text" placeholder="例如 产品经理, 产品助理"></div>
+                <div class="form-field"><label for="profile-target-cities">目标城市 <span class="profile-required-mark">必填</span>（逗号分隔）</label><input id="profile-target-cities" type="text" placeholder="例如 上海, 杭州"></div>
+                <div class="form-field"><label for="profile-salary-min">期望月薪下限</label><input id="profile-salary-min" type="number" min="0" step="1000" inputmode="numeric" placeholder="例如 15000"></div>
+                <div class="form-field"><label for="profile-salary-max">期望月薪上限</label><input id="profile-salary-max" type="number" min="0" step="1000" inputmode="numeric" placeholder="例如 25000"></div>
                 <div class="form-field">
                   <label for="profile-job-type">求职类型</label>
                   <select id="profile-job-type">
@@ -940,7 +944,7 @@
                     <option value="合同">合同</option>
                   </select>
                 </div>
-                <div class="form-field"><label for="profile-availability">到岗时间</label><input id="profile-availability" type="text" placeholder="一个月内 / 随时"></div>
+                <div class="form-field"><label for="profile-availability">到岗时间</label><input id="profile-availability" type="text" placeholder="例如 一个月内 / 随时"></div>
               </div>
 
               <h4 class="profile-section-title" id="sg-profile-sec-education">教育经历 <span class="profile-required-mark">必填：至少一段</span></h4>
@@ -957,10 +961,10 @@
 
               <h4 class="profile-section-title" id="sg-profile-sec-skills">技能与简介</h4>
               <div class="form-grid">
-                <div class="form-field full"><label for="profile-tools">工具 / 技能 <span class="profile-required-mark">必填：至少 3 个</span>（逗号分隔）</label><input id="profile-tools" type="text" placeholder="Axure, Visio, Excel"></div>
-                <div class="form-field full"><label for="profile-strengths">优势标签（逗号分隔）</label><input id="profile-strengths" type="text" placeholder="需求分析, 用户调研, 数据分析"></div>
-                <div class="form-field full" id="sg-profile-sec-summary"><label for="profile-summary">个人简介 <span class="profile-required-mark">必填：至少 20 字</span></label><textarea id="profile-summary" rows="5" placeholder="用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
-                <div class="form-field full"><label for="profile-excluded">排除词（逗号分隔）</label><input id="profile-excluded" type="text" placeholder="外包, 驻场"></div>
+                <div class="form-field full"><label for="profile-tools">工具 / 技能 <span class="profile-required-mark">必填：至少 3 个</span>（逗号分隔）</label><input id="profile-tools" type="text" placeholder="例如 Axure, Visio, Excel"></div>
+                <div class="form-field full"><label for="profile-strengths">优势标签（逗号分隔）</label><input id="profile-strengths" type="text" placeholder="例如 需求分析, 用户调研, 数据分析"></div>
+                <div class="form-field full" id="sg-profile-sec-summary"><label for="profile-summary">个人简介 <span class="profile-required-mark">必填：至少 20 字</span></label><textarea id="profile-summary" rows="5" placeholder="例如：用几句话说明你的方向、经历与优势；只写可核实事实。"></textarea></div>
+                <div class="form-field full"><label for="profile-excluded">排除词（逗号分隔）</label><input id="profile-excluded" type="text" placeholder="例如 外包, 驻场"></div>
               </div>
 
               <label class="checkbox-label profile-truth" id="sg-profile-sec-truth"><input type="checkbox" id="profile-truth"> <span class="profile-required-mark">必填</span>　我确认以上信息真实，可由本工作台用于生成招呼语、题单与简历草稿；联系方式不会写入草稿。</label>
