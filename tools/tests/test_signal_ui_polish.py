@@ -62,7 +62,9 @@ class SignalBaseStylesTests(unittest.TestCase):
         self.assertIn("max-width: 1000px", home)
         day = _between(self.css, ".sg-home-day {", "}")
         self.assertIn("font-size: 140px", day)
-        self.assertIn("var(--sg-num)", day)
+        # 天数不再用等宽数字字体，强调靠字号 + tabular-nums
+        self.assertIn("font-variant-numeric: tabular-nums", day)
+        self.assertNotIn("var(--sg-num)", day)
 
     def test_settings_system_board_is_collapsed(self):
         self.assertIn("#view-data .sg-fold > summary", self.css)

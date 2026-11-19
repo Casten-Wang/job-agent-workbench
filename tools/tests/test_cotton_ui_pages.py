@@ -282,8 +282,11 @@ class CottonPagesComponentTests(unittest.TestCase):
         dialog = self.rule("#hr-reply-confirm-panel .hr-reply-dialog")
         self.assertIn("var(--mj-r-stage)", dialog)
         self.assertIn("var(--mj-shadow-float)", dialog)
+        # 2026-11 排版统一：弹窗标题也走无衬线，层级靠字号/字重而不是字体
         title = self.rule(".hr-reply-head h3")
-        self.assertIn("var(--mj-serif)", title)
+        self.assertIn("font-size: 16px", title)
+        self.assertIn("font-weight: 600", title)
+        self.assertNotIn("serif", title)
 
     def test_collect_checks_and_score_strip_use_status_bars(self):
         check = self.rule(".collect-check {")
@@ -295,10 +298,12 @@ class CottonPagesComponentTests(unittest.TestCase):
         bad = self.rule(".collect-check:has(.badge-bad)")
         self.assertIn("var(--mj-bad)", bad)
 
-    def test_jobs_score_is_monospace_and_quiet(self):
+    def test_jobs_score_is_quiet_tabular_numerals(self):
+        # 数字不再用等宽字体；对齐靠 tabular-nums
         score = self.rule(".jobs-score {")
-        self.assertIn("var(--mj-mono)", score)
-        self.assertIn("tabular-nums", score)
+        self.assertIn("font-variant-numeric: tabular-nums", score)
+        self.assertIn("font-size: 13px", score)
+        self.assertNotIn("mono", score)
         empty = self.rule(".jobs-score-empty")
         self.assertIn("var(--mj-text-2)", empty)
 
@@ -322,14 +327,17 @@ class CottonPagesComponentTests(unittest.TestCase):
         self.assertIn("var(--mj-shadow-card)", node)
         self.assertIn("var(--mj-r-card)", node)
         name = self.rule(".pipeline-name")
-        self.assertIn("var(--mj-serif)", name)
+        self.assertIn("font-size: 16px", name)
+        self.assertIn("font-weight: 600", name)
+        self.assertNotIn("serif", name)
         turn = self.rule(".chat-turn-candidate")
         self.assertIn("var(--mj-brand-soft)", turn)
 
     def test_push_output_uses_paper_and_mono(self):
         block = self.rule(".code-block {")
         self.assertIn("var(--mj-paper-2)", block)
-        self.assertIn("var(--mj-mono)", block)
+        # 代码块仍用等宽，但走统一的 --code-font token
+        self.assertIn("var(--code-font", block)
         self.assertIn("font-size: 12px", block)
 
 

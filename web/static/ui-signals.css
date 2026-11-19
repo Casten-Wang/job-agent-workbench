@@ -387,7 +387,7 @@ textarea {
 }
 
 .nav-text small {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
   color: var(--ink-2);
@@ -420,7 +420,7 @@ textarea {
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -490,7 +490,7 @@ textarea {
 .offerpilot-step h4 {
   margin: 0 0 6px;
   padding-right: 28px;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 650;
 }
 
@@ -499,7 +499,7 @@ textarea {
   top: 12px;
   right: 14px;
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
   color: var(--offer-pink);
@@ -601,7 +601,7 @@ textarea {
 
 .collect-resume-main strong {
   display: block;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -626,7 +626,7 @@ textarea {
 
 .queue-greetings > .muted {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .queue-greeting-card {
@@ -646,7 +646,7 @@ textarea {
 }
 
 .queue-greeting-head strong {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -662,7 +662,7 @@ textarea {
 .queue-greeting-meta {
   margin: 6px 0 0;
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -692,7 +692,7 @@ textarea {
 .queue-delivery-summary {
   margin: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -714,13 +714,13 @@ textarea {
 
 .queue-delivery-item strong {
   display: block;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
 .queue-delivery-item p {
   margin: 4px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -763,7 +763,7 @@ textarea {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .collect-checks-panel {
@@ -790,7 +790,7 @@ textarea {
   border-radius: 14px;
   background: rgba(127, 127, 127, 0.05);
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -821,7 +821,7 @@ textarea {
 
 .collect-check-body strong {
   display: block;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -836,7 +836,7 @@ textarea {
   margin: 10px 0 0;
   padding-left: 18px;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -862,7 +862,7 @@ textarea {
 .advanced-panel summary {
   cursor: pointer;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   list-style: none;
 }

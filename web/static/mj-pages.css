@@ -7,7 +7,7 @@
  * 1. 四个流水线页签共用的页头、页签、按钮、徽标、表格
  * ========================================================================== */
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-title {
-  font-size: 36px;
+  font-size: 40px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-lede {
@@ -160,7 +160,6 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .cell-mono {
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -232,13 +231,13 @@ body.offer-ui:not(#wa-theme-off) #view-collect .resume-dropzone:focus-visible {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-resume-main strong {
   color: var(--mj-ink);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-resume-main p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .resume-drop-status {
@@ -266,26 +265,24 @@ body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card h4 {
   margin: 0 0 8px;
-  font-family: var(--mj-serif);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--mj-ink);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card .hint {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-task-line {
   margin: 0;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect :is(.cell-mono, .offerpilot-task-line .cell-mono) {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -306,8 +303,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs > .panel-head {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs > .panel-head h4 {
   margin: 0;
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -334,8 +330,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card > .panel-head 
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card > .panel-head h4 {
   margin: 0;
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--mj-ink);
@@ -368,7 +363,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body strong {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
@@ -377,7 +372,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .checkbox-label {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .integration-meta {
@@ -392,7 +387,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .integration-meta dd {
   margin: 0;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -419,7 +414,7 @@ body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason-label {
 
 body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason {
   min-height: 32px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-selection-count {
@@ -452,7 +447,6 @@ body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-platform {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-score {
-  font-family: var(--mj-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -542,7 +536,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) :is(#jobs-dossier,
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-toolbar {
   gap: 10px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-count {
@@ -578,7 +572,7 @@ body.offer-ui:not(#wa-theme-off) #view-queue .queue-greeting-meta {
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-greetings > .muted {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-modal {
@@ -588,8 +582,7 @@ body.offer-ui:not(#wa-theme-off) #view-queue .queue-modal {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -631,7 +624,7 @@ body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-card {
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-result {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .sg-queue-delivery-platform,
@@ -655,8 +648,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar h3 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -695,7 +687,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-notice {
   border-left: 3px solid var(--mj-warn);
   background: var(--mj-warn-bg);
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-sidebar {
@@ -713,7 +705,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-sidebar-title {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-count {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -786,7 +777,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row.is-error .hr-platfo
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row-detail {
   color: var(--mj-text);
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -850,7 +840,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-unread .hr-conve
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-time {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -879,7 +868,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
   border-radius: var(--mj-r-tag);
   background: var(--mj-ink);
   color: var(--mj-brand-ink);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-weight: 700;
 }
@@ -908,8 +896,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-head {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-head h4 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -950,13 +937,12 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-label {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-title {
   color: var(--mj-ink);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-score {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1014,13 +1000,13 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-text {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-system .hr-message-text {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty,
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty-hint {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-block-reason {
@@ -1076,7 +1062,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-draft-count {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-draft-count {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1116,15 +1101,14 @@ body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-confirm-panel .hr-reply-di
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-who {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-text {
@@ -1155,7 +1139,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-summary {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-note {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* ==========================================================================
@@ -1172,8 +1156,7 @@ body.offer-ui:not(#wa-theme-off) #view-profile #profile-meter.profile-meter {
 
 body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress-value {
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
-  font-size: 44px;
+  font-size: 40px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1277,7 +1260,6 @@ body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item:hover {
 body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-state {
   border-radius: var(--mj-r-tag);
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1309,7 +1291,6 @@ body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-note {
 body.offer-ui:not(#wa-theme-off) #view-profile .profile-section-title {
   margin: 28px 0 12px;
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
@@ -1350,7 +1331,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .form-field lab
   display: block;
   margin-bottom: 6px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1395,18 +1376,17 @@ body.offer-ui:not(#wa-theme-off) #view-resume .resume-dropzone:focus-visible {
 
 body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone strong {
   color: var(--mj-ink);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-profile .profile-import-text {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1431,7 +1411,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-templat
 body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) legend {
   padding: 0 6px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1488,7 +1468,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .career-message {
 
 body.offer-ui:not(#wa-theme-off) #view-resume .career-code {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1514,7 +1494,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dt {
 
 body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dd {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-saved {
@@ -1529,7 +1509,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-project {
 
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-sha {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 12px;
 }
 
@@ -1550,7 +1530,6 @@ body.offer-ui:not(#wa-theme-off) #view-resume .data-table td {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-resume .resume-compare-cell {
-  font-family: var(--mj-mono);
   font-size: 12px;
 }
 
@@ -1558,7 +1537,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .ats-keyword,
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-ai-help,
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-ai-test-note {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -1582,7 +1561,6 @@ body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node:h
 
 body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-index {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1594,15 +1572,13 @@ body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-owner 
 
 body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-name {
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .sg-card-count strong {
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
-  font-size: 44px;
+  font-size: 40px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1647,7 +1623,6 @@ body.offer-ui:not(#wa-theme-off) #view-interview .interview-module-nav {
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-progress {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1663,7 +1638,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set {
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set legend {
   padding: 0 6px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1695,7 +1670,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn {
   border-radius: var(--mj-r-card) var(--mj-r-card) var(--mj-r-card) 4px;
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-candidate {
@@ -1711,7 +1686,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-incomplete {
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-note {
   color: var(--mj-warn);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-composer {
@@ -1733,7 +1708,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-web-notice {
   border-radius: var(--mj-r-inner);
   background: var(--mj-warn-bg);
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-debrief,
@@ -1798,7 +1773,7 @@ body.offer-ui:not(#wa-theme-off) #view-push .code-block {
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
   color: var(--mj-text);
-  font-family: var(--mj-mono);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1838,7 +1813,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-intervie
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note > p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note .integration-meta dt {
@@ -1848,11 +1823,10 @@ body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-intervie
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note .integration-meta dd {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) :is(.integration-meta, .sg-dev-note, .career-message) code {
-  font-family: var(--mj-mono);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1926,6 +1900,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note[hidden] {
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note {
   margin: 0;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }

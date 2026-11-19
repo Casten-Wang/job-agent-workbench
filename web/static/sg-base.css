@@ -101,26 +101,26 @@ body.offer-ui:not(#wa-theme-off) #refresh-button:hover:not(:disabled) {
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .brand-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: -.01em;
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-item {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
   gap: 10px;
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-index {
-  font-family: var(--sg-num);
-  font-size: 11px;
+  
+  font-size: 12px;
   letter-spacing: .04em;
   font-variant-numeric: tabular-nums;
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-group-label {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: .04em;
   margin: 18px 0 6px;
 }
@@ -177,7 +177,7 @@ body.offer-ui:not(#wa-theme-off) .views > .view > .view-head {
 }
 
 body.offer-ui:not(#wa-theme-off) .view-title {
-  font-family: var(--sg-num);
+  
   font-size: 40px;
   font-weight: 700;
   letter-spacing: -.02em;
@@ -218,7 +218,7 @@ body.offer-ui:not(#wa-theme-off) .sg-help > summary::before {
   margin-right: 6px;
   border-radius: 50%;
   box-shadow: inset 0 0 0 .5px var(--line);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -245,7 +245,7 @@ body.offer-ui:not(#wa-theme-off) .panel-head {
 }
 
 body.offer-ui:not(#wa-theme-off) .panel h3 {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -.01em;
   line-height: 1.3;
@@ -259,7 +259,7 @@ body.offer-ui:not(#wa-theme-off) .panel-note {
 }
 
 body.offer-ui:not(#wa-theme-off) .panel-count {
-  font-family: var(--sg-num);
+  
   font-size: 20px;
   font-weight: 700;
   color: var(--ink);
@@ -350,7 +350,7 @@ body.offer-ui:not(#wa-theme-off) .form-field {
 
 body.offer-ui:not(#wa-theme-off) .form-field > label,
 body.offer-ui:not(#wa-theme-off) .form-field > .form-label {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -362,7 +362,7 @@ body.offer-ui:not(#wa-theme-off) .form-field :is(input:not([type="file"]):not([t
   border-radius: var(--sg-radius-input);
   background: var(--surface);
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) .form-field :is(input, select, textarea):focus-visible {
@@ -379,7 +379,7 @@ body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]
   border-radius: var(--sg-radius-input);
   background: var(--surface);
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus-visible {
@@ -426,7 +426,7 @@ body.offer-ui:not(#wa-theme-off) thead th {
 body.offer-ui:not(#wa-theme-off) tbody td {
   padding: 13px 12px;
   border-bottom: .5px solid var(--line);
-  font-size: 13.5px;
+  font-size: 14px;
   vertical-align: middle;
 }
 
@@ -500,7 +500,7 @@ body.offer-ui:not(#wa-theme-off) .home-head {
 
 body.offer-ui:not(#wa-theme-off) .sg-home-day {
   margin: 0;
-  font-family: var(--sg-num);
+  
   font-size: 140px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -533,7 +533,7 @@ body.offer-ui:not(#wa-theme-off) .home-today #workbench-title {
 
 body.offer-ui:not(#wa-theme-off) .home-today .home-date {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--ink);
   letter-spacing: .01em;
@@ -562,7 +562,7 @@ body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
   border-radius: var(--sg-radius-panel);
   background: var(--ink);
   color: var(--bg);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
   letter-spacing: -.01em;
   line-height: 1.5;
@@ -627,7 +627,7 @@ body.offer-ui:not(#wa-theme-off) .sg-home-task-sub {
 body.offer-ui:not(#wa-theme-off) .home-task-count {
   min-width: 76px;
   text-align: right;
-  font-family: var(--sg-num);
+  
   font-size: 40px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -697,13 +697,13 @@ body.offer-ui:not(#wa-theme-off) .sg-side-head {
 
 body.offer-ui:not(#wa-theme-off) .sg-side-head h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: -.01em;
 }
 
 body.offer-ui:not(#wa-theme-off) .sg-side-meta {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--mute);
   white-space: nowrap;
 }
@@ -732,8 +732,8 @@ body.offer-ui:not(#wa-theme-off) .sg-side-row:last-child {
 }
 
 body.offer-ui:not(#wa-theme-off) .sg-side-num {
-  font-family: var(--sg-num);
-  font-size: 22px;
+  
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
   color: var(--ink);
@@ -783,7 +783,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent > .view-head {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-title {
-  font-family: var(--sg-num);
+  
   font-size: 40px;
   font-weight: 700;
   letter-spacing: -.02em;
@@ -801,7 +801,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-sessions {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-section-head h3 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
 }
 
@@ -809,7 +809,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-session {
   padding: 10px 12px;
   border-radius: var(--sg-radius-input);
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
 }
@@ -868,12 +868,12 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-conversation:has(.wa-material-f
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form h4 {
   margin: 0 0 10px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form > label {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-2);
 }
 
@@ -885,7 +885,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form :is(input:not([ty
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-composer {
@@ -932,7 +932,7 @@ body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary {
   list-style: none;
   cursor: pointer;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
 }
 
@@ -1045,10 +1045,10 @@ body.offer-ui:not(#wa-theme-off) .view:not([hidden]) > :is(.panel, .two-col, .kp
   }
 
   body.offer-ui:not(#wa-theme-off) .sg-home-day {
-    font-size: 96px;
+    font-size: var(--fs-hero-sm);
   }
 
   body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
-    font-size: 15px;
+    font-size: 14px;
   }
 }

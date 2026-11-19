@@ -73,10 +73,11 @@ class PageHeadTests(unittest.TestCase):
         view = _between(self.theme, "body.offer-ui .view {", "}")
         self.assertIn("gap: 20px", view)
 
-    def test_display_type_is_serif_and_body_stays_sans(self):
-        self.assertIn('--op-font-display: "Songti SC"', self.theme)
+    def test_display_type_uses_the_single_sans_stack(self):
+        # 2026-11 排版统一：全站（含大标题）只用一套无衬线，不再混宋体
+        self.assertIn("--op-font-display: var(--ui-font)", self.theme)
         self.assertIn("body.offer-ui .view-title", self.theme)
-        self.assertIn("font-family: var(--op-font-display)", self.theme)
+        self.assertNotIn('"Songti SC"', self.theme)
 
     def test_decorative_layers_are_not_rendered(self):
         block = _between(self.theme, "body.offer-ui .offer-ticker,", "}")

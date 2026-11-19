@@ -704,10 +704,10 @@ body.offer-ui:not(#wa-theme-off) :is(td, th) { border-color: var(--line); }
 body.offer-ui:not(#wa-theme-off) {
   --sg: #D2F53C;
   --sg-ink: #0B0C08;
-  --sg-num: "Avenir Next Condensed", "SF Compact Display", "Barlow Condensed", "DIN Condensed", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --sg-num: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --sg-spring: linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 19.4%, 1.067, 1.089 26.9%, 1.079, 1.054 33.7%, 1.003 43.3%, .993 49.9%, 1.001 63.8%, 1);
   --sg-soft: cubic-bezier(.22, 1, .36, 1);
-  font-family: -apple-system, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--ui-font);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
@@ -723,7 +723,7 @@ body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index { color
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index { color: var(--sg-ink); opacity: .6; }
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-group-label { color: var(--mute); }
 body.offer-ui:not(#wa-theme-off) .brand-rule { width: 8px; height: 8px; border-radius: 50%; background: var(--sg); box-shadow: 0 0 0 0 rgba(210,245,60,.6); animation: sg-pulse 2.6s var(--sg-soft) infinite; }
-[data-theme="light"] body.offer-ui:not(#wa-theme-off) .brand-rule { background: #9BC21A; }
+[data-theme="light"] body.offer-ui:not(#wa-theme-off) .brand-rule { background: var(--mj-brand); }
 @keyframes sg-pulse { 70% { box-shadow: 0 0 0 10px rgba(210,245,60,0); } 100% { box-shadow: 0 0 0 0 rgba(210,245,60,0); } }
 body.offer-ui:not(#wa-theme-off) .segmented { border-radius: 999px; background: var(--accent-soft); padding: 3px; }
 body.offer-ui:not(#wa-theme-off) .segmented button { border-radius: 999px; }
@@ -735,14 +735,14 @@ body.offer-ui:not(#wa-theme-off) .views > .view:not([hidden]) { animation: sg-sc
 
 /* 标题与数字：窄体大字就是版面主角 */
 body.offer-ui:not(#wa-theme-off) .view-title,
-body.offer-ui:not(#wa-theme-off) .home-title { font-family: var(--sg-num); font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
-body.offer-ui:not(#wa-theme-off) .home-title { font-size: 56px; }
+body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
 body.offer-ui:not(#wa-theme-off) .home-task-count,
 body.offer-ui:not(#wa-theme-off) .kpi-value,
-body.offer-ui:not(#wa-theme-off) .wb-counts strong { font-family: var(--sg-num); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+body.offer-ui:not(#wa-theme-off) .wb-counts strong { font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 40px; line-height: 1; }
-body.offer-ui:not(#wa-theme-off) .kpi-value { font-size: 44px; }
-body.offer-ui:not(#wa-theme-off) .home-lede { font-size: 19px; font-weight: 500; letter-spacing: -.01em; }
+body.offer-ui:not(#wa-theme-off) .kpi-value { font-size: 40px; }
+body.offer-ui:not(#wa-theme-off) .home-lede { font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
 body.offer-ui:not(#wa-theme-off) .home-task-label { font-family: inherit; font-size: 16px; font-weight: 600; }
 
 /* 首页「今天」：一块深色概览，信号色余光只出现在这里 */
@@ -782,7 +782,7 @@ body.offer-ui:not(#wa-theme-off) :is(.hub-tabs, .subtabs, [role="tablist"]) :is(
   body.offer-ui:not(#wa-theme-off) :is(.button, .nav-item) { transition: none !important; }
 }
 @media (max-width: 900px) {
-  body.offer-ui:not(#wa-theme-off) .home-title { font-size: 44px; }
+  body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
   body.offer-ui:not(#wa-theme-off) .view-title { font-size: 28px; }
   body.offer-ui:not(#wa-theme-off) .sidebar .nav-item { border-radius: 999px; }
   body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active { border-bottom-color: transparent; }
@@ -803,7 +803,7 @@ body.offer-ui:not(#wa-theme-off) fieldset > label { display: flex; align-items: 
 body.offer-ui:not(#wa-theme-off) label.cu-check, body.offer-ui:not(#wa-theme-off) label:has(> input[type="checkbox"]) { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
 
 body.offer-ui:not(#wa-theme-off) :is(.notice, .hint-box) { background: var(--accent-soft); color: var(--ink-2); border: 0; border-radius: 14px; box-shadow: inset 3px 0 0 var(--sg); padding: 12px 16px; line-height: 1.65; }
-[data-theme="light"] body.offer-ui:not(#wa-theme-off) :is(.notice, .hint-box) { box-shadow: inset 3px 0 0 #9BC21A; }
+[data-theme="light"] body.offer-ui:not(#wa-theme-off) :is(.notice, .hint-box) { box-shadow: inset 3px 0 0 var(--mj-brand); }
 body.offer-ui:not(#wa-theme-off) .notice-warn, body.offer-ui:not(#wa-theme-off) .notice-bad { background: var(--warn-bg); color: var(--warn); box-shadow: inset 3px 0 0 var(--warn); }
 body.offer-ui:not(#wa-theme-off) .notice b, body.offer-ui:not(#wa-theme-off) .notice strong { color: var(--ink); }
 
@@ -836,7 +836,7 @@ body.offer-ui:not(#wa-theme-off) .status { border-radius: 12px; }
 }
 @media (max-width: 560px) {
   body.offer-ui:not(#wa-theme-off) .home-task { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
-  body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 34px; text-align: right; }
+  body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 40px; text-align: right; }
   body.offer-ui:not(#wa-theme-off) .home-task .button { grid-column: 1 / -1; justify-self: start; }
   body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
 }

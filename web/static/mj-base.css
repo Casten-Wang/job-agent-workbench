@@ -26,7 +26,7 @@ body.offer-ui:not(#wa-theme-off) {
   --mj-warn-bg: #FBF1DC;
   --mj-bad: #B3374A;
   --mj-bad-bg: #FBE9EC;
-  --mj-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+  --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --mj-r-stage: 24px;
   --mj-r-card: 14px;
@@ -104,7 +104,7 @@ body.offer-ui:not(#wa-theme-off) {
   --mj-warn-bg: #3A2C10;
   --mj-bad: #F29AA8;
   --mj-bad-bg: #3E1A22;
-  --mj-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+  --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --mj-r-stage: 24px;
   --mj-r-card: 14px;
@@ -182,7 +182,7 @@ body.offer-ui:not(#wa-theme-off) {
     --mj-warn-bg: #3A2C10;
     --mj-bad: #F29AA8;
     --mj-bad-bg: #3E1A22;
-    --mj-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+    --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
     --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     --mj-r-stage: 24px;
     --mj-r-card: 14px;
@@ -244,15 +244,15 @@ body.offer-ui:not(#wa-theme-off) {
 body.offer-ui:not(#wa-theme-off) {
   color: var(--mj-text);
   background: var(--mj-canvas);
-  font-family: -apple-system, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--ui-font);
   font-size: 14px;
   line-height: 1.6;
   letter-spacing: 0;
 }
 
 body.offer-ui:not(#wa-theme-off) .view-title {
-  font-family: var(--mj-serif);
-  font-size: 36px;
+  
+  font-size: 40px;
   font-weight: 600;
   line-height: 1.15;
   letter-spacing: -.01em;
@@ -260,8 +260,8 @@ body.offer-ui:not(#wa-theme-off) .view-title {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-title {
-  font-family: var(--mj-serif);
-  font-size: 26px;
+  
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -.01em;
 }
@@ -356,8 +356,8 @@ body.offer-ui:not(#wa-theme-off) .panel-head {
 
 body.offer-ui:not(#wa-theme-off) .panel h3,
 body.offer-ui:not(#wa-theme-off) .panel-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.35;
@@ -372,7 +372,6 @@ body.offer-ui:not(#wa-theme-off) .panel-note {
 }
 
 body.offer-ui:not(#wa-theme-off) .panel-count {
-  font-family: var(--mj-mono);
   font-size: 13px;
   font-weight: 600;
   color: var(--mj-text-2);
@@ -587,7 +586,7 @@ body.offer-ui:not(#wa-theme-off) .form-field {
 body.offer-ui:not(#wa-theme-off) .form-field > label,
 body.offer-ui:not(#wa-theme-off) .form-field > .form-label {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -598,7 +597,7 @@ body.offer-ui:not(#wa-theme-off) .form-field :is(input:not([type="file"]):not([t
   border-radius: var(--mj-r-control);
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
@@ -608,7 +607,7 @@ body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]
   border-radius: var(--mj-r-control);
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
@@ -616,7 +615,7 @@ body.offer-ui:not(#wa-theme-off) :is(input:not([type="checkbox"]):not([type="rad
   border-radius: var(--mj-r-control);
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(input, select, textarea)::placeholder {
@@ -650,7 +649,7 @@ body.offer-ui:not(#wa-theme-off) .hint {
 
 body.offer-ui:not(#wa-theme-off) .sg-disabled-reason {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -699,7 +698,7 @@ body.offer-ui:not(#wa-theme-off) tbody td {
   padding: 12px;
   border-bottom: 1px solid var(--mj-line);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
   vertical-align: middle;
 }
 
@@ -742,7 +741,6 @@ body.offer-ui:not(#wa-theme-off) .data-table caption {
 }
 
 body.offer-ui:not(#wa-theme-off) :is(.sg-num, .data-table td.is-num, td.is-num) {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -813,8 +811,7 @@ body.offer-ui:not(#wa-theme-off) .action-result .result-title {
 body.offer-ui:not(#wa-theme-off) .action-result .card-meta {
   margin-top: 4px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
-  font-family: var(--mj-mono);
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #status.status {
@@ -897,7 +894,7 @@ body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .brand-rule {
 }
 
 body.offer-ui:not(#wa-theme-off) .brand-title {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
@@ -963,7 +960,6 @@ body.offer-ui:not(#wa-theme-off) .nav__hl {
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-index {
-  font-family: var(--mj-mono);
   font-size: 12px;
   color: var(--mj-mute);
   font-variant-numeric: tabular-nums;
@@ -994,7 +990,6 @@ body.offer-ui:not(#wa-theme-off) .hr-nav-unread {
   border-radius: var(--mj-r-tag);
   background: var(--mj-spark);
   color: #FFFFFF;
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
@@ -1058,8 +1053,8 @@ body.offer-ui:not(#wa-theme-off) .topbar {
 }
 
 body.offer-ui:not(#wa-theme-off) .topbar h1 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--mj-ink);
@@ -1114,7 +1109,7 @@ body.offer-ui:not(#wa-theme-off) .home-head {
 }
 
 body.offer-ui:not(#wa-theme-off) .sg-home-day {
-  font-family: var(--mj-serif);
+  
   font-size: 140px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1125,7 +1120,7 @@ body.offer-ui:not(#wa-theme-off) .sg-home-day {
 
 body.offer-ui:not(#wa-theme-off) .home-today .home-date {
   color: var(--mj-text-2);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: .01em;
 }
@@ -1224,7 +1219,7 @@ body.offer-ui:not(#wa-theme-off) .sg-home-task-sub {
 body.offer-ui:not(#wa-theme-off) .home-task-count {
   min-width: 76px;
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
+  
   font-size: 40px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1274,8 +1269,8 @@ body.offer-ui:not(#wa-theme-off) .sg-side-head {
 }
 
 body.offer-ui:not(#wa-theme-off) .sg-side-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 15px;
+  
+  font-size: 14px;
   font-weight: 600;
   color: var(--mj-ink);
   letter-spacing: 0;
@@ -1296,8 +1291,7 @@ body.offer-ui:not(#wa-theme-off) .sg-side-row {
 
 body.offer-ui:not(#wa-theme-off) .sg-side-num {
   color: var(--mj-ink);
-  font-family: var(--mj-mono);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1311,7 +1305,6 @@ body.offer-ui:not(#wa-theme-off) .sg-activity-row {
 
 body.offer-ui:not(#wa-theme-off) .sg-activity-time {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1350,7 +1343,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-conversation > .wa-section-head
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-section-head h3 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
@@ -1407,13 +1400,12 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-conversation {
 
 body.offer-ui:not(#wa-theme-off) #view-agent #wa-status {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-notice {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-message {
@@ -1450,8 +1442,8 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-message-assistant strong::befor
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-welcome h4 {
-  font-family: var(--mj-serif);
-  font-size: 24px;
+  
+  font-size: 20px;
   color: var(--mj-ink);
 }
 
@@ -1472,7 +1464,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-prompts button {
   border: 1px solid var(--mj-line);
   background: var(--mj-paper);
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1562,11 +1554,11 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-job {
   border: 1px solid var(--mj-line);
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-job h4 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
@@ -1583,11 +1575,11 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-approval {
   border-radius: var(--mj-r-inner);
   background: var(--mj-brand-soft);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-approval h4 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   color: var(--mj-ink);
 }
@@ -1598,7 +1590,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-progress {
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-steps {
@@ -1620,7 +1612,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-results {
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-results > label,
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form > label:not(.wa-check) {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form:not([hidden]) {
@@ -1632,23 +1624,23 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form:not([hidden]) {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form h4 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   color: var(--mj-ink);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-check {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-document {
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-document :is(h1, h2, h3) {
-  font-family: var(--mj-serif);
+  
   color: var(--mj-ink);
 }
 
@@ -1663,7 +1655,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-quiet-dots i {
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-tool {
   border-bottom: 1px solid var(--mj-line);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-tool[data-state="running"] > span:last-child {
@@ -1706,14 +1698,13 @@ body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary {
   padding: 12px 18px;
   background: var(--mj-paper-2);
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary::after {
   color: var(--mj-mute);
-  font-family: system-ui, sans-serif;
   font-size: 12px;
   font-weight: 500;
 }
@@ -1764,7 +1755,7 @@ body.offer-ui:not(#wa-theme-off) #view-data .belt-node {
 
 body.offer-ui:not(#wa-theme-off) #view-data .belt-name {
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1772,7 +1763,6 @@ body.offer-ui:not(#wa-theme-off) #view-data .belt-name {
 
 body.offer-ui:not(#wa-theme-off) #view-data .belt-count,
 body.offer-ui:not(#wa-theme-off) #view-data .pipeline-count strong {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
   color: var(--mj-ink);
 }
@@ -1792,14 +1782,14 @@ body.offer-ui:not(#wa-theme-off) #view-data .pipeline-desc {
 
 body.offer-ui:not(#wa-theme-off) #view-data .focus-line {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .code-block {
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* ==========================================================================
