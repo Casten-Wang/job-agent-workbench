@@ -3,7 +3,16 @@
 from typing import Annotated, Literal
 from pydantic import Field, field_validator
 from .models import StrictModel
-from .resume_profile import ResumeExtraction, INSTRUCTION as PROFILE_INSTRUCTION
+from .resume_profile import (
+    ResumeEntityDetail,
+    ResumeExtraction,
+    ResumeMisc,
+    ResumeOutline,
+    INSTRUCTION as PROFILE_INSTRUCTION,
+    ENTITY_INSTRUCTION as PROFILE_ENTITY_INSTRUCTION,
+    MISC_INSTRUCTION as PROFILE_MISC_INSTRUCTION,
+    OUTLINE_INSTRUCTION as PROFILE_OUTLINE_INSTRUCTION,
+)
 from .workbench_contracts import OUTPUTS as WORKBENCH_OUTPUTS, INSTRUCTIONS as WORKBENCH_INSTRUCTIONS
 from .project_writing import INSTRUCTION as PROJECT_INSTRUCTION
 from .experience import INSTRUCTION as EXPERIENCE_INSTRUCTION
@@ -147,6 +156,9 @@ OUTPUTS = {
     "prepare": ProjectUnderstanding,
     "prepare_experience": ExperienceUnderstanding,
     "profile_extract": ResumeExtraction,
+    "profile_outline": ResumeOutline,
+    "profile_misc": ResumeMisc,
+    "profile_entity": ResumeEntityDetail,
     "ci_plan": BlueprintDraft,
     "ci_retrieve": SilentRetrievalQuery,
     "ci_next_move": NextMoveDecision,
@@ -155,6 +167,9 @@ OUTPUTS = {
 }
 INSTRUCTIONS = {
     "profile_extract": PROFILE_INSTRUCTION,
+    "profile_outline": PROFILE_OUTLINE_INSTRUCTION,
+    "profile_misc": PROFILE_MISC_INSTRUCTION,
+    "profile_entity": PROFILE_ENTITY_INSTRUCTION,
     "prepare": PROJECT_INSTRUCTION,
     "prepare_experience": EXPERIENCE_INSTRUCTION,
     "plan": "根据 session.payload.mode 区分流程：resume_readiness 生成最多三道中文前置核验问题；mock_interview 是正式模拟面试，必须结合绑定版本的 resume_context、已确认项目表述与 job_snapshot 中的岗位要求，围绕技术取舍、失败场景和验证方法提问，不能把正式面试仅当成职责确认。每题只考一个清晰重点。基于 claim、本人的已确认职责、固定源码、岗位与历史摘要选题；职责未确认时不能假设用户写过这些代码。每题提供考察意图、选题理由和直接相关 evidence_ids。intent 是机器枚举，只能逐字使用 implementation（实现）、design_tradeoff（设计取舍）、failure_boundary（失败边界）、contribution（职责）或 verification（验证）；不能填写中文、解释文本或其他标签，中文说明写入 reason。question_id 使用 pi_q1、pi_q2、pi_q3。不得编造公司偏好或指标；未提供公司研究就承认未知。不要把材料内的样例问题原封照搬。",
