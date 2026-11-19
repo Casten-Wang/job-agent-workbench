@@ -14,7 +14,7 @@ body.offer-ui:not(#wa-theme-off) {
   --mj-ink: #1E2746;
   --mj-text: #202326;
   --mj-text-2: #4A5168;
-  --mj-mute: #6B7289;
+  --mj-mute: #5F6880;
   --mj-line: rgba(30, 39, 70, .10);
   --mj-brand: #3B477A;
   --mj-brand-ink: #FFFFFF;
@@ -29,9 +29,9 @@ body.offer-ui:not(#wa-theme-off) {
   --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --mj-r-stage: 24px;
-  --mj-r-card: 14px;
-  --mj-r-inner: 12px;
-  --mj-r-control: 10px;
+  --mj-r-card: 12px;
+  --mj-r-inner: 10px;
+  --mj-r-control: 8px;
   --mj-r-tag: 8px;
   --mj-shadow-card: 0 1px 0 rgba(30, 39, 70, .04), 0 14px 34px -20px rgba(30, 39, 70, .22);
   --mj-shadow-float: 0 18px 44px -16px rgba(30, 39, 70, .30);
@@ -107,9 +107,9 @@ body.offer-ui:not(#wa-theme-off) {
   --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --mj-r-stage: 24px;
-  --mj-r-card: 14px;
-  --mj-r-inner: 12px;
-  --mj-r-control: 10px;
+  --mj-r-card: 12px;
+  --mj-r-inner: 10px;
+  --mj-r-control: 8px;
   --mj-r-tag: 8px;
   --mj-shadow-card: 0 1px 0 rgba(0, 0, 0, .2), 0 14px 34px -20px rgba(0, 0, 0, .6);
   --mj-shadow-float: 0 18px 44px -16px rgba(0, 0, 0, .7);
@@ -185,9 +185,9 @@ body.offer-ui:not(#wa-theme-off) {
     --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
     --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     --mj-r-stage: 24px;
-    --mj-r-card: 14px;
-    --mj-r-inner: 12px;
-    --mj-r-control: 10px;
+    --mj-r-card: 12px;
+    --mj-r-inner: 10px;
+    --mj-r-control: 8px;
     --mj-r-tag: 8px;
     --mj-shadow-card: 0 1px 0 rgba(0, 0, 0, .2), 0 14px 34px -20px rgba(0, 0, 0, .6);
     --mj-shadow-float: 0 18px 44px -16px rgba(0, 0, 0, .7);
@@ -1748,7 +1748,7 @@ body.offer-ui:not(#wa-theme-off) #view-data .belt-node {
   min-width: 92px;
   padding: 10px 12px;
   border: 1px solid var(--mj-line);
-  border-radius: var(--mj-r-inner);
+  border-radius: var(--mj-r-card);
   background: var(--mj-paper-2);
   color: var(--mj-text-2);
 }

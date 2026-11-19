@@ -839,7 +839,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-unread .hr-conve
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-time {
-  color: var(--mj-mute);
+  color: var(--mj-text-2);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1070,8 +1070,8 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer .button {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-send {
-  min-height: 38px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 0 var(--sp-4);
   border-radius: var(--mj-r-control);
   background: var(--mj-ink);
   color: var(--mj-brand-ink);
@@ -1138,7 +1138,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-summary {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-note {
-  color: var(--mj-mute);
+  color: var(--mj-text-2);
   font-size: 13px;
 }
 
@@ -1902,4 +1902,70 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note {
   color: var(--mj-text-2);
   font-size: 13px;
   line-height: 1.55;
+}
+
+/* ==========================================================================
+ * 组件规范收口（UI 第 1 轮）
+ * 同类组件全站只有一种写法，数值全部取 mj-base / offer-theme 的 token：
+ *   主按钮 36 / 小号 30，圆角 8；输入控件 36（工具栏紧凑件 32），圆角 8；
+ *   卡片与卡片头圆角 12；徽标、标签 22 高、12px、600；提示文字 13px；
+ *   面板内小节标题 16 / 600。
+ * 选择器带视图 id，用来压过各页早先写下的 38px / 10px / 14px 等局部数值。
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .button:not(.button-small) {
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--mj-r-control);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .button-small {
+  min-height: 30px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--mj-r-control);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"])) {
+  min-height: 36px;
+  border-radius: var(--mj-r-control);
+  font-size: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) textarea {
+  border-radius: var(--mj-r-control);
+  font-size: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(.panel-head, .integration-head) {
+  border-radius: var(--mj-r-card) var(--mj-r-card) 0 0;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(.badge, .chip, .tag) {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--mj-r-tag);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .hint {
+  font-size: 13px;
+  line-height: var(--lh-body);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(.panel h4, .integration-panel h4) {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 折叠标题：与正文次级色一致，不再用更浅的一档灰 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) summary {
+  color: var(--mj-text-2);
 }

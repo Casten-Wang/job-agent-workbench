@@ -812,11 +812,8 @@ body.offer-ui:not(#wa-theme-off) .chip.is-done { background: var(--ink); color: 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .chip.is-done { background: var(--sg); color: var(--sg-ink); }
 body.offer-ui:not(#wa-theme-off) .form-actions { border: 0; background: transparent; }
 
-/* 流水线子页签：文字页签，选中用信号色粗线（原来是方框按钮） */
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab { border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); padding: 7px 14px; font-weight: 600; transition: background .2s var(--sg-soft), color .2s var(--sg-soft); }
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab:hover { background: var(--accent-soft); color: var(--ink); }
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active { background: var(--ink); color: var(--bg); }
-:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active { background: var(--sg); color: var(--sg-ink); }
+/* 流水线子页签：样式只在 mj-base.css §8 定义一处（胶囊轨道 + 墨色当前项），
+   这里不再重复写，避免模拟面试页签被这里的 999px 圆角覆盖。 */
 
 /* 表格 / 折叠 */
 body.offer-ui:not(#wa-theme-off) table { border-collapse: collapse; }

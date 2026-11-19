@@ -434,65 +434,28 @@ body.offer-ui:not(#wa-theme-off) .view-head .sg-help > summary {
   color: var(--mj-text-2);
 }
 
-/* 页签：一种样式——下划线式，轨道透明，不再「胶囊套胶囊」 */
-body.offer-ui:not(#wa-theme-off) :is(.ui-hub-tabs, .resume-mode-tabs, .iv-mode-tabs) {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-1) var(--sp-5);
-  width: auto;
-  max-width: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid var(--mj-line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+/* 页签：全站只有一种——浅品牌底胶囊轨道 + 墨色当前项（定义在 mj-base.css §8）。
+   这里只补外壳特有的两件事。 */
+body.offer-ui:not(#wa-theme-off) .view-head-row > .ui-hub-tabs {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: var(--sp-2) 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--mj-text-2);
-  font-size: var(--fs-body);
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
-  box-shadow: none;
-  transform: none;
+/* showView('interview') 会清掉三个页签的 is-active（它们没有 data-view），
+   而页面仍停在上次的模式上；没有选中项时按 data-iv-mode 补上当前页签，
+   没有模式时停在第 1 个，避免「一个都没选中」。 */
+body.offer-ui:not(#wa-theme-off) #view-interview:not([data-iv-mode]) .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab:first-child,
+body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="ci"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="ci"],
+body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="project"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="project"],
+body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="tools"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="tools"] {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
 }
 
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 2px;
-  background: transparent;
-}
-
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab:hover {
-  background: transparent;
-  color: var(--mj-ink);
-}
-
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab:is(.is-active, [aria-current="page"], [aria-selected="true"]) {
-  background: transparent;
-  color: var(--mj-ink);
-  font-weight: 600;
-  box-shadow: none;
-}
-
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab:is(.is-active, [aria-current="page"], [aria-selected="true"])::after {
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview:not([data-iv-mode]) .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab:first-child,
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="ci"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="ci"],
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="project"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="project"],
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="tools"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="tools"] {
   background: var(--mj-brand);
 }
 
@@ -517,7 +480,7 @@ body.offer-ui:not(#wa-theme-off) .panel-head {
 
 body.offer-ui:not(#wa-theme-off) :is(.panel-head h3, .integration-head h3, .panel h3) {
   font-family: var(--ui-font);
-  font-size: var(--fs-title);
+  font-size: var(--fs-section);
   font-weight: 600;
   line-height: var(--lh-title);
   letter-spacing: 0;
@@ -1011,6 +974,16 @@ body.offer-ui:not(#wa-theme-off) #ci-status-msg[data-error="true"] {
   }
 }
 
+/* 行内代码：底色与文字都跟随主题（深色下原来是浅底浅字，1.74:1） */
+body.offer-ui:not(#wa-theme-off) code:not(pre code) {
+  padding: 1px var(--sp-1);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+  font-family: var(--code-font);
+  font-size: var(--fs-aux);
+}
+
 /* ---------- 12. 对比度补充（WCAG AA 4.5:1） ----------
    12px 辅助字与必填标记在浅底/品牌浅底上低于 4.5:1，这里统一提到次级文字色；
    流水线步骤号原来是粉色强调，与「单一强调色」规则冲突，改为次级文字。 */
@@ -1025,4 +998,90 @@ body.offer-ui:not(#wa-theme-off) .sg-help > summary {
 body.offer-ui:not(#wa-theme-off) .pipeline-index {
   color: var(--mj-text-2);
   font-variant-numeric: tabular-nums;
+}
+
+/* 深色下「我发出的」气泡时间戳只有 4.4:1，改用正文次级色 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-me .hr-message-meta {
+  color: var(--mj-text-2);
+}
+
+/* ---------- 13. 定制简历：四步流程的当前步 ----------
+   页面没有 JS 步骤状态，这里用 :has() 读表单本身：
+   目标岗位空着 → 第 1 步是当前步；已填 → 第 3 步（勾选真实性并生成）是当前步。
+   当前步有品牌色轨道、实心节点和「当前」小签，其余步骤是灰轨道，四步顺序一眼可见。 */
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal > :is(#cu-step-target, #cu-step-material, #cu-step-generate, #cu-resume-preview) {
+  position: relative;
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-5);
+  border-left: 3px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal > :is(#cu-step-target, #cu-step-material, #cu-step-generate, #cu-resume-preview)::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: -6px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-pill);
+  background: var(--mj-paper);
+  box-shadow: inset 0 0 0 2px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal > :is(#cu-step-target, #cu-step-material, #cu-step-generate, #cu-resume-preview) > h4:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:placeholder-shown) > #cu-step-target,
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-generate {
+  border-left-color: var(--mj-brand);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:placeholder-shown) > #cu-step-target::before,
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-generate::before {
+  background: var(--mj-brand);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:placeholder-shown) > #cu-step-target > h4::after,
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-generate > h4::after {
+  content: "当前";
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-size: var(--fs-aux);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* 第 1 步填好后轨道变「已完成」 */
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-target {
+  border-left-color: var(--mj-good);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-target::before {
+  background: var(--mj-good);
+  box-shadow: none;
+}
+
+/* ---------- 14. 模拟面试：每个面板只有一处主操作 ----------
+   主操作所在的一行与上面的字段用一条线分开，眼睛直接落到唯一填充色的按钮上；
+   四张入口卡片的「进入」提示与页签同色，不再和正文同灰。 */
+body.offer-ui:not(#wa-theme-off) #view-interview :is(.form-actions, .career-actions, .ci-controls):has(> .button:not(.button-quiet):not(.button-danger)) {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #interview-hub .sg-card-enter {
+  color: var(--mj-brand);
+  font-weight: 600;
 }
