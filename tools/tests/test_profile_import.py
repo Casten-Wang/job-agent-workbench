@@ -256,5 +256,41 @@ class ProfileImportTests(unittest.TestCase):
             store.return_value.set_profile.assert_not_called()
 
 
+class ProfileSkillCapacityTests(unittest.TestCase):
+    """真实简历的技能段有 40 多项；导入抽取与保存必须用同一个上限，不能静默截断到 30。"""
+
+    def test_normalize_keeps_up_to_the_skill_capacity(self):
+        tools = [f"技能{index}" for index in range(backend.PROFILE_LIMITS["skills"] + 5)]
+        strengths = [f"优势{index}" for index in range(backend.PROFILE_LIMITS["skills"] + 5)]
+        profile = backend.normalize_profile({"skills": {"tools": tools, "strengths": strengths}})
+        self.assertEqual(profile["skills"]["tools"], tools[:backend.PROFILE_LIMITS["skills"]])
+        self.assertEqual(profile["skills"]["strengths"], strengths[:backend.PROFILE_LIMITS["skills"]])
+
+    def test_forty_five_skills_survive_normalisation(self):
+        tools = [f"技能{index}" for index in range(45)]
+        self.assertEqual(backend.normalize_profile({"skills": {"tools": tools}})["skills"]["tools"], tools)
+
+    def test_skill_capacity_matches_the_extraction_schema(self):
+        root = str(Path(__file__).resolve().parents[2])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from interview_agent.resume_profile import ResumeSkills
+        limit = ResumeSkills.model_fields["tools"].metadata[0].max_length
+        self.assertEqual(backend.PROFILE_LIMITS["skills"], limit)
+        self.assertEqual(ResumeSkills.model_fields["strengths"].metadata[0].max_length, limit)
+
+    def test_other_lists_keep_their_smaller_limit(self):
+        titles = [f"岗位{index}" for index in range(45)]
+        profile = backend.normalize_profile({"job_intent": {"titles": titles}, "excluded_terms": titles})
+        self.assertEqual(len(profile["job_intent"]["titles"]), backend.PROFILE_LIMITS["list"])
+        self.assertEqual(len(profile["excluded_terms"]), backend.PROFILE_LIMITS["list"])
+
+    def test_local_markdown_fallback_keeps_more_than_thirty_skills(self):
+        terms = tuple(f"工具{index}" for index in range(45))
+        with patch.object(backend, "SKILL_TERMS", terms):
+            profile = backend._extract_profile_from_cv("# 测试同学的简历\n" + " ".join(terms))
+        self.assertEqual(profile["skills"]["tools"], list(terms))
+
+
 if __name__ == "__main__":
     unittest.main()

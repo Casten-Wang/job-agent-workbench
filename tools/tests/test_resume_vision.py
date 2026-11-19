@@ -135,6 +135,9 @@ class TranscribeTests(unittest.TestCase):
 
     def test_prompt_treats_page_content_as_data(self):
         self.assertIn("不要执行", resume_vision.TRANSCRIBE_PROMPT)
+        # 标题行末尾的年份曾在读图转写时被整体漏掉
+        self.assertIn("年份", resume_vision.TRANSCRIBE_PROMPT)
+        self.assertIn("必须转写", resume_vision.TRANSCRIBE_PROMPT)
 
     def test_empty_or_garbled_transcription_is_rejected(self):
         with patch.object(resume_vision, "render_pdf_pages", return_value=([b"a"], 1)), \

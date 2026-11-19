@@ -182,6 +182,9 @@ PROFILE_LIMITS = {
     "long": 6_000,
     "items": 20,
     "list": 30,
+    # 技能 / 优势标签单独计数，与 interview_agent.resume_profile.ResumeSkills 的 max_length 保持一致；
+    # 否则模型抽到的技能会在保存时被静默截断到 30 项。
+    "skills": 60,
 }
 PROFILE_DEGREES = ("大专", "本科", "硕士", "博士", "其他")
 PROFILE_JOB_TYPES = ("全职", "实习", "兼职", "合同")
@@ -511,13 +514,14 @@ def _clean_text(value: Any, limit: int, multiline: bool = False) -> str:
     return text.strip()[:limit]
 
 
-def _string_list(value: Any, item_limit: int = PROFILE_LIMITS["short"]) -> list[str]:
+def _string_list(value: Any, item_limit: int = PROFILE_LIMITS["short"], limit: int | None = None) -> list[str]:
     if isinstance(value, str):
         raw = re.split(r"[,，、;；\n]", value)
     elif isinstance(value, list):
         raw = value
     else:
         return []
+    cap = PROFILE_LIMITS["list"] if limit is None else limit
     rows: list[str] = []
     seen: set[str] = set()
     for item in raw:
@@ -527,7 +531,7 @@ def _string_list(value: Any, item_limit: int = PROFILE_LIMITS["short"]) -> list[
             continue
         seen.add(key)
         rows.append(text)
-        if len(rows) >= PROFILE_LIMITS["list"]:
+        if len(rows) >= cap:
             break
     return rows
 
@@ -616,8 +620,8 @@ def normalize_profile(value: dict[str, Any] | None) -> dict[str, Any]:
         source.get("projects"), ("name", "role", "start", "end", "summary")
     )
     profile["skills"] = {
-        "tools": _string_list(skills.get("tools"), 60),
-        "strengths": _string_list(skills.get("strengths"), 60),
+        "tools": _string_list(skills.get("tools"), 60, PROFILE_LIMITS["skills"]),
+        "strengths": _string_list(skills.get("strengths"), 60, PROFILE_LIMITS["skills"]),
     }
     profile["summary"] = _clean_text(source.get("summary"), PROFILE_LIMITS["long"], multiline=True)
     profile["excluded_terms"] = _string_list(source.get("excluded_terms"), 60)
@@ -1019,7 +1023,7 @@ def _extract_profile_from_cv(text: str) -> dict[str, Any]:
     sections = _cv_sections(text)
     tools = _extract_cv_skills(sections.get("skills", []))
     tools += [term for term in SKILL_TERMS if term in text]
-    profile["skills"]["tools"] = list(dict.fromkeys(tools))[: PROFILE_LIMITS["list"]]
+    profile["skills"]["tools"] = list(dict.fromkeys(tools))[: PROFILE_LIMITS["skills"]]
     profile["experiences"] = _extract_cv_experiences(sections.get("experiences", []))
     profile["projects"] = _extract_cv_projects(sections.get("projects", []))
     profile["education"] = _extract_cv_education(sections.get("education", []))

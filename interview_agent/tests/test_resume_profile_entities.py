@@ -285,5 +285,53 @@ class EntityExtractionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result["profile"]["experiences"]), 1)
 
 
+class DisplacedEducationSchoolTests(unittest.IsolatedAsyncioTestCase):
+    """Markdown 导出常把学校名挪到教育条目之外；只有一条教育记录时仍应保留，并提示核对。"""
+
+    TEXT = ("姓名：测试同学\n上海\n\n教育背景\n · 计算机科学与技术（本科） 2024.09 - 2028.06（预计）\n"
+            "专业技能\nPython SQL\n测试大学\n")
+
+    @staticmethod
+    def education_row(school="测试大学"):
+        return {"school": school, "major": "计算机科学与技术", "degree": "本科", "start": "2024.09",
+                "end": "2028.06", "summary": "",
+                "source_quote": "· 计算机科学与技术（本科） 2024.09 - 2028.06（预计）"}
+
+    def agent(self, *rows):
+        data = extraction()
+        data["education"] = list(rows)
+        return StageAgent(extract=lambda text: data)
+
+    async def test_single_education_keeps_a_school_found_elsewhere_in_the_source(self):
+        result = await extract_profile(self.agent(self.education_row()), self.TEXT)
+        education = result["profile"]["education"]
+        self.assertEqual(len(education), 1)
+        self.assertEqual(education[0]["school"], "测试大学")
+        self.assertEqual(education[0]["major"], "计算机科学与技术")
+        self.assertTrue(any("不在该条目附近" in warning for warning in result["warnings"]))
+
+    async def test_school_missing_from_the_source_is_still_rejected(self):
+        result = await extract_profile(self.agent(self.education_row("虚构不存在的大学")), self.TEXT)
+        # 校名核对不上时整条记录进入「未解析段落」，不留下编造的学校。
+        self.assertEqual(result["profile"]["education"], [])
+        self.assertTrue(any("无法在对应原文中核对" in warning for warning in result["warnings"]))
+        self.assertTrue(any(item["section"] == "教育经历" for item in result["unmatched_sections"]))
+        self.assertNotIn("虚构不存在的大学", str(result["profile"]))
+
+    async def test_school_appearing_twice_is_not_guessed(self):
+        text = self.TEXT + "曾参加测试大学的暑期项目\n"
+        result = await extract_profile(self.agent(self.education_row()), text)
+        self.assertEqual(result["profile"]["education"], [])
+        self.assertTrue(any(item["section"] == "教育经历" for item in result["unmatched_sections"]))
+
+    async def test_two_education_rows_never_borrow_each_others_school(self):
+        second = self.education_row("别的大学")
+        second["source_quote"] = "· 另一门专业（硕士） 2028.09 - 2031.06（预计）"
+        text = self.TEXT.replace("专业技能", " · 另一门专业（硕士） 2028.09 - 2031.06（预计）\n专业技能", 1) + "别的大学\n"
+        result = await extract_profile(self.agent(self.education_row(), second), text)
+        self.assertEqual(result["profile"]["education"], [])
+        self.assertNotIn("测试大学", str(result["profile"]["education"]))
+
+
 if __name__ == "__main__":
     unittest.main()

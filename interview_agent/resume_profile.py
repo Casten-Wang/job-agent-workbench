@@ -752,7 +752,18 @@ async def extract_profile(agent, text):
             end = _next_boundary(text, start, starts, boundaries)
             within = normalize(text[start:end])
             model_summary = row.pop("summary", "")
-            row = {key: supported(value, within, f"第 {index} 条{label}的{field_names[key]}") for key, value in row.items()}
+            checked = {}
+            for key, value in row.items():
+                field_label = f"第 {index} 条{label}的{field_names[key]}"
+                if (section == "education" and key == "school" and value.strip() and len(data[section]) == 1
+                        and normalize(value) not in within and source.count(normalize(value)) == 1):
+                    # Markdown/PDF 转换常把学校名挪到别处。只有一条教育记录、且该校名在整份原文里只出现一次时，
+                    # 才按原文保留（不会串到别的条目），并提示核对。
+                    warnings.append(f"{field_label}不在该条目附近，请核对是否对应本条。")
+                    checked[key] = value.strip()
+                else:
+                    checked[key] = supported(value, within, field_label)
+            row = checked
             row["summary"] = supported(model_summary, within, f"第 {index} 条{label}的描述") if model_summary.strip() else _block_summary(text, start, end)
             if section == "education":
                 row["degree"] = {"学士": "本科", "硕士研究生": "硕士", "博士研究生": "博士", "专科": "大专"}.get(row["degree"], row["degree"])
