@@ -130,19 +130,84 @@ class ProfileImportTests(unittest.TestCase):
             extract.assert_not_called()
             self.agent.assert_not_called()
 
+    def assert_only_logged(self, store):
+        store.return_value._write_json.assert_not_called()
+        store.return_value.set_profile.assert_not_called()
+
     def test_agent_failure_does_not_save_or_fall_back_to_partial_parsing(self):
         self.agent.side_effect = backend.ApiError("model failed", 502)
         with patch.object(backend, "get_store") as store:
-            with self.assertRaisesRegex(backend.ApiError, "当前资料未修改"):
-                backend.import_profile_cv(self.payload())
-            store.assert_not_called()
+            result = backend.import_profile_cv(self.payload())
+            self.assert_only_logged(store)
+        # A failed model call returns the locally parsed text so the form stays usable,
+        # without any local regex/field fallback.
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["failure"], "invalid_output")
+        self.assertEqual(result["source_text"], RESUME)
+        self.assertIn("未通过校验", result["message"])
+        self.assertEqual(result["profile"]["education"], [])
+        self.assertEqual(result["profile"]["experiences"], [])
+        self.assertEqual(result["profile"]["projects"], [])
+        self.assertFalse(result["profile"]["truth_confirmed"])
 
-    def test_malformed_agent_response_is_rejected(self):
+    def test_model_failures_map_to_distinct_failure_codes(self):
+        cases = (
+            (backend.ApiError("模型响应超时，请稍后重试", 504), "timeout"),
+            (backend.ApiError("未配置模型密钥", 502), "model_unconfigured"),
+            (backend.ApiError("连接失败", 503), "model_unavailable"),
+        )
+        for error, expected in cases:
+            with self.subTest(expected=expected), patch.object(backend, "get_store") as store:
+                self.agent.side_effect = error
+                result = backend.import_profile_cv(self.payload())
+                self.assert_only_logged(store)
+                self.assertEqual(result["failure"], expected)
+                self.assertEqual(result["source_text"], RESUME)
+                self.assertTrue(result["message"])
+
+    def test_truncated_engine_result_keeps_partial_profile_and_source(self):
+        suggestion = backend.default_profile()
+        suggestion["basic"]["name"] = "测试同学"
+        suggestion["experiences"] = [{"company": "测试公司", "title": "开发实习生"}]
+        self.agent.return_value = {
+            "profile": suggestion, "warnings": ["第 1 段未能完整解析"],
+            "generation": {"model": "contract"}, "failure": "model_output_truncated",
+            "partial": True, "unmatched_sections": [{"section": "工作经历", "text": "原文段落"}],
+        }
+        with patch.object(backend, "get_store") as store:
+            result = backend.import_profile_cv(self.payload())
+            self.assert_only_logged(store)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["failure"], "truncated")
+        self.assertTrue(result["partial"])
+        self.assertEqual(result["profile"]["basic"]["name"], "测试同学")
+        self.assertEqual(result["profile"]["experiences"][0]["company"], "测试公司")
+        self.assertEqual(result["warnings"], ["第 1 段未能完整解析"])
+        self.assertEqual(result["unmatched_sections"], [{"section": "工作经历", "text": "原文段落"}])
+        self.assertEqual(result["source_text"], RESUME)
+        self.assertIn("截断", result["message"])
+
+    def test_unmatched_sections_are_bounded(self):
+        suggestion = backend.default_profile()
+        suggestion["basic"]["name"] = "测试同学"
+        self.agent.return_value = {
+            "profile": suggestion, "warnings": [], "partial": True,
+            "unmatched_sections": [{"section": "工作经历", "text": "长" * 9000}] + [{"section": "x", "text": "y"}] * 30,
+        }
+        with patch.object(backend, "get_store"):
+            result = backend.import_profile_cv(self.payload())
+        self.assertEqual(len(result["unmatched_sections"]), 20)
+        self.assertEqual(len(result["unmatched_sections"][0]["text"]), 6000)
+        self.assertLessEqual(sum(len(item["text"]) for item in result["unmatched_sections"]), 20000)
+
+    def test_malformed_agent_response_is_reported_not_saved(self):
         self.agent.return_value = {"text": "not a profile"}
         with patch.object(backend, "get_store") as store:
-            with self.assertRaises(backend.ApiError):
-                backend.import_profile_cv(self.payload())
-            store.assert_not_called()
+            result = backend.import_profile_cv(self.payload())
+            self.assert_only_logged(store)
+        self.assertEqual(result["failure"], "invalid_output")
+        self.assertEqual(result["source_text"], RESUME)
+        self.assertEqual(result["profile"]["education"], [])
 
     def test_partial_invalid_and_oversize_uploads(self):
         for payload in ({"mode": "user", "filename": "resume.txt"}, {"mode": "user", "content_base64": "abc"}, {**self.payload(), "content_base64": "!!!"}, self.payload(content=b"a" * (profile_import.MAX_BYTES + 1))):

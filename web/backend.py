@@ -1133,10 +1133,88 @@ def import_profile_cv(payload: dict[str, Any]) -> dict[str, Any]:
     return _import_profile_upload(payload)
 
 
+PROFILE_IMPORT_FAILURE_MESSAGES = {
+    "truncated": "简历过长，模型输出被截断；已尽量填入可识别的部分，请对照解析原文手动补全未识别的经历。",
+    "timeout": "模型响应超时；已尽量填入可识别的部分，请对照解析原文核对，可稍后重试。",
+    "invalid_output": "模型返回的结果未通过校验；已尽量填入可识别的部分，请对照解析原文核对，可稍后重试。",
+    "model_unconfigured": "尚未配置可用的模型，当前资料未修改；请先在设置中配置模型后重试。",
+    "model_unavailable": "模型服务暂时不可用，当前资料未修改；请稍后重试。",
+    "no_supported_fields": "未在简历中识别到可核对的内容，当前资料未修改；请对照解析原文手动填写。",
+}
+
+PROFILE_IMPORT_FAILURES = {
+    "model_output_truncated": "truncated",
+    "model_timeout": "timeout",
+    "invalid_model_decision": "invalid_output",
+    "invalid_resume_extraction": "invalid_output",
+    "missing_model_credential": "model_unconfigured",
+    "model_client_closed": "model_unconfigured",
+    "provider_http_401": "model_unconfigured",
+    "provider_http_403": "model_unconfigured",
+    "resume_no_supported_fields": "no_supported_fields",
+}
+
+
+def _profile_import_warnings(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item)[:300] for item in value[:50] if isinstance(item, (str, int, float))]
+
+
+def _profile_import_unmatched(value: Any) -> list[dict[str, str]]:
+    """Original paragraphs the engine could not attach to any record; bounded and additive."""
+    rows, total = [], 0
+    if not isinstance(value, list):
+        return rows
+    for item in value[:20]:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        text = text[: min(6000, 20000 - total)]
+        total += len(text)
+        rows.append({"section": str(item.get("section") or "")[:40], "text": text})
+        if total >= 20000:
+            break
+    return rows
+
+
+def _profile_import_result(text: str, filename: str, extraction: dict[str, Any] | None,
+                           failure: str | None, warnings: list[str]) -> dict[str, Any]:
+    """Suggestion payload that keeps the parsed source text usable after a model failure."""
+    profile = extraction.get("profile") if isinstance(extraction, dict) else None
+    suggestion = normalize_profile(profile if isinstance(profile, dict) else {})
+    suggestion["truth_confirmed"] = False
+    partial = bool(isinstance(extraction, dict) and extraction.get("partial"))
+    if failure:
+        message = PROFILE_IMPORT_FAILURE_MESSAGES.get(failure, PROFILE_IMPORT_FAILURE_MESSAGES["model_unavailable"])
+    elif partial:
+        message = "Agent 已解析简历的部分内容；未识别的段落保留在解析原文中，请核对后手动补全。"
+    else:
+        message = "Agent 已解析整份简历并填入资料及经历；请核对各项内容，确认真实性后保存。"
+    get_store("user").log("读取简历建议资料", "本地文件；未自动保存")
+    return {
+        "ok": True,
+        "profile": suggestion,
+        "source": filename,
+        "source_text": text,
+        "filename": filename,
+        "warnings": warnings,
+        "generation": extraction.get("generation", {}) if isinstance(extraction, dict) else {},
+        "failure": failure,
+        "partial": partial,
+        "unmatched_sections": _profile_import_unmatched(extraction.get("unmatched_sections") if isinstance(extraction, dict) else None),
+        "message": message,
+    }
+
+
 def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
     """Uploaded PDF/DOCX/MD/TXT: parse text locally, let the resume Agent suggest fields.
 
-    Never saves and never falls back to partial local parsing when the Agent fails.
+    Never saves and never falls back to partial local parsing when the Agent fails;
+    a model failure still returns the locally parsed ``source_text`` plus a bounded
+    ``failure`` code so the user can fill the form by hand.
     """
     if str(payload.get("mode") or "user") != "user":
         raise ApiError("仅支持 user 模式导入简历")
@@ -1157,22 +1235,21 @@ def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         extraction = upstream("POST", "/v1/career/profile-import", {"text": text})
     except ApiError as exc:
-        raise ApiError("简历 Agent 解析未完成，当前资料未修改；请检查模型服务后重试。", exc.status) from None
-    if not isinstance(extraction.get("profile"), dict):
-        raise ApiError("简历 Agent 返回格式异常，当前资料未修改，请重试。", 502)
-    suggestion = normalize_profile(extraction["profile"])
-    suggestion["truth_confirmed"] = False
-    get_store("user").log("读取简历建议资料", "本地文件；未自动保存")
-    return {
-        "ok": True,
-        "profile": suggestion,
-        "source": filename,
-        "source_text": text,
-        "filename": filename,
-        "warnings": extraction.get("warnings", []),
-        "generation": extraction.get("generation", {}),
-        "message": "Agent 已解析整份简历并填入资料及经历；请核对各项内容，确认真实性后保存。",
-    }
+        if "超时" in exc.message:
+            failure = "timeout"
+        elif any(word in exc.message for word in ("密钥", "未配置", "未启动", "连接配置")):
+            failure = "model_unconfigured"
+        elif exc.status == 502:
+            failure = "invalid_output"
+        else:
+            failure = "model_unavailable"
+        return _profile_import_result(text, filename, None, failure, [])
+    if not isinstance(extraction, dict) or not isinstance(extraction.get("profile"), dict):
+        return _profile_import_result(text, filename, None, "invalid_output", [])
+    code = str(extraction.get("failure") or "")
+    failure = PROFILE_IMPORT_FAILURES.get(code, "model_unavailable" if code else None)
+    return _profile_import_result(text, filename, extraction, failure,
+                                  _profile_import_warnings(extraction.get("warnings")))
 
 
 def _job_id(record: dict[str, Any], index: int) -> str:
