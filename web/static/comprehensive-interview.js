@@ -287,7 +287,8 @@
     const frozenLabel = t.frozen_reason ? (FROZEN_REASON_LABELS[t.frozen_reason] || t.frozen_reason) : '';
     const frozenText = frozenLabel ? `（${frozenLabel}）` : '';
     const qaText = t.qa_window_active ? ' | 反问时间' : '';
-    badge.textContent = `已聊 ${formatDuration(elapsed)} / 还剩 ${formatDuration(remaining)}${frozenText}${qaText}`;
+    const remainingText = remaining <= 0 ? '时间已到' : `还剩 ${formatDuration(remaining)}`;
+    badge.textContent = `已聊 ${formatDuration(Math.min(elapsed, Number(t.duration_seconds || elapsed)))} / ${remainingText}${frozenText}${qaText}`;
     badge.classList.toggle('is-frozen', Boolean(t.frozen_reason));
     badge.classList.toggle('is-qa', Boolean(t.qa_window_active));
   }
