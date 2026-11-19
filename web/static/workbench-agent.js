@@ -362,12 +362,22 @@
     if(current)return;const title=$('input').value.trim().slice(0,60) || '新的求职目标';await accept(await api('/conversations',{title}));
   }
   async function send(override={}) {
-    if(active())return;await ensureConversation();const text=override.text || $('input').value.trim();if(!text)return;
+    if(active())return;
+    // 旧会话创建于另一个模型配置（例如更换了服务商），引擎不再接收新消息：改为新建会话并沿用已选岗位与材料。
+    if(current?.model_changed){
+      const carry={};for(const k of ['job_id','material_id','resume_version_id'])if(current[k])carry[k]=current[k];
+      const text=override.text || $('input').value.trim();if(!text)return;
+      current=null;events=[];selectedArtifact=null;closeStream();$('messages').replaceChildren();
+      await accept(await api('/conversations',{title:text.slice(0,60)}),false);
+      if(Object.keys(carry).length)await accept(await api(`/conversations/${current.id}/context`,carry),false);
+      var switched=true;
+    }
+    await ensureConversation();const text=override.text || $('input').value.trim();if(!text)return;
     guiMilestone=null;
     const payload={event_id:crypto.randomUUID(),text,...override};
     if(!override.text && submitted?.text===text)payload.event_id=submitted.event_id;
     submitted=payload;const ticket=epoch;const value=await api(`/conversations/${current.id}/messages`,payload);
-    if(ticket!==epoch)return;followMessages=true;await accept(value);if(!override.text){$('input').value='';keepInput();resizeInput();}submitted=null;notice('');
+    if(ticket!==epoch)return;followMessages=true;await accept(value);if(!override.text){$('input').value='';keepInput();resizeInput();}submitted=null;notice(switched?'模型设置已更换，已为你新建会话继续；原会话保留在历史中。':'');
   }
   async function load() {
     const ticket=epoch;try {const data=await api('/conversations');if(ticket!==epoch)return;sessions=data.items;availableMaterials=data.materials || [];const sid=storage.get(key('conversation'));

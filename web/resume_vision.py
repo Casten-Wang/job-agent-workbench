@@ -1,18 +1,16 @@
 """PDF 文字层不可用（乱码或扫描件）时，把页面渲染成图片，交给已配置的多模态模型转写文字。
 
 转写结果只作为「待核对的原文」继续走现有简历抽取；不保存图片、不写盘留存、不调用额外 OCR 依赖。
-渲染使用 macOS 自带的 ``sips``；其他系统没有渲染器时明确报告不可用，由调用方回退到原提示。
+渲染使用跨平台 PDFium，兼容 Windows、macOS 和 Linux；页面只在内存中处理。
 """
 
 from __future__ import annotations
 
 import base64
 import io
-import shutil
-import subprocess
-import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
+from contextlib import closing
 from typing import Any
 
 MAX_VISION_PAGES = 6
@@ -30,43 +28,34 @@ class VisionUnavailable(RuntimeError):
     """图片识别不可用或失败；消息可直接展示给用户，不含密钥或服务端原文。"""
 
 
+# PDFium is not thread-safe, even across separate documents.
+_PDF_RENDER_LOCK = threading.Lock()
+
+
 def render_pdf_pages(content: bytes, max_pages: int = MAX_VISION_PAGES) -> tuple[list[bytes], int]:
-    """返回 (前 max_pages 页的 JPEG 字节, PDF 总页数)。"""
-    sips = shutil.which("sips")
-    if not sips:
-        raise VisionUnavailable("本机没有可用的 PDF 渲染工具（需要 macOS 的 sips）")
+    """返回 (前 max_pages 页的 JPEG 字节, PDF 总页数)，无需系统渲染命令。"""
     try:
-        from pypdf import PdfReader, PdfWriter
-        from PIL import Image
+        import pypdfium2 as pdfium
     except ImportError as exc:
-        raise VisionUnavailable("本机缺少 pypdf 或 Pillow 依赖") from exc
+        raise VisionUnavailable("本机缺少 PDF 渲染依赖，请安装 requirements-offerpilot.txt 中的 pypdfium2 和 Pillow") from exc
     try:
-        reader = PdfReader(io.BytesIO(content))
-        total = len(reader.pages)
         images: list[bytes] = []
-        with tempfile.TemporaryDirectory(prefix="offerpilot-resume-") as directory:
-            root = Path(directory)
+        with _PDF_RENDER_LOCK, pdfium.PdfDocument(content) as document:
+            total = len(document)
             for index in range(min(total, max_pages)):
-                writer = PdfWriter()
-                writer.add_page(reader.pages[index])
-                source = root / f"p{index}.pdf"
-                with source.open("wb") as handle:
-                    writer.write(handle)
-                target = root / f"p{index}.png"
-                result = subprocess.run(
-                    [sips, "-s", "format", "png", "--resampleWidth", str(RENDER_WIDTH), str(source), "--out", str(target)],
-                    capture_output=True, timeout=60, check=False)
-                if result.returncode != 0 or not target.exists():
-                    raise VisionUnavailable("PDF 页面渲染失败")
-                with Image.open(target) as picture:
-                    buffer = io.BytesIO()
-                    picture.convert("RGB").save(buffer, "JPEG", quality=85)
-                images.append(buffer.getvalue())
+                with closing(document[index]) as page:
+                    width, height = page.get_size()
+                    scale = min(RENDER_WIDTH / width, (MAX_IMAGE_PIXELS / (width * height)) ** 0.5)
+                    with closing(page.render(scale=scale)) as bitmap:
+                        with bitmap.to_pil() as picture:
+                            with picture.convert("RGB") as rgb:
+                                rgb.thumbnail((RENDER_WIDTH, rgb.height))
+                                buffer = io.BytesIO()
+                                rgb.save(buffer, "JPEG", quality=85)
+                                images.append(buffer.getvalue())
         return images, total
-    except VisionUnavailable:
-        raise
     except Exception as exc:
-        raise VisionUnavailable("PDF 页面渲染失败") from exc
+        raise VisionUnavailable("PDF 页面渲染失败，请确认文件完整且未加密，并已安装 PDF 渲染依赖") from exc
 
 
 MAX_IMAGE_PIXELS = 40_000_000

@@ -74,6 +74,18 @@ class ParserTests(unittest.TestCase):
         with self.assertRaises(NoteFailure):
             handler.redirect_request(urllib.request.Request(URL), None, 302, "", {}, "https://localhost/private")
 
+    def test_official_rednote_redirect_is_allowed_without_accepting_lookalike_hosts(self):
+        target = URL.replace("www.xiaohongshu.com", "www.rednote.com")
+        self.assertEqual(checked_url(target).hostname, "www.rednote.com")
+        handler = SafeRedirect(lambda: None)
+        redirected = handler.redirect_request(urllib.request.Request(URL), None, 302, "", {}, target)
+        self.assertEqual(redirected.full_url, target)
+        for address in (target.replace("www.rednote.com", "www.rednote.com.evil.invalid"),
+                        target.replace("https://", "http://"),
+                        target.replace("www.rednote.com", "user@www.rednote.com")):
+            with self.subTest(address=address), self.assertRaises(NoteFailure):
+                checked_url(address)
+
     def test_transport_query_headers_cookies_and_failure_classification(self):
         requests, handlers, gates = [], [], []
 

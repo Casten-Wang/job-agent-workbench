@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -130,7 +131,7 @@ class ConfigAndFingerprintTests(unittest.TestCase):
             CONFIG["title_keywords"],
             ["AI产品经理", "商业分析师", "跨境电商", "产品经理", "数据分析"],
         )
-        self.assertEqual(CONFIG["salary"]["min_threshold"], 15000)
+        self.assertEqual(CONFIG["salary"]["min_threshold"], 0)
         self.assertEqual(CONFIG["score"]["high_threshold"], 4.5)
         self.assertEqual(CONFIG["score"]["approval_min"], 4.0)
         self.assertEqual(CONFIG["score"]["approval_max"], 4.4)
@@ -188,6 +189,7 @@ class HardFilterTests(unittest.TestCase):
             codes(record["hard_filter"]["reasons"]),
         )
 
+    @patch.dict(CONFIG["salary"], {"min_threshold": 15000})
     def test_salary_below_min_is_rejected_and_supported_formats(self) -> None:
         below = parse(salary="10k-14k")
         self.assertEqual(below["hard_filter"]["status"], "reject")
@@ -205,6 +207,12 @@ class HardFilterTests(unittest.TestCase):
         self.assertEqual(parse(salary="15k-25k")["salary_min"], 15000)
         self.assertEqual(parse(salary="15-25k")["salary_min"], 15000)
         self.assertEqual(parse(salary="20K~30K 元/月")["salary_min"], 20000)
+
+    def test_zero_monthly_floor_keeps_lower_salary_ranges(self) -> None:
+        with patch.dict(CONFIG["salary"], {"min_threshold": 0}):
+            record = parse(salary="10k-14k")
+        self.assertEqual(record["hard_filter"]["status"], "pass")
+        self.assertNotIn(CONFIG["reason_codes"]["salary_below_min"], codes(record["hard_filter"]["reasons"]))
 
     def test_empty_city_passes_with_warning(self) -> None:
         record = parse(city="")

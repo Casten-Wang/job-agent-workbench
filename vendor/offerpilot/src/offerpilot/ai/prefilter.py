@@ -8,6 +8,7 @@ from offerpilot.job_filters import matching_blocked_company, matching_deal_break
 
 
 _INTERNSHIP_KEYWORDS = ("实习", "intern", "internship", "管培")
+_NON_MONTHLY_PAY = re.compile(r"(?:元|[kK]|千|万|\d)\s*/\s*(?:小时|天|日|时|周)|(?:日|时|周)薪")
 _ANONYMOUS_COMPANY_PATTERN = re.compile(
     r"^(?:[\u4e00-\u9fff]{2,4})?某.+(?:公司|企业|集团)$"
 )
@@ -93,6 +94,9 @@ def salary_filter_result(salary: str, profile: dict) -> tuple[int, str]:
 
     返回 (score, reason)：score=0 表示拦截并携带原因，score=100 表示通过。
     """
+    salary = str(salary or "")
+    if _NON_MONTHLY_PAY.search(unicodedata.normalize("NFKC", salary)):
+        return 100, "非月薪报价，保留原始薪资，不参与月薪硬筛"
     salary_min = _as_number(profile.get("salary_min", 0))
     salary_max = _as_number(profile.get("salary_max", 0))
     parsed_salary = _parse_salary_range_k(str(salary or ""))
@@ -122,6 +126,8 @@ def _contains_internship_signal(job: dict) -> bool:
 
 
 def _parse_salary_range_k(salary: str) -> tuple[float, float] | None:
+    if _NON_MONTHLY_PAY.search(unicodedata.normalize("NFKC", salary)):
+        return None
     range_match = re.search(r"(\d+(?:\.\d+)?)\s*[kK]?\s*-\s*(\d+(?:\.\d+)?)\s*[kK]", salary)
     if range_match:
         low = float(range_match.group(1))

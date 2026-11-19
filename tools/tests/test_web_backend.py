@@ -1288,6 +1288,22 @@ class ApprovalGateTests(SeededStoreTestCase):
         self.assertEqual(quota["planned_today"], len(ranks))
         self.assertLessEqual(quota["planned_today"], quota["remaining"])
 
+    def test_snapshot_queue_uses_current_job_score_after_rescoring(self):
+        store = backend.get_store("user")
+        jobs = store.jobs()
+        job = next(row for row in jobs if row["id"] == "demo-job-001")
+        job.update(score=83, score_raw=83, score_coverage=0.9,
+                   score_scale=backend.MATCH_SCORE_SCALE_LABEL, scoring_model=backend.MATCH_SCORE_MODEL)
+        store.set_jobs(jobs)
+        queue = store.queue()
+        row = next(row for row in queue if row["id"] == job["id"])
+        row["score"] = 56
+        store.set_queue(queue)
+        snap = backend.snapshot("user", {})
+        current = next(row for row in snap["queue"] if row["id"] == job["id"])
+        self.assertEqual(current["score"], 83)
+        self.assertEqual(next(row for row in store.queue() if row["id"] == job["id"])["score"], 56)
+
     def test_confirm_requires_at_least_one_selected_row(self):
         with self.assertRaises(backend.ApiError):
             backend.confirm_queue({"mode": "user", "ids": []})
@@ -2897,7 +2913,7 @@ class QueueDeliveryModalTests(unittest.TestCase):
         script = self._script()
         generate = script[script.index("async function generateQueueGreetings"):]
         generate = generate[: generate.index("function stopQueueGreetingWatch")]
-        self.assertIn("watchQueueGreetings(ids, button)", generate)
+        self.assertIn("watchQueueGreetings(ids, button, data.task && data.task.id)", generate)
         self.assertNotIn("queueApprovedSelection.clear()", generate)
         for marker in (
             "function watchQueueGreetings",
@@ -2972,7 +2988,7 @@ class SecurityTests(SeededStoreTestCase):
         self.assertIn('id="collect-min-score"', html)
         self.assertIn("怎么打分", html)
         self.assertIn('id="collect-criteria"', html)
-        self.assertIn("本次初筛条件", html)
+        self.assertIn("个人资料偏好", html)
         self.assertIn('data-view-link="profile"', html)
         script = (WEB_DIR / "static" / "app.js").read_text(encoding="utf-8")
         self.assertIn("function renderCollectCriteria", script)
@@ -4026,9 +4042,12 @@ class CollectImportHardFilterTests(SeededStoreTestCase):
 
     def test_collect_import_persists_reject_reasons(self):
         store = backend.get_store("user")
-        result = backend._import_offerpilot_records(
-            store, [self._runtime_job("op-hard-1")], ["op-hard-1"]
-        )
+        config = backend.filters.load_config()
+        config["salary"]["min_threshold"] = 15000
+        with patch.object(backend.filters, "load_config", return_value=config):
+            result = backend._import_offerpilot_records(
+                store, [self._runtime_job("op-hard-1")], ["op-hard-1"]
+            )
         self.assertEqual(len(result["added"]), 1)
         self.assertEqual(result["hard_filter_blocked"], 1)
         job = next(row for row in store.jobs() if row.get("offerpilot_id") == "op-hard-1")
@@ -4049,6 +4068,23 @@ class CollectImportHardFilterTests(SeededStoreTestCase):
         job = next(row for row in store.jobs() if row.get("offerpilot_id") == "op-hard-2")
         self.assertEqual(job["hard_filter"]["status"], "pass")
         self.assertEqual(job["hard_filter"]["reasons"], [])
+
+    def test_duplicate_import_refreshes_verdict_after_salary_floor_change(self):
+        store = backend.get_store("user")
+        job = self._runtime_job("op-floor-changed", title="产品经理", city="上海", salary="12-24k")
+        config = backend.filters.load_config()
+        config["salary"]["min_threshold"] = 15000
+        with patch.object(backend.filters, "load_config", return_value=config):
+            backend._import_offerpilot_records(store, [job], [job["id"]])
+        initial = next(row for row in store.jobs() if row.get("offerpilot_id") == job["id"])
+        self.assertEqual(initial["hard_filter"]["status"], "reject")
+        config["salary"]["min_threshold"] = 0
+        with patch.object(backend.filters, "load_config", return_value=config):
+            result = backend._import_offerpilot_records(store, [job], [job["id"]])
+        current = next(row for row in store.jobs() if row.get("offerpilot_id") == job["id"])
+        self.assertEqual(result["duplicates"], 1)
+        self.assertEqual(current["hard_filter"]["status"], "pass")
+        self.assertEqual(current["hard_filter"]["reasons"], [])
 
 
 class EnqueueHardFilterTests(SeededStoreTestCase):
@@ -4078,7 +4114,10 @@ class EnqueueHardFilterTests(SeededStoreTestCase):
 
     def test_enqueue_blocks_excluded_term_and_low_salary_with_readable_reason(self):
         self._add_document_scored_job("hard-enqueue-1", title="电销专员", salary_text="8-12k")
-        result = backend.enqueue({"mode": "user", "ids": ["hard-enqueue-1"]})
+        config = backend.filters.load_config()
+        config["salary"]["min_threshold"] = 15000
+        with patch.object(backend.filters, "load_config", return_value=config):
+            result = backend.enqueue({"mode": "user", "ids": ["hard-enqueue-1"]})
         self.assertEqual(result["accepted"], [])
         self.assertEqual(
             [item["id"] for item in result["hard_filter_blocked"]], ["hard-enqueue-1"]

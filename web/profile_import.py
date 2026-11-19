@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 import unicodedata
 import zipfile
 from pathlib import Path
@@ -132,7 +133,8 @@ def _pdf_text(content: bytes) -> str:
         parts = []
         total = 0
         for page in reader.pages:
-            part = page.extract_text() or ""
+            part = page.extract_text(extraction_mode="layout", layout_mode_strip_rotated=False) or ""
+            part = "\n".join(re.sub(r"[ \t]+", " ", line).strip() for line in part.replace("\x7f", "").splitlines())
             total += len(part)
             if total > MAX_TEXT:
                 raise ValueError("简历文字过长，请精简至 60000 字符以内")

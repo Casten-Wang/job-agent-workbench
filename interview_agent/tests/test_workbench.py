@@ -198,6 +198,24 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         accepted = Decision.model_validate({"action": "draft_application", "arguments": {"instruction": "draft"}})
         self.assertEqual(accepted.model_dump()["arguments"], {"instruction": "draft"})
 
+    async def test_successful_draft_is_not_regenerated_in_the_same_turn(self):
+        original = self.agent.decide
+
+        async def repeat_draft(stage, value):
+            if stage == "workbench_decide":
+                return {"action": "draft_application", "arguments": {"instruction": str(len(value["observations"]))}}
+            return await original(stage, value)
+
+        self.agent.decide = repeat_draft
+        first = await self.prepare()
+        self.assertEqual(first["status"], "completed")
+        self.assertEqual(len(first["artifacts"]), 2)
+        self.assertEqual(sum(stage == "workbench_draft" for stage, _ in self.agent.calls), 1)
+        second = await self.send("修改草稿")
+        self.assertEqual(second["status"], "completed")
+        self.assertEqual(len(second["artifacts"]), 4)
+        self.assertEqual(sum(stage == "workbench_draft" for stage, _ in self.agent.calls), 2)
+
     async def test_new_fact_and_semantic_failure_preserve_existing_revision(self):
         before = (await self.prepare())["artifacts"]
         self.agent.unsupported = True
@@ -257,7 +275,10 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NotFoundError):
             bob.get(self.sid)
         self.assertEqual(bob.materials(), [])
+        self.assertFalse(self.workflow.view(self.workflow.get(self.sid))["model_changed"])
         self.agent.generation = {**self.agent.generation, "model": "changed"}
+        # 视图标出模型已更换，前端据此新建会话而不是把消息发进旧会话
+        self.assertTrue(self.workflow.view(self.workflow.get(self.sid))["model_changed"])
         with self.assertRaises(ConflictError):
             await self.workflow.turn(self.sid, UserEvent(event_id="changed", text="继续"), self.source)
 

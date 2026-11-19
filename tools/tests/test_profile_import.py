@@ -2,6 +2,7 @@
 
 import base64
 import io
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -31,9 +32,10 @@ def docx_bytes(text):
     return stream.getvalue()
 
 
-def pdf_bytes(text="Resume Test"):
+def pdf_bytes(text="Resume Test", *, stream=None):
     """Minimal real PDF with a text stream, parsed by the installed pypdf."""
-    stream = f"BT /F1 12 Tf 40 700 Td ({text}) Tj ET".encode("ascii")
+    if stream is None:
+        stream = f"BT /F1 12 Tf 40 700 Td ({text}) Tj ET".encode("ascii")
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
@@ -55,6 +57,27 @@ def pdf_bytes(text="Resume Test"):
 
 
 class ResumeTextTests(unittest.TestCase):
+    def test_pdf_preserves_visual_education_order_and_removes_hidden_bullet(self):
+        stream = (
+            b"BT /F1 12 Tf 40 700 Td (Education) Tj ET\n"
+            b"BT /F1 12 Tf 170 680 Td (Computer Science Bachelor 2024-2028) Tj ET\n"
+            b"BT /F1 12 Tf 40 650 Td (Projects) Tj ET\n"
+            b"BT /F1 12 Tf 40 630 Td (\\177Build task persistence) Tj ET\n"
+            b"BT /F1 12 Tf 40 680 Td (Test University) Tj ET\n"
+        )
+        text = profile_import.extract_resume_text("resume.pdf", pdf_bytes(stream=stream))
+        self.assertIn("Test University Computer Science Bachelor 2024-2028", re.sub(r"\s+", " ", text))
+        self.assertLess(text.index("Test University"), text.index("Projects"))
+        self.assertIn("Build task persistence", text)
+        self.assertNotIn("\x7f", text)
+
+    def test_pdf_keeps_rotated_text(self):
+        stream = (b"BT /F1 12 Tf 40 700 Td (Resume) Tj ET\n"
+                  b"BT /F1 12 Tf 0 1 -1 0 150 150 Tm (Rotated Skill) Tj ET\n")
+        text = profile_import.extract_resume_text("resume.pdf", pdf_bytes(stream=stream))
+        self.assertIn("Resume", text)
+        self.assertIn("Rotated Skill", text)
+
     def test_text_formats_and_chinese_encodings(self):
         for filename, encoding in (("resume.md", "utf-8-sig"), ("resume.TXT", "utf-16"), ("中文.txt", "gb18030")):
             with self.subTest(filename=filename):

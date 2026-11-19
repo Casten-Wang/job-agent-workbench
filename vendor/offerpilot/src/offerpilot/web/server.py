@@ -501,6 +501,8 @@ def _execute_collect(task: WorkbenchTask, config: dict) -> None:
 	_log(task, f"本轮采集完成：新增 {len(result.get('collected_job_ids', []))}，状态 {result.get('status', 'completed')}")
 	if task.stop_requested.is_set():
 		return
+	if result.get("status") == "completed_with_errors":
+		raise RuntimeError(result.get("error") or "采集或自动评分未全部完成；已保存的岗位与评分保留，请检查后继续")
 
 
 def _stop_or_log_boss_collection_reason(task: WorkbenchTask, stop_reason: str) -> None:

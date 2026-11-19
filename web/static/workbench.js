@@ -102,6 +102,11 @@
   const readDrafts=mode=>{try{return JSON.parse(sessionStorage.getItem(`offerpilot.workbench.forms.${mode}`) || '{}');}catch{return {};}};
   let drafts=readDrafts(workspaceMode);
   function saveDrafts(){try{sessionStorage.setItem(`offerpilot.workbench.forms.${workspaceMode}`,JSON.stringify(drafts));}catch{}}
+  function cacheProfileDraft(){
+    drafts.profile=collectProfileForm();drafts.profile.truth_confirmed=false;
+    for(const id of Object.keys(drafts.fields || {}))if(id.startsWith('profile-'))delete drafts.fields[id];
+    saveDrafts();
+  }
   function draftField(field) {return field?.id&&field.matches('input,textarea,select')&&field.closest('#wb-main')
     &&!field.matches('[type="password"],[type="file"],[type="hidden"],[type="radio"]')
     &&!field.closest('#wa-approval,#wa-material-approval-slot,#queue-delivery-panel')
@@ -226,7 +231,7 @@
     if(name==='overview-home')name='home';
     if(name==='collect'&&!options.legacy){options={...options,jobsTab:'collect'};name='jobs';}
     const cap=capability(name), view=(name==='jobs'||cap?.view==='jobs')&&!options.legacy?'jobs-inplace':(cap?.view || name);
-    if(view!=='jobs-inplace')restoreBorrowed();
+    if(view!=='jobs-inplace'){toggleJobEntry('');restoreBorrowed();}
     if(name!=='queue'&&state.queueDeliveryOpen&&!state.queueDeliveryBusy&&dom.queueDeliveryPanel?.parentElement===$('review-host'))closeDeliveryModal();
     if(name!=='mail'&&state.hrReplyModalOpen&&!state.hrReplyBusy&&dom.hrReplyConfirmPanel?.parentElement?.id==='wb-hr-confirm-host')closeHrReplyModal();
     if(name!=='mail')restoreHrReplyPanel();
@@ -915,10 +920,11 @@
   $('connect-github').addEventListener('click',()=>openCapability('github'));$('connect-platform').addEventListener('click',()=>openCapability('collect'));
   $('model-settings').addEventListener('click',()=>navigate('data',{anchor:'ai-settings-panel'}));
   window.addEventListener('offerpilot:state',()=>{restoreDrafts();scheduleRefresh();if(current==='jobs')renderJobPicker();renderTaskChrome();});
+  window.addEventListener('offerpilot:profile-draft',cacheProfileDraft);
   for(const type of ['input','change'])document.addEventListener(type,event=>{
+    if(event.target.closest?.('#profile-form')){cacheProfileDraft();return;}
     const field=event.target;if(!draftField(field))return;
     drafts.fields ||= {};drafts.fields[field.id]=field.type==='checkbox'?field.checked:field.value;
-    if(field.closest('#profile-form')){drafts.profile=collectProfileForm();drafts.profile.truth_confirmed=false;}
     saveDrafts();
   });
   window.addEventListener('offerpilot:agent',event=>{

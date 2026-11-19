@@ -155,6 +155,13 @@ class TaskShellStructureTests(unittest.TestCase):
         for element_id, label in (("wb-nav-profile", "我的资料"), ("wb-all-tools", "全部功能"), ("wb-settings-button", "设置")):
             self.assertIn(f'id="{element_id}" class="wb-foot-link" aria-label="{label}"', HTML)
 
+    def test_sending_into_a_conversation_from_another_model_starts_a_new_one(self):
+        agent = (STATIC / "workbench-agent.js").read_text(encoding="utf-8")
+        send = agent[agent.index("  async function send("):agent.index("  async function load(")]
+        self.assertIn("current?.model_changed", send)
+        self.assertIn("api('/conversations',", send)
+        self.assertIn("/context`,carry", send)  # 沿用已选岗位与材料
+
     def test_ids_stay_unique(self):
         ids = re.findall(r'\bid="([^"]+)"', HTML)
         self.assertEqual(len(ids), len(set(ids)))

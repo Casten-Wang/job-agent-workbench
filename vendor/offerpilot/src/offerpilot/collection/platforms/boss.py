@@ -179,14 +179,15 @@ JS_EXTRACT_LIST = """
         const nameEl = box.querySelector('.job-name');
         const salaryEl = box.querySelector('.job-salary');
         const tags = box.querySelectorAll('.tag-list li');
+        const tagTexts = Array.from(tags).map(t => t.textContent.trim());
         const companyEl = box.querySelector('.boss-name') || box.querySelector('.company-name');
         const locationEl = box.querySelector('.company-location');
         const href = nameEl ? nameEl.getAttribute('href') : '';
         if (!nameEl || !href) return;
         jobs.push({
             title: nameEl.textContent.trim(), salary: salaryEl ? salaryEl.textContent.trim() : '',
-            experience: tags[0] ? tags[0].textContent.trim() : '',
-            education: tags[1] ? tags[1].textContent.trim() : '',
+            experience: tagTexts.filter(t => /经验|应届|在校|^\\d.*(?:年|天\\s*[/／]\\s*周|个?月)/.test(t)).join(' · '),
+            education: tagTexts.find(t => /^(?:统招)?(?:初中|高中|中专|中技|大专|本科|硕士|博士|学历不限|不限学历)/.test(t)) || '',
             company: companyEl ? companyEl.textContent.trim() : '',
             location: locationEl ? locationEl.textContent.trim() : '', url: href
         });
@@ -209,8 +210,8 @@ JS_EXTRACT_DETAIL = """
         || document.querySelector('.salary')?.textContent?.trim() || '';
     const tagItems = document.querySelectorAll('.info-primary .tag-list span');
     const tagTexts = Array.from(tagItems).map(t => t.textContent.trim());
-    info.experience = tagTexts[0] || '';
-    info.education = tagTexts[1] || '';
+    info.experience = tagTexts.filter(t => /经验|应届|在校|^\\d.*(?:年|天\\s*[/／]\\s*周|个?月)/.test(t)).join(' · ');
+    info.education = tagTexts.find(t => /^(?:统招)?(?:初中|高中|中专|中技|大专|本科|硕士|博士|学历不限|不限学历)/.test(t)) || '';
     const pageText = [info.title, info.experience, document.querySelector('.job-sec-text')?.textContent || ''].join(' ');
     info.recruitment_type = /校招|校园招聘|应届|毕业生|管培生/.test(pageText)
         ? 'campus'

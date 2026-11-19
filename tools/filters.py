@@ -25,6 +25,7 @@ from typing import Any
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 _ZERO_WIDTH_RE = re.compile("[​‌‍﻿]")
 _WHITESPACE_RE = re.compile(r"\s+")
+_NON_MONTHLY_PAY = re.compile(r"(?:元|[kK]|千|万|\d)\s*/\s*(?:小时|天|日|时|周)|(?:日|时|周)薪")
 _MARKDOWN_LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
 
 # The same legal-suffix list used by tools/precheck.py.  Kept here as behavior
@@ -228,6 +229,9 @@ def parse_salary(
         "reason": None,
     }
     if not text:
+        return result
+    if _NON_MONTHLY_PAY.search(text):
+        result["reason"] = "non-monthly-pay"
         return result
 
     lowered = text.casefold()

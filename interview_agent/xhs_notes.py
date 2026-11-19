@@ -12,7 +12,8 @@ import urllib.request
 
 
 UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1"
-HOSTS = {"xhslink.com", "www.xhslink.com", "xiaohongshu.com", "www.xiaohongshu.com"}
+HOSTS = {"xhslink.com", "www.xhslink.com", "xiaohongshu.com", "www.xiaohongshu.com",
+         "rednote.com", "www.rednote.com"}
 NOTE_ID = re.compile(r"/(?:explore|discovery/item)/([a-fA-F0-9]{24})(?:/|$)")
 MAX_HTML = 4 * 1024 * 1024
 

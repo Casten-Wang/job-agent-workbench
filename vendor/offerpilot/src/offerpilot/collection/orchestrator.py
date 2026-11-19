@@ -626,6 +626,7 @@ class CollectionOrchestrator:
         errors = any(r.status in {"blocked", "failed"} for r in platform_results)
         shortages = any(r.status == "completed_with_shortage" for r in platform_results)
         outcome = "stopped" if stopped else "completed_with_errors" if errors else "completed_with_shortage" if shortages else "completed"
+        scoring_error = ""
         if options["auto_score"] and unique_new_ids and not stopped and not errors and not any(r.reason_code == "timing_gap" for r in platform_results):
             try:
                 self._emit_scoring(states, unique_new_ids)
@@ -633,16 +634,32 @@ class CollectionOrchestrator:
 
                 score_config = dict(self.config)
                 score_config["_workbench_stop_event"] = self.stop_event
+                score_checkpoint = {}
+                upstream_checkpoint = score_config.get("_workbench_score_checkpoint")
+
+                def checkpoint_score(state):
+                    score_checkpoint.update(deepcopy(state))
+                    if callable(upstream_checkpoint):
+                        upstream_checkpoint(state)
+
+                score_config["_workbench_score_checkpoint"] = checkpoint_score
                 score_jobs(score_config, scope="selected", job_ids=unique_new_ids, limit=None, force_rescore=False)
+                if score_checkpoint.get("status") in {"paused", "completed_with_errors"}:
+                    remaining = len(score_checkpoint.get("remaining_job_ids") or [])
+                    reason = score_checkpoint.get("error") or score_checkpoint.get("pause_reason") or "部分岗位评分失败"
+                    scoring_error = f"自动评分未完成：{reason}；剩余 {remaining} 个岗位待处理"
+                    outcome = "stopped" if self.stop_event and self.stop_event.is_set() else "completed_with_errors"
             except Exception as exc:
                 outcome = "completed_with_errors"
-                self._persist(states, unique_new_ids, "", error=f"自动评分失败：{str(exc)[:500]}")
-        self._persist(states, unique_new_ids, "", status=outcome, stop_reason=getattr(self.stop_event, "reason", "user_stopped") if stop_requested else next((r.reason_code for r in reversed(platform_results) if r.reason_code), ""))
+                scoring_error = f"自动评分失败：{str(exc)[:500]}"
+        stop_requested = bool(self.stop_event and self.stop_event.is_set())
+        self._persist(states, unique_new_ids, "", status=outcome, stop_reason=getattr(self.stop_event, "reason", "user_stopped") if stop_requested else next((r.reason_code for r in reversed(platform_results) if r.reason_code), ""), error=scoring_error or None)
         return {
             "run_id": self.run_id,
             "status": outcome,
             "platforms": states,
             "collected_job_ids": unique_new_ids,
+            "error": scoring_error,
             "results": [result.__dict__ for result in platform_results],
         }
 

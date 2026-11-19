@@ -257,6 +257,16 @@ class EntityExtractionTests(unittest.IsolatedAsyncioTestCase):
                 if other != tag:
                     self.assertNotIn(other, row["summary"])
 
+    async def test_misc_failure_marks_partial_without_losing_successful_entities(self):
+        def fail_misc(text):
+            raise ModelError("invalid_model_decision")
+        result = await extract_profile(StageAgent(misc=fail_misc), mixed_resume())
+        self.assertEqual(result["diagnostics"]["mode"], "entities")
+        self.assertEqual(result["diagnostics"]["misc"], "failed")
+        self.assertTrue(result["partial"])
+        self.assertTrue(result["profile"]["projects"])
+        self.assertTrue(any("基本信息" in warning for warning in result["warnings"]))
+
     async def test_return_keys_are_backward_compatible(self):
         short = ("姓名：测试同学\n上海\n\n工作经历\n"
                  "2023.06-2023.09 合成公司 后端实习生\n- " + BULLET + "\n")

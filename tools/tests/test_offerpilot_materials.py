@@ -82,6 +82,41 @@ def _materials_call(payload: dict | None = None):
 
 
 class PromptPrincipleTests(unittest.TestCase):
+    def test_truncated_materials_retry_once_without_dropping_source(self):
+        error = greeter.AIRequestError("output_truncated", "fixture truncation")
+        with patch.object(greeter, "_call_claude", side_effect=[error, json.dumps(VALID_PAYLOAD)]) as call:
+            result = greeter._generate_materials_once({"id": "job-1", "title": "测试岗位", "company": "测试公司"}, RESUME, CONFIG)
+        self.assertIsNotNone(result)
+        self.assertEqual(call.call_count, 2)
+        first, second = call.call_args_list
+        self.assertEqual(first.args[0], second.args[0])
+        self.assertIn(RESUME, first.args[0])
+        self.assertGreater(second.kwargs["max_tokens"], first.kwargs["max_tokens"])
+        self.assertLessEqual(second.kwargs["max_tokens"], 32768)
+
+    def test_materials_network_errors_do_not_retry(self):
+        error = greeter.AIRequestError("network", "fixture network failure")
+        with patch.object(greeter, "_call_claude", side_effect=error) as call:
+            with self.assertRaises(greeter.AIRequestError):
+                greeter._generate_materials_once({"title": "测试岗位", "company": "测试公司"}, RESUME, CONFIG)
+        self.assertEqual(call.call_count, 1)
+
+    def test_repeated_truncation_still_fails_without_a_partial_package(self):
+        error = greeter.AIRequestError("output_truncated", "fixture truncation")
+        with patch.object(greeter, "_call_claude", side_effect=error) as call:
+            with self.assertRaises(greeter.AIRequestError):
+                greeter._generate_materials_once({"title": "测试岗位", "company": "测试公司"}, RESUME, CONFIG)
+        self.assertEqual(call.call_count, 2)
+
+    def test_materials_output_budget_covers_full_resume_package(self):
+        with patch.object(greeter, "_call_claude", return_value="invalid") as call:
+            greeter._generate_materials_once(
+                {"id": "job-1", "title": "开发实习生", "company": "测试公司"},
+                RESUME, {"ai": {"greeting_max_tokens": 8192}},
+            )
+        self.assertEqual(call.call_args.kwargs["max_tokens"], 16384)
+        self.assertEqual(call.call_args.kwargs["purpose"], "materials")
+
     def test_greeting_and_review_prompts_carry_the_user_principles(self) -> None:
         greeting_prompt = greeter.GREETING_PROMPT
         review_prompt = greeter.REVIEW_PROMPT

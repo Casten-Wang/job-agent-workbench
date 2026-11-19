@@ -272,6 +272,8 @@ class WorkbenchWorkflow:
             "material_id", "messages", "artifacts", "recommendations", "pending", "saved_versions",
             "error_code", "updated_at", "material_run", "resume_version_id", "interview_id", "business_results", "ui_actions")} | {"cursor": len(data["events"]),
                 "materials": self.materials(public=True), "generation": self.agent.generation,
+                # 会话创建时的模型与当前设置不同：引擎不再接受新消息，前端据此改为新建会话。
+                "model_changed": bool(data.get("generation")) and data.get("generation") != self.agent.generation,
                 "streaming_message": deepcopy(self.live_text.get(data["id"])),
                 "progress": progress, "guidance": self.guidance(data, progress)}
 
@@ -596,6 +598,10 @@ class WorkbenchWorkflow:
         if decision["action"] in {"ask", "reply"}:
             return self.finish(data, decision["message"] or "请补充本次求职目标。",
                                "waiting_input" if decision["action"] == "ask" else "completed")
+        if decision["action"] in {"draft_application", "revise_application"} and any(
+                item["tool"] in {"draft_application", "revise_application"} and item["result"].get("artifacts")
+                for item in data["observations"]):
+            return self.finish(data, "简历和招呼语草稿已准备，请核对内容；需要调整时可继续提出修改，保存正式版本仍需确认。")
         INPUTS[decision["action"]].model_validate(decision["arguments"])
         return {"data": data, "decision": decision, "route": "execute"}
 

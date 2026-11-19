@@ -183,6 +183,7 @@ const state = {
   queueDeliveryBatchId: null,
   queueDeliveryReturnFocus: null,
   queueGreetingWatch: null,
+  offerpilotLastTask: null,
   profileDirty: false,
   profileImportBusy: false,
   profileAutoPrefillTried: false,
@@ -3082,6 +3083,7 @@ function renderProfile(profile) {
   renderProfileMeter(completeness);
   renderProfileDraftBanner();
   if (dom.profileSave) dom.profileSave.classList.toggle('button-draft', state.profileDirty);
+  if (state.profileDirty) window.dispatchEvent(new CustomEvent('offerpilot:profile-draft'));
   // The snapshot can arrive after the user already opened this page; retry the one-time prefill then.
   const profilePanel = document.querySelector('[data-view-panel="profile"]');
   if (profilePanel && !profilePanel.hidden) maybeAutoPrefillProfile();
@@ -3888,6 +3890,13 @@ function renderOfferPilotTask(task, lastTask) {
   meta.append(offerpilotMetaRow('更新时间', formatDateTime(row.updated_at)));
   if (row.deadline_at) meta.append(offerpilotMetaRow('截止时间', formatDateTime(row.deadline_at)));
   meta.append(offerpilotMetaRow('已请求停止', row.stop_requested ? '是' : '否'));
+  const metrics = row.metrics || {};
+  if (metrics.collect_seen != null) {
+    meta.append(offerpilotMetaRow('采集统计', `读取 ${metrics.collect_seen} · 新增 ${metrics.collect_new || 0} · 重复 ${metrics.collect_duplicate || 0} · 过滤 ${metrics.collect_filtered || 0}`));
+  }
+  if (Number(metrics.ai_total) > 0) {
+    meta.append(offerpilotMetaRow('AI 评分', `已处理 ${metrics.ai_completed || 0}/${metrics.ai_total} · 保留 ${metrics.ai_passed || 0} · 过滤 ${metrics.ai_filtered || 0} · 失败 ${metrics.ai_failed || 0}`));
+  }
   container.append(meta);
   if (current && row.id && ['running', 'stopping', 'queued', 'pending'].includes(String(row.status || ''))) {
     const stop = el('button', {
@@ -3931,7 +3940,7 @@ function collectPlatformLabel(platform) {
   return CHANNEL_LABELS[platform] || platform;
 }
 
-/* 采集页「本次初筛条件」：只读展示个人资料里的求职意向，并给空输入框提供默认值。 */
+/* 采集页「个人资料偏好」：只读展示求职意向，并给空输入框提供默认值。 */
 
 function collectProfileIntent() {
   const profile = state.snapshot && state.snapshot.profile;
@@ -4244,6 +4253,7 @@ function renderOfferPilot(boss) {
   }
   applyOfferPilotPrefs(data);
   state.offerpilotTaskActive = Boolean(data.task);
+  state.offerpilotLastTask = data.last_task || data.task || null;
   state.offerpilotPipeline = data.pipeline && typeof data.pipeline === 'object' ? data.pipeline : null;
   renderPipelineStatus();
   syncCollectModeUI();
@@ -5186,7 +5196,8 @@ async function generateQueueGreetings(button) {
     return;
   }
   setStatus(data.message || '正在生成招呼语；完成后会自动弹出核对窗口。', 'ok');
-  watchQueueGreetings(ids, button);
+  showInline(document.getElementById('queue-greeting-status'), '正在生成招呼语与定制材料；完成后会打开核对预览。', 'ok');
+  watchQueueGreetings(ids, button, data.task && data.task.id);
 }
 
 /* 生成招呼语是后台任务：轮询到所选岗位都 ready 后自动打开发送弹窗。 */
@@ -5196,9 +5207,9 @@ function stopQueueGreetingWatch() {
   state.queueGreetingWatch = null;
 }
 
-function watchQueueGreetings(ids, trigger) {
+function watchQueueGreetings(ids, trigger, taskId) {
   stopQueueGreetingWatch();
-  const watch = { ids: ids.map(String), attempts: 0, timer: null, trigger };
+  const watch = { ids: ids.map(String), attempts: 0, timer: null, trigger, taskId: String(taskId || '') };
   state.queueGreetingWatch = watch;
   const maxAttempts = 30;
   const tick = async () => {
@@ -5213,12 +5224,26 @@ function watchQueueGreetings(ids, trigger) {
       && rows.every((row) => row.greeting && row.greeting.ready);
     if (ready) {
       stopQueueGreetingWatch();
+      showInline(document.getElementById('queue-greeting-status'), '招呼语已生成，请核对预览；尚未发送。', 'ok');
       openDeliveryModal(rows, trigger);
       return;
     }
+    const task = state.offerpilotLastTask;
+    if (task && String(task.id) === watch.taskId) {
+      if (['failed', 'stopped', 'completed'].includes(String(task.status))) {
+        stopQueueGreetingWatch();
+        const message = task.error || task.stop_reason || '生成任务已结束，所选岗位的材料尚未全部就绪，请检查后重试。';
+        showInline(document.getElementById('queue-greeting-status'), String(message), 'error');
+        setStatus(String(message), 'error');
+        return;
+      }
+      if (['running', 'stopping', 'queued', 'pending'].includes(String(task.status))) watch.attempts = 0;
+    }
     if (watch.attempts >= maxAttempts) {
       stopQueueGreetingWatch();
-      setStatus('招呼语还在生成；完成后可勾选岗位点「查看并发送」核对。', 'warn');
+      const message = '暂时无法确认生成状态；请刷新后查看任务结果，材料就绪后可点「查看并发送」核对。';
+      showInline(document.getElementById('queue-greeting-status'), message, 'warn');
+      setStatus(message, 'warn');
       return;
     }
     watch.timer = window.setTimeout(tick, 2500);

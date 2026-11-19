@@ -26,6 +26,164 @@ INTENT = {"intent": "answer", "reason": "synthetic transport test", "clarificati
 
 
 class ModelAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_long_resume_deadline_does_not_extend_other_stages_or_custom_limits(self):
+        seen = {}
+        profile = {"basic": {"name": "合成同学"}, "job_intent": {}, "skills": {},
+                   "education": [], "experiences": [], "projects": [], "summary": ""}
+
+        def handler(request):
+            payload = json.loads(request.content)
+            stage = payload["tools"][0]["function"]["name"].removeprefix("submit_")
+            seen[stage] = request.extensions["timeout"]
+            return httpx.Response(200, json=completion(stage, profile if stage == "profile_extract" else INTENT))
+
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(handler)).start()
+        try:
+            await adapter.decide("profile_extract", {"resume_text": "合成同学"})
+            await adapter.decide("intent", {})
+            self.assertGreater(seen["profile_extract"]["read"], seen["intent"]["read"])
+            self.assertEqual(seen["intent"]["read"], 120)
+            self.assertEqual(seen["profile_extract"]["connect"], 20)
+        finally:
+            await adapter.close()
+
+        async def slow(request):
+            await asyncio.sleep(0.05)
+            return httpx.Response(200, json=completion("profile_extract", profile))
+
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(slow), timeout=0.02).start()
+        try:
+            with self.assertRaises(ModelError) as error:
+                await adapter.decide("profile_extract", {"resume_text": "合成同学"})
+            self.assertEqual(error.exception.code, "model_timeout")
+        finally:
+            await adapter.close()
+
+    async def test_model_connection_uses_the_same_direct_route_as_settings_check(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {"HTTPS_PROXY": "unsupported://unusable-system-proxy"}):
+            adapter = ModelAdapter(ENV)
+            try:
+                await adapter.start()
+                self.assertFalse(adapter.client.is_closed)
+            finally:
+                await adapter.close()
+
+    async def test_profile_misc_schema_repair_supplies_exact_nested_fields(self):
+        requests = []
+        valid = {"basic": {"name": "合成同学"}, "job_intent": {}, "skills": {"tools": ["Python"]}, "summary": ""}
+        def handler(request):
+            payload = json.loads(request.content)
+            requests.append(payload)
+            if len(requests) == 1:
+                decision = {**valid, "job_intent": {"position": "开发"}, "skills": {"tools": "Python"}}
+            else:
+                repair = payload["messages"][-1]["content"]
+                self.assertIn('"availability"', repair)
+                self.assertIn('"strengths"', repair)
+                self.assertIn('"titles"', repair)
+                decision = valid
+            return httpx.Response(200, json=completion("profile_misc", decision))
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(handler)).start()
+        try:
+            result = await adapter.decide("profile_misc", {"resume_text": "合成同学 Python"})
+            self.assertEqual(result["skills"]["tools"], ["Python"])
+            self.assertEqual(len(requests), 2)
+        finally:
+            await adapter.close()
+
+    async def test_resume_decodes_only_source_supported_whitespace_escapes(self):
+        from interview_agent.resume_profile import extract_profile
+        cases = [
+            ("实现持久化。\n处理失败后恢复。", r"实现持久化。\n处理失败后恢复。", "实现持久化。\n处理失败后恢复。"),
+            (r"保留路径 C:\new 和字面量 \n。", r"保留路径 C:\new 和字面量 \n。", r"保留路径 C:\new 和字面量 \n。"),
+            ("实现持久化。\n处理失败后恢复。", r"实现持久化。\n并将转化率提升80%。", ""),
+        ]
+        for source_summary, provider_summary, expected in cases:
+            with self.subTest(summary=provider_summary):
+                decision = {"basic": {"name": "合成同学"}, "job_intent": {}, "skills": {},
+                            "education": [], "experiences": [], "projects": [], "summary": provider_summary}
+                adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, json=completion("profile_extract", decision)))).start()
+                try:
+                    result = await extract_profile(adapter, "合成同学\n" + source_summary)
+                    self.assertEqual(result["profile"]["summary"], expected)
+                    self.assertFalse(result["profile"]["truth_confirmed"])
+                    if not expected:
+                        self.assertTrue(any("个人简介" in warning for warning in result["warnings"]))
+                finally:
+                    await adapter.close()
+
+    async def test_resume_keeps_escaped_quotes_scoped_to_their_own_record(self):
+        from interview_agent.resume_profile import extract_profile
+        projects = [
+            {"name": "项目甲", "summary": r"使用 Python\n实现校验。", "source_quote": r"项目甲\n使用 Python\n实现校验。"},
+            {"name": "项目乙", "summary": "使用 Python", "source_quote": r"项目乙\n使用 SQL 实现报表。"},
+        ]
+        decision = {"basic": {"name": "合成同学"}, "job_intent": {},
+                    "skills": {"tools": [r"Python\n开发"]}, "education": [], "experiences": [],
+                    "projects": projects, "summary": ""}
+        source = "合成同学\nPython\n开发\n项目甲\n使用 Python\n实现校验。\n项目乙\n使用 SQL 实现报表。"
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=completion("profile_extract", decision)))).start()
+        try:
+            result = await extract_profile(adapter, source)
+            self.assertEqual(len(result["profile"]["projects"]), 2)
+            self.assertEqual(result["profile"]["projects"][0]["summary"], "使用 Python\n实现校验。")
+            self.assertEqual(result["profile"]["projects"][1]["summary"], "")
+            self.assertEqual(result["profile"]["skills"]["tools"], ["Python\n开发"])
+        finally:
+            await adapter.close()
+
+    async def test_resume_skills_match_the_saved_profile_capacity(self):
+        from interview_agent.resume_profile import extract_profile, ResumeSkills
+        from pydantic import ValidationError
+        tools = [f"原文技能{index}" for index in range(60)]
+        decision = {"basic": {"name": "合成同学"}, "job_intent": {}, "skills": {"tools": tools},
+                    "education": [], "experiences": [], "projects": [], "summary": ""}
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=completion("profile_extract", decision)))).start()
+        try:
+            result = await extract_profile(adapter, "合成同学\n" + "\n".join(tools))
+            self.assertEqual(result["profile"]["skills"]["tools"], tools)
+            self.assertFalse(result["profile"]["truth_confirmed"])
+            with self.assertRaises(ValidationError):
+                ResumeSkills(tools=tools + ["超过保存上限的技能"])
+        finally:
+            await adapter.close()
+
+    async def test_long_resume_preserves_all_projects_without_accepting_truncation(self):
+        from interview_agent.resume_profile import extract_profile
+        projects = []
+        for index in range(7):
+            name = f"合成项目{index + 1}"
+            summary = "使用 Python 实现输入校验、任务持久化与错误恢复，并验证完整用户流程。" * 20
+            projects.append({"name": name, "summary": summary, "source_quote": name + "\n" + summary})
+        decision = {"basic": {"name": "合成同学"}, "job_intent": {}, "skills": {"tools": ["Python"]},
+                    "education": [], "experiences": [], "projects": projects, "summary": ""}
+        source = "合成同学\n" + "\n".join(row["source_quote"] for row in projects)
+        requests = []
+
+        def handler(request):
+            payload = json.loads(request.content)
+            requests.append(payload)
+            response = completion("profile_extract", decision)
+            # This provider fixture needs more output than the observed 8192-token cutoff.
+            if payload["max_tokens"] < 9000:
+                response["choices"][0]["finish_reason"] = "length"
+            return httpx.Response(200, json=response)
+
+        adapter = await ModelAdapter(ENV, transport=httpx.MockTransport(handler)).start()
+        try:
+            result = await extract_profile(adapter, source)
+            self.assertEqual([row["name"] for row in result["profile"]["projects"]],
+                             [row["name"] for row in projects])
+            self.assertEqual(result["profile"]["projects"][-1]["summary"], projects[-1]["summary"])
+            self.assertFalse(result["profile"]["truth_confirmed"])
+            self.assertEqual(len(requests), 1)
+        finally:
+            await adapter.close()
+
     async def test_comprehensive_json_contract_preserves_validation_and_repairs(self):
         dimension = {"dimension_id": "verification", "label": "验证", "weight": 1,
             "score": 3, "evidence_quotes": ["覆盖缺失和合法输入"], "comment": "补充失败用例。"}
@@ -145,6 +303,7 @@ class ModelAdapterTests(unittest.IsolatedAsyncioTestCase):
                 'text': '访谈12位用户，按场景整理问题并参与需求评审。'}]})
             self.assertEqual(len(requests), 2)
             self.assertIn('unsupported_numbers', requests[1]['messages'][-1]['content'])
+            self.assertEqual(requests[0]['max_tokens'], 16384)
             self.assertIn('12位用户', result['claims'][0]['text'])
         finally:
             await adapter.close()

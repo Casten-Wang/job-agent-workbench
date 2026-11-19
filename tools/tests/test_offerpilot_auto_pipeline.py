@@ -48,6 +48,30 @@ def _runtime_job(job_id: str, **overrides: object) -> dict:
 
 
 class VendorFullFlowTests(unittest.TestCase):
+    def test_collection_scoring_failure_stops_before_confirmation(self):
+        task = WorkbenchTask(id="partial-score", mode="full", label="全流程")
+        result = {
+            "run_id": "collection-1", "status": "completed_with_errors",
+            "platforms": {"boss": {"status": "completed"}},
+            "collected_job_ids": ["job-1", "job-2"],
+            "error": "自动评分未完成：AI 服务连接失败，剩余 1 个岗位",
+        }
+        with patch.object(vendor_server, "CollectionOrchestrator") as orchestrator, patch.object(
+            vendor_server, "_get_web_db"
+        ), patch.object(vendor_server, "get_jobs_pending_confirmation") as pending, patch.object(
+            vendor_server, "_execute_deliver"
+        ) as deliver:
+            orchestrator.return_value.run.return_value = result
+            with self.assertRaisesRegex(RuntimeError, "自动评分未完成"):
+                vendor_server._execute_full(task, {
+                    "_workbench_auto_pipeline": True,
+                    "_collection_options": {"platform_order": ["boss"], "platforms": {"boss": {}}},
+                })
+        pending.assert_not_called()
+        deliver.assert_not_called()
+        self.assertFalse(task.context.get("confirmation_complete", False))
+        self.assertEqual(task.progress["collected_job_ids"], ["job-1", "job-2"])
+
     def test_workbench_full_stops_right_after_scoring(self):
         task = WorkbenchTask(id="task-1", mode="full", label="采集 + 评分 + 招呼语")
         db = MagicMock()

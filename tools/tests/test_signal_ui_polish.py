@@ -240,7 +240,7 @@ class SignalScriptTests(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不可用")
-        fn = _between(self.script, "const COLLECT_PLATFORMS", "/* 采集页「本次初筛条件」")
+        fn = _between(self.script, "const COLLECT_PLATFORMS", "/* 采集页「个人资料偏好」")
         harness = (
             "const CHANNEL_LABELS = {boss:'Boss直聘', liepin:'猎聘', '51job':'前程无忧', zhilian:'智联招聘'};\n"
             "var dom = {offerpilotMode:{value:'collect'}, collectPlatform:{value:'liepin'}};\n"

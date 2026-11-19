@@ -224,6 +224,7 @@ SUMMARY_REASON_LIMIT = 240
 MISSING_LIMIT = 160
 HARD_GAP_LIMIT = 120
 MAX_HARD_GAPS = 10
+MAX_MANDATORY_CONDITIONS = 50
 
 
 @dataclass(frozen=True)
@@ -588,7 +589,7 @@ def _structured_score_result(result: dict, *, reviewed: bool = False) -> ScoreRe
         dimension_evidence[key] = _normalize_short_text(value.get("evidence"), COMPONENT_EVIDENCE_LIMIT)
 
     raw_conditions = result.get("mandatory_conditions")
-    if not isinstance(raw_conditions, list) or len(raw_conditions) > MAX_HARD_GAPS:
+    if not isinstance(raw_conditions, list) or len(raw_conditions) > MAX_MANDATORY_CONDITIONS:
         return None
     mandatory_conditions: list[dict[str, str]] = []
     for item in raw_conditions:
@@ -1028,7 +1029,7 @@ def _sanitize_v4_trace(value: dict) -> dict | None:
         return None
 
     raw_conditions = value.get("mandatory_conditions")
-    if not isinstance(raw_conditions, list) or len(raw_conditions) > MAX_HARD_GAPS:
+    if not isinstance(raw_conditions, list) or len(raw_conditions) > MAX_MANDATORY_CONDITIONS:
         return None
     mandatory_conditions: list[dict[str, str]] = []
     for item in raw_conditions:

@@ -2496,10 +2496,10 @@ def _import_offerpilot_records(store: Store, runtime_jobs: list[dict[str, Any]],
         fingerprint = _job_fingerprint(job)
         match, revived = _resolve_pool_duplicate(index, fingerprint)
         if match is not None:
+            # Re-imports must reflect the current profile and filter settings.
+            match["hard_filter"] = record["hard_filter"]
             if revived:
                 restored.append(str(match.get("id") or ""))
-                # Re-apply the current profile's hard filter to the revived row.
-                match["hard_filter"] = record["hard_filter"]
             else:
                 duplicates += 1
             # Backfill an unscored row; a row already carrying a document score
@@ -2984,6 +2984,8 @@ def snapshot(mode: str, query: dict[str, str] | None = None) -> dict[str, Any]:
     all_jobs_by_id = {str(job.get("id")): job for job in jobs}
     for row in queue_view:
         source_job = all_jobs_by_id.get(str(row.get("id")))
+        if source_job is not None:
+            row["score"] = _score(source_job)
         row["fit_confidence"] = job_match.fit_confidence(source_job) if source_job else None
     materials_by_vendor: dict[str, Any] = {}
     if boss_state.get("ok"):

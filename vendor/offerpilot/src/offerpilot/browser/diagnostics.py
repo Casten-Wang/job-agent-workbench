@@ -12,6 +12,35 @@ from offerpilot.browser import evaluate, find_boss_tab, find_zhilian_tab
 from offerpilot.browser.runtime import check_node_available, ensure_runtime, get_runtime_url, runtime_health, runtime_targets
 
 
+BOSS_PAGE_STATE_SCRIPT = """
+(() => {
+  const text = document.body ? document.body.innerText : '';
+  if (document.documentURI.startsWith('chrome-error:') || document.querySelector('#main-frame-error')) {
+    const code = text.match(/\\b(?:ERR_[A-Z_]+|DNS_PROBE_[A-Z_]+)\\b/);
+    return JSON.stringify({status: 'network_error', code: code ? code[0] : ''});
+  }
+  if (!document.body || document.readyState !== 'complete' || !text.trim()) {
+    return JSON.stringify({status: 'loading'});
+  }
+  return JSON.stringify({status: 'ready'});
+})()
+"""
+
+
+def inspect_boss_page(target: dict[str, Any] | None) -> dict[str, str]:
+    """Read the existing tab's document, rather than trusting its retained URL."""
+    target_id = str((target or {}).get("targetId") or (target or {}).get("id") or "").strip()
+    if target_id:
+        try:
+            raw = evaluate(target_id, BOSS_PAGE_STATE_SCRIPT, timeout=5)
+            state = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(state, dict) and state.get("status") in {"network_error", "loading", "ready"}:
+                return {str(key): str(value) for key, value in state.items()}
+        except Exception:
+            pass
+    return {"status": "unknown", "message": "无法确认 BOSS 页面是否加载成功，请重新加载后检查"}
+
+
 ZHILIAN_PAGE_STATE_SCRIPT = """
 (() => {
   const text = document.body ? document.body.innerText : '';
@@ -69,6 +98,7 @@ def run_browser_diagnostics(config: dict[str, Any] | None = None) -> dict[str, A
         # so browser product/version information is available to diagnostics.
         health = runtime_health(config) or health
     boss_tab = find_boss_tab() if runtime_ready else None
+    boss_page = inspect_boss_page(boss_tab) if boss_tab else None
     zhilian_tab = find_zhilian_tab() if runtime_ready else None
     zhilian_page = inspect_zhilian_page(zhilian_tab) if runtime_ready and zhilian_tab else None
     browser_product, browser_name = _browser_identity(health)
@@ -90,6 +120,7 @@ def run_browser_diagnostics(config: dict[str, Any] | None = None) -> dict[str, A
         "chrome": isinstance(targets, list),
         "targets": targets or [],
         "boss_tab": boss_tab,
+        "boss_page": boss_page,
         "zhilian_tab": zhilian_tab,
         "zhilian_page": zhilian_page,
         "errors": errors,

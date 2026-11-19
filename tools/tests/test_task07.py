@@ -154,7 +154,7 @@ class OfferPilotAdapterTests(unittest.TestCase):
             ),
         )
 
-    def test_hard_rules_reject_excluded_term_city_and_low_salary(self):
+    def test_hard_rules_reject_excluded_term_and_city_without_monthly_floor(self):
         payload = [
             {
                 "company": "虚构外包服务公司",
@@ -169,7 +169,7 @@ class OfferPilotAdapterTests(unittest.TestCase):
         reasons = record["hard_filter"]["reasons"]
         self.assertTrue(any("excluded-term" in reason for reason in reasons))
         self.assertIn("city-not-allowed", reasons)
-        self.assertIn("salary-below-min", reasons)
+        self.assertNotIn("salary-below-min", reasons)
         self.assertEqual(
             record["hard_filter"]["engine"],
             "task03-filters" if (PROJECT_ROOT / "tools" / "filters.py").is_file() else "adapter-minimal-fallback",

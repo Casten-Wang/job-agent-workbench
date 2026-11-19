@@ -781,7 +781,7 @@ def _normalize_materials(
 
 
 def _generate_materials_once(job: dict, resume_summary: str, config: dict) -> dict | None:
-    """One model call per job producing the fixed materials package, or ``None``."""
+    """Produce the fixed package, retrying a truncated response once."""
     jd_summary = _truncate_prompt_text(
         clean_job_description(job.get("jd", "")), MATERIALS_TEXT_LIMITS["jd"]
     ) or "无详细描述"
@@ -801,7 +801,13 @@ def _generate_materials_once(job: dict, resume_summary: str, config: dict) -> di
             _positive_match_reason(job.get("score_reason", "")), 240
         ) or "无",
     )
-    response = _call_claude(prompt, config, purpose="materials")
+    try:
+        response = _call_claude(prompt, config, max_tokens=16384, purpose="materials")
+    except AIRequestError as exc:
+        if exc.kind != "output_truncated":
+            raise
+        _notify(config, f"{job['company']}｜{job['title']} 的定制材料被截断，保留完整资料并增大输出预算后重试一次。")
+        response = _call_claude(prompt, config, max_tokens=32768, purpose="materials")
     payload = _parse_materials_response(response)
     if payload is None:
         return None
@@ -1192,7 +1198,7 @@ def generate_greetings(config: dict, job_ids: list[str] | None = None, db_path=N
                         break
                     continue
 
-                # One extra call per job. A materials failure leaves the previous
+                # Generate the package before saving. A materials failure leaves the previous
                 # greeting untouched and writes nothing partial.
                 materials = None
                 if ai_enabled and (force_regenerate or not _has_materials(job)):

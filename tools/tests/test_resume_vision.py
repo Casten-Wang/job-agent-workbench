@@ -1,7 +1,6 @@
 """PDF 文字层不可用时的图片识别兜底。数据全部虚构；模型与渲染器在边界处替换。"""
 
 import base64
-import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -154,14 +153,39 @@ class TranscribeTests(unittest.TestCase):
                 resume_vision.call_vision_model(b"jpeg", "p")
         self.assertIn("尚未配置", str(caught.exception))
 
-    @unittest.skipUnless(shutil.which("sips"), "needs macOS sips")
     def test_real_render_produces_jpeg_pages(self):
         images, total = resume_vision.render_pdf_pages(pdf_bytes())
         self.assertEqual(total, 1)
         self.assertTrue(images[0].startswith(b"\xff\xd8"))
 
+    def test_scanned_pdf_renders_in_order_and_obeys_page_limit(self):
+        import io
+        from PIL import Image
+        stream = io.BytesIO()
+        pages = [Image.new("RGB", (200, 280), color) for color in ("red", "green", "blue")]
+        pages[0].save(stream, "PDF", save_all=True, append_images=pages[1:])
+        content = stream.getvalue()
+        with self.assertRaises(profile_import.TextLayerUnusable):
+            profile_import.extract_resume_text("scan.pdf", content)
+        images, total = resume_vision.render_pdf_pages(content, max_pages=2)
+        self.assertEqual(total, 3)
+        self.assertEqual(len(images), 2)
+        for data, channel in zip(images, (0, 1)):
+            with Image.open(io.BytesIO(data)) as image:
+                self.assertEqual(image.width, resume_vision.RENDER_WIDTH)
+                pixel = image.getpixel((10, 10))
+                self.assertEqual(pixel.index(max(pixel)), channel)
+        with patch.object(resume_vision, "call_vision_model", return_value=RESUME) as model:
+            text, notes = resume_vision.transcribe_pdf(content)
+        self.assertEqual(model.call_count, 3)
+        self.assertIn(RESUME, text)
+
+    def test_invalid_pdf_reports_clear_render_error(self):
+        with self.assertRaises(resume_vision.VisionUnavailable):
+            resume_vision.render_pdf_pages(b"not a PDF")
+
     def test_render_without_tool_reports_unavailable(self):
-        with patch.object(shutil, "which", return_value=None):
+        with patch.dict(sys.modules, {"pypdfium2": None}):
             with self.assertRaises(resume_vision.VisionUnavailable):
                 resume_vision.render_pdf_pages(pdf_bytes())
 

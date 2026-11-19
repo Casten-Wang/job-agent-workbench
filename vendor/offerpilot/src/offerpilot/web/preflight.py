@@ -404,7 +404,14 @@ def check_browser_connection(config: dict, collection_options: dict | None = Non
 			boss_tab = result.get("boss_tab")
 			if boss_tab:
 				url = str(boss_tab.get("url") or "")
-				if any(marker in url.lower() for marker in ("/login", "/user/", "signin")):
+				page_state = result.get("boss_page") or {}
+				if page_state.get("status") == "network_error":
+					checks.append(_check("boss_page", "BOSS 网页连接", "error", "Chrome 已连接，但 BOSS 网页连接失败",
+						f"{page_state.get('code') or '网页未加载成功'}；请检查网络、系统代理或 VPN 分流后重新加载。", "browser"))
+				elif page_state.get("status") in {"loading", "unknown"}:
+					checks.append(_check("boss_page", "BOSS 页面状态", "warning", "尚未确认 BOSS 页面加载成功",
+						"请等待页面加载完成或重新加载 BOSS 网页后再检查。", "browser"))
+				elif any(marker in url.lower() for marker in ("/login", "/user/", "signin")):
 					checks.append(
 						_check(
 							"boss_login",

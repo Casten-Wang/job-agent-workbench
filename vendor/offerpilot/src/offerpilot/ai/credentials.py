@@ -620,6 +620,10 @@ def call_openai_compatible_text(
 
     mode, budget = resolve_thinking_options(config, purpose)
     strategies = _openai_thinking_strategies(mode, budget, max_tokens)
+    # Step 5 documents low/medium/high effort rather than disabled thinking.
+    if (model == "step-5-preview" and httpx.URL(base_url).host == "api.stepfun.com"
+            and mode in {"auto", "disabled"}):
+        strategies = [({"reasoning_effort": "low"}, max_tokens)]
     request_timeout = _coerce_timeout(timeout if timeout is not None else ai_cfg.get("timeout_seconds", 60))
     thinking_rejected = False
     compatibility_error: Exception | None = None

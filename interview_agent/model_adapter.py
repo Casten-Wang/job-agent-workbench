@@ -56,7 +56,7 @@ def strict_response_schema(model):
 
 
 class ModelAdapter:
-    def __init__(self, env=None, *, transport=None, timeout=120):
+    def __init__(self, env=None, *, transport=None, timeout=None):
         env = os.environ if env is None else env
         config = parse_json((Path(__file__).parent / "provider.json").read_text(encoding="utf-8"))
         self.provider = env.get("INTERVIEW_PROVIDER") or config["provider"]
@@ -69,7 +69,8 @@ class ModelAdapter:
         self._key = env.get("INTERVIEW_API_KEY") or env.get("STEP_API_KEY") or env.get("STEPFUN_API_KEY")
         if not self._key or not self._key.strip():
             raise ModelError("missing_model_credential")
-        self.timeout = timeout
+        self.timeout = 120 if timeout is None else timeout
+        self.profile_timeout = 180 if timeout is None else timeout
         self.transport = transport
         self.client = None
         self.last_failure = None
@@ -81,7 +82,7 @@ class ModelAdapter:
         self.client = httpx.AsyncClient(headers={"Authorization": "Bearer " + self._key},
             timeout=httpx.Timeout(self.timeout, connect=min(20, self.timeout)),
             follow_redirects=False, transport=self.transport,
-            trust_env=urlsplit(self.base_url).hostname != "127.0.0.1")
+            trust_env=False)
         self._key = None
         return self
 
@@ -104,6 +105,7 @@ class ModelAdapter:
             raise ValueError("Unknown decision stage")
         if self.client is None or self.client.is_closed:
             raise ModelError("model_client_closed")
+        timeout = self.profile_timeout if stage == "profile_extract" else self.timeout
         output = OUTPUTS[stage]
         tool_name = "submit_" + stage
         comprehensive_json = stage in {"ci_plan", "ci_debrief"}
@@ -115,7 +117,7 @@ class ModelAdapter:
             {"role": "user", "content": json.dumps(value, ensure_ascii=False, allow_nan=False)},
         ]
         payload = {"model": self.model, "messages": messages, "stream": on_text is not None,
-            "max_tokens": 16384 if stage == "prepare" else 8192, "reasoning_effort": "low",
+            "max_tokens": 16384 if stage in {"prepare", "prepare_experience", "profile_extract"} else 8192, "reasoning_effort": "low",
             "tools": [{"type": "function", "function": {"name": tool_name,
                 "description": "提交本次唯一的结构化决策；普通文本不会触发动作。", "parameters": output.model_json_schema()}}],
             # Step Plan currently returns plain text for forced named tools; validate auto output strictly.
@@ -138,7 +140,7 @@ class ModelAdapter:
         if structured and (self.schema_fallback or comprehensive_json):
             use_json_object()
         try:
-            async with asyncio.timeout(self.timeout):
+            async with asyncio.timeout(timeout):
                 attempt = -1
                 while attempt < 1:
                     attempt += 1
@@ -147,7 +149,8 @@ class ModelAdapter:
                         if on_text is not None:
                             status, body = await read_completion(self.client, self.base_url + "/chat/completions", payload, stage, on_text)
                         else:
-                            response = await self.client.post(self.base_url + "/chat/completions", json=payload)
+                            response = await self.client.post(self.base_url + "/chat/completions", json=payload,
+                                timeout=httpx.Timeout(timeout, connect=min(20, timeout)))
                             status = response.status_code
                     except httpx.TransportError:
                         if attempt == 0:
@@ -236,6 +239,8 @@ class ModelAdapter:
                             contract = ("\n请重新构造整个参数对象；array 字段必须使用 JSON 数组，不能返回普通字符串或 JSON 字符串。"
                                 "不添加 Schema 之外的字段。精确参数 Schema：" + json.dumps(output.model_json_schema(), ensure_ascii=False)) if stage.startswith("workbench_") else ""
                             repair = "请重新输出符合 Schema 的单个 JSON 对象。" if structured else f"请按工具 Schema 调用 {tool_name} 一次；只提供该阶段需要的字段。"
+                            if stage.startswith("profile_") and isinstance(error, ValidationError):
+                                contract += "精确参数 Schema（JSON）：" + json.dumps(output.model_json_schema(), ensure_ascii=False)
                             messages.append({"role": "user", "content": f"上次响应未通过校验：{json.dumps(self.last_failure, ensure_ascii=False)}。{repair}{contract}"})
                             continue
                         raise ModelError("invalid_model_decision") from None
