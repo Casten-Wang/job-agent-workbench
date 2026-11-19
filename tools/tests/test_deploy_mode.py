@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 import sys
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -153,6 +154,50 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 204)
         self.assertEqual(headers["X-Frame-Options"], "DENY")
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
+
+    def test_deploy_workbench_saves_profile_through_https_and_proxy_hosts(self):
+        cases = (
+            {"Host": "castenwang-offerpilot.ms.show", "Origin": "https://castenwang-offerpilot.ms.show"},
+            {"Host": "10.0.0.8:7860", "Origin": "https://castenwang-offerpilot.ms.show"},
+            {"Host": "10.0.0.8:7860", "Origin": "https://careers.example.test",
+             "X-Forwarded-Host": "careers.example.test"},
+        )
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {"OFFERPILOT_DEPLOY": "1"}), \
+             patch.object(server.backend, "WEB_DIR", Path(directory)), \
+             patch.object(server.backend, "_profile_cv_source", return_value=None):
+            port = self._serve()
+            for index, headers in enumerate(cases):
+                with self.subTest(headers=headers):
+                    profile = {"basic": {"name": f"Synthetic Candidate {index}", "city": "上海"},
+                               "education": [{"school": "Synthetic University", "degree": "本科"}]}
+                    status, _, body = self._request(port, "POST", "/api/workbench/confirmed-action?mode=user",
+                        {**headers, "Content-Type": "application/json"},
+                        {"action": "save-profile", "arguments": {"profile": profile},
+                         "operation_id": f"https-profile-save-{index}"})
+                    self.assertEqual(status, 200, body.decode("utf-8"))
+                    self.assertTrue(json.loads(body)["ok"])
+                    status, _, body = self._request(port, "GET", "/api/profile?mode=user", headers)
+                    self.assertEqual(status, 200)
+                    saved = json.loads(body)["profile"]
+                    self.assertTrue(saved["saved"])
+                    self.assertEqual(saved["basic"], {**server.backend.default_profile()["basic"], **profile["basic"]})
+                    self.assertEqual(saved["education"][0]["school"], "Synthetic University")
+
+    def test_deploy_workbench_rejects_foreign_origins_before_saving(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {"OFFERPILOT_DEPLOY": "1"}), \
+             patch.object(server.backend, "WEB_DIR", Path(directory)):
+            port = self._serve()
+            for origin in ("https://evil.example.org", "https://castenwang-offerpilot.ms.show.attacker.test", "null"):
+                with self.subTest(origin=origin):
+                    status, _, _ = self._request(port, "POST", "/api/workbench/confirmed-action?mode=user",
+                        {"Host": "10.0.0.8:7860", "X-Forwarded-Host": "castenwang-offerpilot.ms.show",
+                         "Origin": origin, "Content-Type": "application/json"},
+                        {"action": "save-profile", "arguments": {"profile": {"basic": {"name": "Rejected"}}},
+                         "operation_id": "foreign-profile-save"})
+                    self.assertEqual(status, 403)
+            self.assertFalse((Path(directory) / "data/user/profile.json").exists())
 
 
 class PackagingTests(unittest.TestCase):

@@ -372,7 +372,9 @@ class JobAgentHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path.rstrip("/") or "/"
         try:
-            if path.startswith("/api/workbench/") and self.headers.get("Origin"):
+            # Public HTTPS/proxy origins were checked by _host_is_allowed().
+            # The direct HTTP host/port check below applies only to local mode.
+            if not deploy_mode.enabled() and path.startswith("/api/workbench/") and self.headers.get("Origin"):
                 origin = urllib.parse.urlsplit(self.headers["Origin"])
                 expected = urllib.parse.urlsplit("http://" + self.headers.get("Host", ""))
                 if origin.scheme != expected.scheme or origin.hostname != expected.hostname or origin.port != expected.port:
