@@ -3,35 +3,83 @@
 from __future__ import annotations
 
 import io
+import unicodedata
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
 MAX_BYTES = 5 * 1024 * 1024
 MAX_TEXT = 60_000
-SUFFIXES = {".md", ".txt", ".docx", ".pdf"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+SUFFIXES = {".md", ".txt", ".docx", ".pdf"} | IMAGE_SUFFIXES
+
+
+def is_image_name(filename: str) -> bool:
+    return Path(filename).suffix.lower() in IMAGE_SUFFIXES
+
+
+class TextLayerUnusable(ValueError):
+    """PDF 没有可用文字层（乱码或纯图片）；调用方可改走图片识别。消息可直接展示。"""
 
 
 def extract_resume_text(filename: str, content: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix not in SUFFIXES:
-        raise ValueError("请选择 PDF、DOCX、Markdown 或 TXT 简历文件")
+        raise ValueError("请选择 PDF、DOCX、Markdown、TXT 或 PNG/JPG 图片简历文件")
     if not content:
         raise ValueError("简历文件为空，请重新选择")
     if len(content) > MAX_BYTES:
         raise ValueError("简历文件不能超过 5 MB")
+    if suffix in IMAGE_SUFFIXES:
+        raise TextLayerUnusable("这是一张图片简历，没有可直接读取的文字层。")
     if suffix == ".pdf":
         text = _pdf_text(content)
     elif suffix == ".docx":
         text = _docx_text(content)
     else:
         text = _plain_text(content)
-    text = text.replace("\x00", "").strip()
+    text = _fold_cjk_radicals(text.replace("\x00", "")).strip()
     if not text:
-        raise ValueError("未读取到简历文字；扫描图片 PDF 请先转为可复制文字的文件")
+        if suffix == ".pdf":
+            raise TextLayerUnusable("这份 PDF 里没有可读取的文字（可能是扫描图片）。")
+        raise ValueError("未读取到简历文字；请确认文件内容不是空白")
+    if looks_garbled(text):
+        raise (TextLayerUnusable if suffix == ".pdf" else ValueError)(GARBLED_MESSAGE)
     if len(text) > MAX_TEXT:
         raise ValueError("简历文字过长，请精简至 60000 字符以内")
     return text
+
+
+def _fold_cjk_radicals(text: str) -> str:
+    """PDF 常把「生」抽成康熙部首「⽣」（U+2F63）；折回通用汉字，否则搜索与核对都会对不上。"""
+    return "".join(
+        unicodedata.normalize("NFKC", char) if 0x2E80 <= ord(char) <= 0x2FDF else char for char in text
+    )
+
+
+GARBLED_MESSAGE = (
+    "这份文件的文字层是乱码（常见于字体没有标准编码的 PDF 导出），读出来的不是真实文字，"
+    "继续解析只会得到错误字段。请在原软件里用「打印 → 存储为 PDF」重新导出，或改传 DOCX / Markdown / TXT。"
+)
+
+
+def _plausible(char: str) -> bool:
+    code = ord(char)
+    return (
+        char.isascii()
+        or 0x4E00 <= code <= 0x9FFF or 0x3400 <= code <= 0x4DBF or 0xF900 <= code <= 0xFAFF  # 汉字
+        or 0x3000 <= code <= 0x303F or 0xFF00 <= code <= 0xFFEF  # 中日文标点、全角
+        or 0x00A0 <= code <= 0x024F  # 拉丁扩展（带重音字母）
+        or 0x2000 <= code <= 0x206F or 0x2190 <= code <= 0x27BF  # 通用标点、箭头、符号
+    )
+
+
+def looks_garbled(text: str, threshold: float = 0.2, minimum: int = 30) -> bool:
+    """字体缺少 ToUnicode 映射的 PDF 会抽出大量私有/异文字符；这类文本不能交给模型猜。"""
+    chars = [char for char in text if not char.isspace()]
+    if len(chars) < minimum:
+        return False
+    return sum(not _plausible(char) for char in chars) / len(chars) > threshold
 
 
 def _plain_text(content: bytes) -> str:

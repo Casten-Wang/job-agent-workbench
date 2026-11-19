@@ -11,6 +11,7 @@
   let authTimer = null, projectTimer = null, nextPage = null, tree = null;
   let knowledgeTimer = null, knowledgeEpoch = 0;
   let sourceMode = safeLocalGet(key('source')) === 'github' ? 'github' : 'manual';
+  let profileData = null, entryOrder = [], selectionForDraft = null, jobsEpoch = 0;
   const experienceFields = ['kind','name','organization','position','start','end','role','jd','context','contribution','outcome','source_text','portfolio_url'];
   const exp = field => $(`exp-${field.replaceAll('_','-')}`);
   const commands = [...document.querySelectorAll('[data-cu-command]')];
@@ -76,6 +77,7 @@
     $('experience-form').querySelectorAll('input,textarea,select').forEach(input=>{input.disabled=busy || project?.status==='preparing';});
     document.querySelectorAll('[name="cu-source-type"]').forEach(input=>{input.disabled=busy || project?.status==='preparing';});
     $('start-readiness').disabled = busy || project?.status !== 'ready';
+    $('generate').disabled = busy || project?.status === 'preparing';
     $('save-version').disabled = busy || !draft;
     $('regenerate').disabled = busy || !version;
     $('download').disabled = busy || !version;
@@ -107,14 +109,14 @@
     sourceMode=source; safeLocalSet(key('source'),source);
     $('github-panel').hidden=source!=='github'; $('experience-panel').hidden=source!=='manual';
     document.querySelectorAll('[name="cu-source-type"]').forEach(input=>{input.checked=input.value===source;});
-    $('connection').textContent=source==='manual' ? '自主导入（无需 GitHub）' : connected ? 'GitHub 已连接' : 'GitHub 项目';
+    $('connection').textContent=source==='manual' ? '个人资料' : connected ? 'GitHub 已连接' : 'GitHub 项目';
   }
   function message(text) { $('message').textContent = text; $('interview-message').textContent = text;window.OfferPilotWorkbench?.careerNotice(text); }
   function renderEmptyResumePreview() {
     const doc = $('markdown');
     if (!doc) return;
     doc.replaceChildren(
-      node('p', '右侧实时预览区已就绪。在左侧整理并确认项目经历后，点击“生成简历预览”，A4 排版效果会实时展示在这里。', 'hint')
+      node('p', '预览区已就绪。选好目标岗位、勾选经历后点击「生成简历草稿」，A4 排版效果会实时展示在这里。', 'hint')
     );
   }
   function clearResume() {
@@ -141,6 +143,173 @@
       return false;
     }
     return true;
+  }
+  // ---- 定制简历：选目标 → 带出个人资料 → 勾选与补充 → 生成核对 ----
+  function entryKey(section, index) { return `${section}:${index}`; }
+  function entryRow(item) { return (profileData && profileData[item.section] || [])[item.index] || {}; }
+  function entryHeading(item, row) {
+    return item.section === 'experiences'
+      ? [row.company, row.title].filter(Boolean).join(' · ')
+      : [row.name, row.role].filter(Boolean).join(' · ');
+  }
+  function entryPeriod(row) { return [row.start, row.end].filter(Boolean).join(' - '); }
+  function jobJd(job) {
+    const standard = job.standard || {};
+    const list = (value) => Array.isArray(value) ? value.filter(Boolean) : value ? [String(value)] : [];
+    const parts = [];
+    const responsibilities = list(standard.responsibilities);
+    if (responsibilities.length) parts.push('职责：' + responsibilities.join('；'));
+    const must = list(standard.must_have);
+    if (must.length) parts.push('必备条件：' + must.join('；'));
+    const nice = list(standard.nice_to_have);
+    if (nice.length) parts.push('加分项：' + nice.join('；'));
+    return parts.join('\n') || String(job.raw_text || job.description || job.jd || '');
+  }
+  function fillJobs() {
+    const select = $('job-select');
+    if (!select || !state.snapshot) return;
+    const jobs = Array.isArray(state.snapshot.jobs) ? state.snapshot.jobs : [];
+    const current = select.value;
+    const options = [node('option', '手动填写岗位')];
+    options[0].value = '';
+    jobs.slice(0, 300).forEach(job => {
+      const option = node('option', [job.company, job.title, job.city].filter(Boolean).join(' · ') || String(job.id));
+      option.value = String(job.id);
+      options.push(option);
+    });
+    select.replaceChildren(...options);
+    if (jobs.some(job => String(job.id) === current)) select.value = current;
+    $('job-empty').hidden = jobs.length > 0;
+    jobsEpoch = jobs.length;
+  }
+  function applyJob() {
+    const id = $('job-select').value;
+    if (!id || !state.snapshot) return;
+    const job = (state.snapshot.jobs || []).find(item => String(item.id) === id);
+    if (!job) return;
+    $('target-role').value = String(job.title || job.role || '');
+    $('target-jd').value = jobJd(job);
+    message(`已带入「${[job.company, job.title].filter(Boolean).join(' · ')}」的岗位信息；可以再补充。`);
+  }
+  async function loadProfileEntries(valid) {
+    const response = await fetch('/api/profile?mode=user', {cache: 'no-store'});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '个人资料读取失败，请重试。');
+    if (valid && !valid()) return null;
+    profileData = data.profile || data;
+    const complete = Boolean(profileData.truth_confirmed && profileData.basic && profileData.basic.name);
+    $('profile-gate').hidden = complete;
+    const available = new Map();
+    [['experiences', profileData.experiences], ['projects', profileData.projects]].forEach(([section, rows]) => {
+      (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+        if (!row || !(row.company || row.title || row.name)) return;
+        available.set(entryKey(section, index), {section, index});
+      });
+    });
+    const next = [];
+    // 先按用户已排好的顺序保留，再追加资料里新出现的条目。
+    entryOrder.forEach(item => {
+      const key = entryKey(item.section, item.index);
+      const entry = available.get(key);
+      if (!entry) return;
+      available.delete(key);
+      next.push({...entry, checked: item.checked !== false, note: item.note || ''});
+    });
+    available.forEach(entry => next.push({...entry, checked: true, note: ''}));
+    entryOrder = next;
+    renderEntries();
+    renderAutoIncluded();
+    return complete;
+  }
+  function renderAutoIncluded() {
+    const box = $('auto-summary');
+    if (!box) return;
+    box.replaceChildren();
+    if (!profileData) { box.append(node('p', '正在读取个人资料…', 'hint')); return; }
+    const education = (profileData.education || []).filter(row => row.school);
+    box.append(node('p', education.length
+      ? '教育背景：' + education.map(row => [row.school, row.major, row.degree].filter(Boolean).join(' · ')).join('；')
+      : '教育背景：个人资料里还没有填写。', 'hint'));
+    const skills = [...(profileData.skills?.tools || []), ...(profileData.skills?.strengths || [])];
+    box.append(node('p', skills.length ? '技能：' + skills.join('、') : '技能：个人资料里还没有填写。', 'hint'));
+    box.append(node('p', String(profileData.summary || '').trim() ? '个人简介：已填写。' : '个人简介：未填写（不影响生成）。', 'hint'));
+  }
+  function moveEntry(position, step) {
+    const target = position + step;
+    if (target < 0 || target >= entryOrder.length) return;
+    [entryOrder[position], entryOrder[target]] = [entryOrder[target], entryOrder[position]];
+    renderEntries();
+  }
+  function renderEntries() {
+    const list = $('entry-list');
+    if (!list) return;
+    list.replaceChildren();
+    $('entry-empty').hidden = entryOrder.length > 0;
+    const firstChecked = entryOrder.findIndex(item => item.checked !== false);
+    entryOrder.forEach((item, position) => {
+      const row = entryRow(item);
+      const card = node('div', undefined, 'career-task');
+      const label = node('label', undefined, 'cu-check');
+      const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = item.checked !== false;
+      checkbox.addEventListener('change', () => { item.checked = checkbox.checked; renderEntries(); });
+      const body = node('span', undefined, 'cu-entry-body');
+      body.append(node('strong', `${position + 1}. ${entryHeading(item, row) || '未命名条目'}`, 'cu-entry-title'));
+      const meta = node('span', undefined, 'cu-entry-meta');
+      meta.append(node('span', item.section === 'experiences' ? '工作 / 实习' : '项目', 'cu-entry-kind'));
+      const period = entryPeriod(row);
+      if (period) meta.append(node('span', period, 'cu-entry-period'));
+      if (position === firstChecked) meta.append(node('span', '本段会整理成要点', 'cu-entry-flag'));
+      body.append(meta);
+      const summary = String(row.summary || '').trim();
+      body.append(summary
+        ? node('span', summary.split('\n').slice(0, 2).join(' '), 'cu-entry-text')
+        : node('span', '还没有说明；补充一句后才能用这段生成。', 'cu-entry-text is-empty'));
+      label.append(checkbox, body);
+      card.append(label);
+      const actions = node('div', undefined, 'career-actions');
+      const up = node('button', '上移', 'button button-quiet'); up.type = 'button'; up.disabled = position === 0;
+      up.addEventListener('click', () => moveEntry(position, -1));
+      const down = node('button', '下移', 'button button-quiet'); down.type = 'button'; down.disabled = position === entryOrder.length - 1;
+      down.addEventListener('click', () => moveEntry(position, 1));
+      actions.append(up, down);
+      card.append(actions);
+      if (!summary) {
+        const field = node('div', undefined, 'form-field');
+        const inputId = `cu-entry-note-${position}`;
+        const fieldLabel = node('label', '补充一句（只用于这份简历）'); fieldLabel.htmlFor = inputId;
+        const input = node('input'); input.id = inputId; input.type = 'text'; input.maxLength = 400;
+        input.value = item.note || '';
+        input.placeholder = '这段经历你做了什么、交付了什么？';
+        input.addEventListener('input', () => { item.note = input.value; });
+        field.append(fieldLabel, input);
+        card.append(field);
+      }
+      list.append(card);
+    });
+  }
+  function selectedEntries() {
+    return entryOrder.filter(item => item.checked !== false)
+      .map(item => ({section: item.section, index: item.index, note: item.note || ''}));
+  }
+  async function generate(valid) {
+    const role = $('target-role').value.trim();
+    if (!role) throw new Error('请先选择或填写目标岗位。');
+    if (!$('generate-consent').checked) throw new Error('请先勾选确认真实性并允许模型整理这份简历。');
+    const items = selectedEntries();
+    if (!items.length) throw new Error('请至少勾选一段经历或项目。');
+    if (!await loadProfileEntries(valid)) {
+      message('个人资料还不完整：请填写姓名、确认真实性并保存，再回来生成简历。');
+      setStatus('请先补全个人资料并确认真实性，然后返回定制简历。', 'warn');
+      showView('profile');
+      return;
+    }
+    const value = await api('/profile-experience', {items, role, jd: $('target-jd').value, confirmed: true, model_consent: true});
+    if (!valid()) return;
+    selectionForDraft = items.map(({section, index}) => ({section, index}));
+    clearResume();
+    safeLocalSet(key('project'), value.project_id);
+    $('project-review').hidden = true;
+    await projectStatus(value.project_id, valid);
   }
   async function api(path, data) {
     const separator = path.includes('?') ? '&' : '?';
@@ -235,7 +404,7 @@
     const id=safeLocalGet(key('project'));
     if (id && /^project_[a-f0-9]{32}$/.test(id)) await projectStatus(id,valid);
     if (!valid() || sourceMode==='manual') {
-      if(valid() && !project)message('可直接填写实习、工作、项目或作品集，无需连接 GitHub。');
+      if(valid() && !project)message('经历已从个人资料带出：勾选要写进这份简历的条目，再点「生成简历草稿」。');
       return;
     }
     const data=await api('/github/status'); if (!valid()) return;
@@ -284,9 +453,14 @@
     $('claims').replaceChildren();
     value.claims.forEach(claim => {
       const row=node('div',undefined,'career-task'); const label=node('label',undefined,'cu-check'); const input=node('input'); input.type='checkbox'; input.value=claim.claim_id; input.checked=selected.has(claim.claim_id);
-      const body=node('span',claim.pillar ? `${claim.pillar}：${claim.text}` : claim.text);
-      const notes=[claim.fit_reason ? `岗位相关：${claim.fit_reason}` : '', claim.boundary ? `职责边界：${claim.boundary}` : '', claim.risk ? `待确认：${claim.risk}` : ''].filter(Boolean).join(' / ');
-      if (notes) body.append(node('small',notes,'career-claim-note'));
+      const body=node('span',undefined,'cu-claim-body');
+      body.append(node('span',claim.pillar ? `${claim.pillar}：${claim.text}` : claim.text,'cu-claim-text'));
+      [['岗位相关',claim.fit_reason],['职责边界',claim.boundary],['待确认',claim.risk]].forEach(([label,value])=>{
+        if (!value) return;
+        const line=node('span',undefined,'cu-claim-note');
+        line.append(node('span',label,'cu-claim-tag'), node('span',value,'cu-claim-note-text'));
+        body.append(line);
+      });
       label.append(input,body); row.append(label);
       const evidence=(value.evidence || []).filter(item=>claim.evidence_ids.includes(item.evidence_id));
       if (evidence.length) {
@@ -357,7 +531,10 @@
   }
   async function makeDraft(valid,materialId) {
     if (!await checkProfile(valid)) return;
-    const value=await api('/resume-drafts',materialId ? {material_id:materialId}:{session_id:sessionId}); if (!valid()) return;
+    const body=materialId ? {material_id:materialId}:{session_id:sessionId};
+    // 定制简历页只带出勾选的条目；面试复盘入口没有选择时沿用完整资料。
+    if (selectionForDraft) body.items=selectionForDraft;
+    const value=await api('/resume-drafts',body); if (!valid()) return;
     draft=value; renderResume(value.markdown); $('resume-preview').hidden=false; $('save-confirmed').checked=false;
     version=null; $('saved-resume').hidden=true; $('save-version').hidden=false; $('save-confirmed').closest('label').hidden=false;
     message('已根据导入材料和你确认的经历生成简历预览。请核对资料与表述后保存版本。');
@@ -394,6 +571,11 @@
     $('experience-form').reset(); $('extract-status').textContent=''; showSource(sourceMode);
     $('question').textContent=''; $('session-meta').textContent='在定制简历页选择并确认项目后开始。';
     $('save-version').hidden=false; $('save-confirmed').closest('label').hidden=false;
+    selectionForDraft=null; profileData=null; entryOrder=[];
+    if (personal) {
+      fillJobs();
+      loadProfileEntries().catch(error => { if (mode === state.mode) message(error.message); });
+    }
     controls(); if (personal) { warmKnowledge(); run(connectState); }
   }
   document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',resetMode));
@@ -455,6 +637,11 @@
   }));
   $('download-pdf').addEventListener('click',()=>{if(!version)return;const a=node('a');a.href=`/api/career-user/resumes/${version.resume_version_id}/pdf?mode=user&template=${resumeTemplate}`;a.download=`${version.resume_version_id}_${resumeTemplate}.pdf`;a.click();});
   $('print').addEventListener('click',()=>{if(version)window.open(`/api/career-user/resumes/${version.resume_version_id}/print?mode=user&template=${resumeTemplate}`,'_blank','noopener');});
+  $('job-select').addEventListener('change',applyJob);
+  $('job-select').addEventListener('focus',fillJobs);
+  window.addEventListener('offerpilot:state',()=>{if(!jobsEpoch)fillJobs();});
+  $('generate').addEventListener('click',()=>run(generate));
+  $('goto-profile').addEventListener('click',()=>showView('profile'));
   resetMode();
   window.OfferPilotCareer={
     refreshVersions:()=>{const ticket=epoch;return loadVersions(()=>ticket===epoch&&state.mode==='user');},

@@ -8,33 +8,34 @@
  * 1. Token：浅色
  * ========================================================================== */
 body.offer-ui:not(#wa-theme-off) {
-  --mj-canvas: #F4F5F8;
+  --mj-canvas: #F2F3F0;
   --mj-paper: #FFFFFF;
-  --mj-paper-2: #F8F9FC;
-  --mj-ink: #1E2746;
-  --mj-text: #202326;
-  --mj-text-2: #4A5168;
-  --mj-mute: #6B7289;
-  --mj-line: rgba(30, 39, 70, .10);
-  --mj-brand: #3B477A;
+  --mj-paper-2: #F7F8F5;
+  --mj-ink: #0D0E0C;
+  --mj-text: #0D0E0C;
+  --mj-text-2: #4A4C45;
+  --mj-mute: #65675F;
+  --mj-line: rgba(13, 14, 12, .10);
+  --mj-brand: #0D0E0C;
   --mj-brand-ink: #FFFFFF;
-  --mj-brand-soft: #E9ECF7;
-  --mj-spark: #C45B6C;
+  --mj-brand-soft: #E9EAE4;
+  --mj-spark: #9BC21A;
+  --mj-spark-ink: #0B0C08;
   --mj-good: #1E7A52;
   --mj-good-bg: #E7F4EC;
   --mj-warn: #8A5A00;
   --mj-warn-bg: #FBF1DC;
   --mj-bad: #B3374A;
   --mj-bad-bg: #FBE9EC;
-  --mj-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+  --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --mj-r-stage: 24px;
-  --mj-r-card: 14px;
-  --mj-r-inner: 12px;
-  --mj-r-control: 10px;
+  --mj-r-card: 12px;
+  --mj-r-inner: 10px;
+  --mj-r-control: 8px;
   --mj-r-tag: 8px;
-  --mj-shadow-card: 0 1px 0 rgba(30, 39, 70, .04), 0 14px 34px -20px rgba(30, 39, 70, .22);
-  --mj-shadow-float: 0 18px 44px -16px rgba(30, 39, 70, .30);
+  --mj-shadow-card: 0 1px 0 rgba(13, 14, 12, .04), 0 14px 34px -20px rgba(13, 14, 12, .22);
+  --mj-shadow-float: 0 18px 44px -16px rgba(13, 14, 12, .30);
   --mj-glass: rgba(255, 255, 255, .72);
 
   /* 旧 token 重映射：没改到的旧规则自动换色 */
@@ -61,7 +62,7 @@ body.offer-ui:not(#wa-theme-off) {
   --wa-focus: var(--mj-brand);
   --wa-elevated: var(--mj-paper);
   --focus: var(--mj-brand);
-  --focus-ring: rgba(59, 71, 122, .35);
+  --focus-ring: rgba(13, 14, 12, .35);
   --good: var(--mj-good);
   --good-bg: var(--mj-good-bg);
   --warn: var(--mj-warn);
@@ -73,12 +74,12 @@ body.offer-ui:not(#wa-theme-off) {
   --code-bg: var(--mj-paper-2);
   --series-1: var(--mj-brand);
   --series-2: var(--mj-spark);
-  --series-3: #8C9AD6;
-  --stage-0: #E3E7F6;
-  --stage-1: #C3CBEA;
-  --stage-2: #8C9AD6;
-  --stage-3: #5C69A6;
-  --stage-4: #3B477A;
+  --series-3: #8D8F87;
+  --stage-0: #E6E8E0;
+  --stage-1: #C9CCBF;
+  --stage-2: #9EA293;
+  --stage-3: #6E7266;
+  --stage-4: #0D0E0C;
   --chart-grid: var(--mj-line);
 }
 
@@ -86,34 +87,35 @@ body.offer-ui:not(#wa-theme-off) {
  * 2. Token：深色（用户显式选择）
  * ========================================================================== */
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) {
-  --mj-canvas: #111629;
-  --mj-paper: #1A2140;
-  --mj-paper-2: #202850;
-  --mj-ink: #ECEFFA;
-  --mj-text: #E3E6F3;
-  --mj-text-2: #AEB5D0;
-  --mj-mute: #8E96B8;
-  --mj-line: rgba(236, 239, 250, .12);
-  --mj-brand: #AEB9F0;
-  --mj-brand-ink: #111629;
-  --mj-brand-soft: #262F5C;
-  --mj-spark: #E58A98;
+  --mj-canvas: #0A0B09;
+  --mj-paper: #141512;
+  --mj-paper-2: #1B1C18;
+  --mj-ink: #F1F2EC;
+  --mj-text: #F1F2EC;
+  --mj-text-2: #B0B2A8;
+  --mj-mute: #9A9C92;
+  --mj-line: rgba(241, 242, 236, .12);
+  --mj-brand: #D2F53C;
+  --mj-brand-ink: #0B0C08;
+  --mj-brand-soft: #23251C;
+  --mj-spark: #D2F53C;
+  --mj-spark-ink: #0B0C08;
   --mj-good: #7FD9B0;
   --mj-good-bg: #123629;
   --mj-warn: #F2C777;
   --mj-warn-bg: #3A2C10;
   --mj-bad: #F29AA8;
   --mj-bad-bg: #3E1A22;
-  --mj-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+  --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --mj-r-stage: 24px;
-  --mj-r-card: 14px;
-  --mj-r-inner: 12px;
-  --mj-r-control: 10px;
+  --mj-r-card: 12px;
+  --mj-r-inner: 10px;
+  --mj-r-control: 8px;
   --mj-r-tag: 8px;
   --mj-shadow-card: 0 1px 0 rgba(0, 0, 0, .2), 0 14px 34px -20px rgba(0, 0, 0, .6);
   --mj-shadow-float: 0 18px 44px -16px rgba(0, 0, 0, .7);
-  --mj-glass: rgba(26, 33, 64, .72);
+  --mj-glass: rgba(20, 21, 18, .72);
 
   --bg: var(--mj-canvas);
   --surface: var(--mj-paper);
@@ -125,7 +127,7 @@ body.offer-ui:not(#wa-theme-off) {
   --line: var(--mj-line);
   --accent: var(--mj-ink);
   --accent-fill: var(--mj-ink);
-  --accent-ink: #111629;
+  --accent-ink: #0B0C08;
   --accent-soft: var(--mj-brand-soft);
   --pill: var(--mj-paper-2);
   --on-ink: var(--mj-brand-ink);
@@ -138,7 +140,7 @@ body.offer-ui:not(#wa-theme-off) {
   --wa-focus: var(--mj-brand);
   --wa-elevated: var(--mj-paper);
   --focus: var(--mj-brand);
-  --focus-ring: rgba(174, 185, 240, .35);
+  --focus-ring: rgba(210, 245, 60, .4);
   --good: var(--mj-good);
   --good-bg: var(--mj-good-bg);
   --warn: var(--mj-warn);
@@ -150,12 +152,12 @@ body.offer-ui:not(#wa-theme-off) {
   --code-bg: var(--mj-paper-2);
   --series-1: var(--mj-brand);
   --series-2: var(--mj-spark);
-  --series-3: #7E8BD0;
-  --stage-0: #2A3366;
-  --stage-1: #3F4A85;
-  --stage-2: #5C69A6;
-  --stage-3: #8C9AD6;
-  --stage-4: #C3CBEA;
+  --series-3: #6A6C64;
+  --stage-0: #2A2C26;
+  --stage-1: #44463E;
+  --stage-2: #6B6E63;
+  --stage-3: #A3A59C;
+  --stage-4: #F1F2EC;
   --chart-grid: var(--mj-line);
 }
 
@@ -164,34 +166,35 @@ body.offer-ui:not(#wa-theme-off) {
  * ========================================================================== */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) {
-    --mj-canvas: #111629;
-    --mj-paper: #1A2140;
-    --mj-paper-2: #202850;
-    --mj-ink: #ECEFFA;
-    --mj-text: #E3E6F3;
-    --mj-text-2: #AEB5D0;
-    --mj-mute: #8E96B8;
-    --mj-line: rgba(236, 239, 250, .12);
-    --mj-brand: #AEB9F0;
-    --mj-brand-ink: #111629;
-    --mj-brand-soft: #262F5C;
-    --mj-spark: #E58A98;
+    --mj-canvas: #0A0B09;
+    --mj-paper: #141512;
+    --mj-paper-2: #1B1C18;
+    --mj-ink: #F1F2EC;
+    --mj-text: #F1F2EC;
+    --mj-text-2: #B0B2A8;
+    --mj-mute: #9A9C92;
+    --mj-line: rgba(241, 242, 236, .12);
+    --mj-brand: #D2F53C;
+    --mj-brand-ink: #0B0C08;
+    --mj-brand-soft: #23251C;
+    --mj-spark: #D2F53C;
+    --mj-spark-ink: #0B0C08;
     --mj-good: #7FD9B0;
     --mj-good-bg: #123629;
     --mj-warn: #F2C777;
     --mj-warn-bg: #3A2C10;
     --mj-bad: #F29AA8;
     --mj-bad-bg: #3E1A22;
-    --mj-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+    --mj-serif: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
     --mj-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     --mj-r-stage: 24px;
-    --mj-r-card: 14px;
-    --mj-r-inner: 12px;
-    --mj-r-control: 10px;
+    --mj-r-card: 12px;
+    --mj-r-inner: 10px;
+    --mj-r-control: 8px;
     --mj-r-tag: 8px;
     --mj-shadow-card: 0 1px 0 rgba(0, 0, 0, .2), 0 14px 34px -20px rgba(0, 0, 0, .6);
     --mj-shadow-float: 0 18px 44px -16px rgba(0, 0, 0, .7);
-    --mj-glass: rgba(26, 33, 64, .72);
+    --mj-glass: rgba(20, 21, 18, .72);
 
     --bg: var(--mj-canvas);
     --surface: var(--mj-paper);
@@ -203,7 +206,7 @@ body.offer-ui:not(#wa-theme-off) {
     --line: var(--mj-line);
     --accent: var(--mj-ink);
     --accent-fill: var(--mj-ink);
-    --accent-ink: #111629;
+    --accent-ink: #0B0C08;
     --accent-soft: var(--mj-brand-soft);
     --pill: var(--mj-paper-2);
     --on-ink: var(--mj-brand-ink);
@@ -216,7 +219,7 @@ body.offer-ui:not(#wa-theme-off) {
     --wa-focus: var(--mj-brand);
     --wa-elevated: var(--mj-paper);
     --focus: var(--mj-brand);
-    --focus-ring: rgba(174, 185, 240, .35);
+    --focus-ring: rgba(210, 245, 60, .4);
     --good: var(--mj-good);
     --good-bg: var(--mj-good-bg);
     --warn: var(--mj-warn);
@@ -228,12 +231,12 @@ body.offer-ui:not(#wa-theme-off) {
     --code-bg: var(--mj-paper-2);
     --series-1: var(--mj-brand);
     --series-2: var(--mj-spark);
-    --series-3: #7E8BD0;
-    --stage-0: #2A3366;
-    --stage-1: #3F4A85;
-    --stage-2: #5C69A6;
-    --stage-3: #8C9AD6;
-    --stage-4: #C3CBEA;
+    --series-3: #6A6C64;
+    --stage-0: #2A2C26;
+    --stage-1: #44463E;
+    --stage-2: #6B6E63;
+    --stage-3: #A3A59C;
+    --stage-4: #F1F2EC;
     --chart-grid: var(--mj-line);
   }
 }
@@ -244,15 +247,15 @@ body.offer-ui:not(#wa-theme-off) {
 body.offer-ui:not(#wa-theme-off) {
   color: var(--mj-text);
   background: var(--mj-canvas);
-  font-family: -apple-system, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--ui-font);
   font-size: 14px;
   line-height: 1.6;
   letter-spacing: 0;
 }
 
 body.offer-ui:not(#wa-theme-off) .view-title {
-  font-family: var(--mj-serif);
-  font-size: 36px;
+  
+  font-size: 40px;
   font-weight: 600;
   line-height: 1.15;
   letter-spacing: -.01em;
@@ -260,8 +263,8 @@ body.offer-ui:not(#wa-theme-off) .view-title {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-title {
-  font-family: var(--mj-serif);
-  font-size: 26px;
+  
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -.01em;
 }
@@ -356,8 +359,8 @@ body.offer-ui:not(#wa-theme-off) .panel-head {
 
 body.offer-ui:not(#wa-theme-off) .panel h3,
 body.offer-ui:not(#wa-theme-off) .panel-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.35;
@@ -372,7 +375,6 @@ body.offer-ui:not(#wa-theme-off) .panel-note {
 }
 
 body.offer-ui:not(#wa-theme-off) .panel-count {
-  font-family: var(--mj-mono);
   font-size: 13px;
   font-weight: 600;
   color: var(--mj-text-2);
@@ -452,15 +454,38 @@ body.offer-ui:not(#wa-theme-off) .button-danger:hover:not(:disabled) {
 }
 
 /* workbench-agent.css:385 给主按钮设了 background: var(--ink) / color: var(--bg)，
-   选择器带两个 :not()，特异性更高；重复 :not() 抬高一级覆盖，保证主按钮用墨靛与白字。 */
+   选择器带两个 :not()，特异性更高；重复 :not() 抬高一级覆盖。
+   第 3 轮信号规范：浅色近黑底白字，深色信号底近黑字；悬停只做同一色系的明度变化。 */
 body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button:not(.button-quiet):not(.button-danger) {
   background: var(--mj-ink);
   color: var(--mj-brand-ink);
 }
 
 body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button:not(.button-quiet):not(.button-danger):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mj-ink) 88%, var(--mj-paper));
+  color: var(--mj-brand-ink);
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button:not(.button-quiet):not(.button-danger) {
   background: var(--mj-brand);
   color: var(--mj-brand-ink);
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button:not(.button-quiet):not(.button-danger):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mj-brand) 88%, var(--mj-ink));
+  color: var(--mj-brand-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button:not(.button-quiet):not(.button-danger) {
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+  }
+
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button:not(.button-quiet):not(.button-danger):hover:not(:disabled) {
+    background: color-mix(in srgb, var(--mj-brand) 88%, var(--mj-ink));
+    color: var(--mj-brand-ink);
+  }
 }
 
 body.offer-ui:not(#wa-theme-off) .button-row {
@@ -587,7 +612,7 @@ body.offer-ui:not(#wa-theme-off) .form-field {
 body.offer-ui:not(#wa-theme-off) .form-field > label,
 body.offer-ui:not(#wa-theme-off) .form-field > .form-label {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -598,7 +623,7 @@ body.offer-ui:not(#wa-theme-off) .form-field :is(input:not([type="file"]):not([t
   border-radius: var(--mj-r-control);
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
@@ -608,7 +633,7 @@ body.offer-ui:not(#wa-theme-off) input:not([type="checkbox"]):not([type="radio"]
   border-radius: var(--mj-r-control);
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
@@ -616,7 +641,7 @@ body.offer-ui:not(#wa-theme-off) :is(input:not([type="checkbox"]):not([type="rad
   border-radius: var(--mj-r-control);
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(input, select, textarea)::placeholder {
@@ -650,7 +675,7 @@ body.offer-ui:not(#wa-theme-off) .hint {
 
 body.offer-ui:not(#wa-theme-off) .sg-disabled-reason {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -699,7 +724,7 @@ body.offer-ui:not(#wa-theme-off) tbody td {
   padding: 12px;
   border-bottom: 1px solid var(--mj-line);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
   vertical-align: middle;
 }
 
@@ -742,7 +767,6 @@ body.offer-ui:not(#wa-theme-off) .data-table caption {
 }
 
 body.offer-ui:not(#wa-theme-off) :is(.sg-num, .data-table td.is-num, td.is-num) {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -813,8 +837,7 @@ body.offer-ui:not(#wa-theme-off) .action-result .result-title {
 body.offer-ui:not(#wa-theme-off) .action-result .card-meta {
   margin-top: 4px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
-  font-family: var(--mj-mono);
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #status.status {
@@ -897,7 +920,7 @@ body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .brand-rule {
 }
 
 body.offer-ui:not(#wa-theme-off) .brand-title {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
@@ -935,24 +958,25 @@ body.offer-ui:not(#wa-theme-off) .sidebar .nav-item:hover {
   color: var(--mj-ink);
 }
 
+/* 信号语言：选中项是唯一的深色块（浅色近黑底白字，深色信号底近黑字） */
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active {
-  background: var(--mj-brand-soft);
-  color: var(--mj-ink);
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--mj-spark);
+  box-shadow: none;
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active {
-  background: var(--mj-brand-soft);
-  color: var(--mj-ink);
-  box-shadow: inset 3px 0 0 var(--mj-spark);
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  box-shadow: none;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active {
-    background: var(--mj-brand-soft);
-    color: var(--mj-ink);
-    box-shadow: inset 3px 0 0 var(--mj-spark);
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+    box-shadow: none;
   }
 }
 
@@ -963,7 +987,6 @@ body.offer-ui:not(#wa-theme-off) .nav__hl {
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-index {
-  font-family: var(--mj-mono);
   font-size: 12px;
   color: var(--mj-mute);
   font-variant-numeric: tabular-nums;
@@ -971,11 +994,13 @@ body.offer-ui:not(#wa-theme-off) .sidebar .nav-index {
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index {
-  color: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  opacity: .72;
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index {
-  color: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  opacity: .72;
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-text small {
@@ -984,7 +1009,7 @@ body.offer-ui:not(#wa-theme-off) .sidebar .nav-text small {
 }
 
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-text small {
-  color: var(--mj-text-2);
+  color: color-mix(in srgb, var(--mj-brand-ink) 76%, transparent);
 }
 
 body.offer-ui:not(#wa-theme-off) .hr-nav-unread {
@@ -993,8 +1018,7 @@ body.offer-ui:not(#wa-theme-off) .hr-nav-unread {
   padding: 0 5px;
   border-radius: var(--mj-r-tag);
   background: var(--mj-spark);
-  color: #FFFFFF;
-  font-family: var(--mj-mono);
+  color: var(--mj-spark-ink);
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
@@ -1058,8 +1082,8 @@ body.offer-ui:not(#wa-theme-off) .topbar {
 }
 
 body.offer-ui:not(#wa-theme-off) .topbar h1 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--mj-ink);
@@ -1114,7 +1138,7 @@ body.offer-ui:not(#wa-theme-off) .home-head {
 }
 
 body.offer-ui:not(#wa-theme-off) .sg-home-day {
-  font-family: var(--mj-serif);
+  
   font-size: 140px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1125,7 +1149,7 @@ body.offer-ui:not(#wa-theme-off) .sg-home-day {
 
 body.offer-ui:not(#wa-theme-off) .home-today .home-date {
   color: var(--mj-text-2);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: .01em;
 }
@@ -1148,7 +1172,7 @@ body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
   padding: 22px 24px;
   border-radius: var(--mj-r-stage);
   background: var(--mj-ink);
-  color: #ECEFFA;
+  color: var(--mj-canvas);
   font-size: 16px;
   font-weight: 500;
   letter-spacing: 0;
@@ -1164,8 +1188,8 @@ body.offer-ui:not(#wa-theme-off) .home-today .home-lede::before {
   height: 8px;
   margin: 0 0 16px;
   border-radius: 50%;
-  background: rgba(236, 239, 250, .30);
-  box-shadow: 14px 0 0 rgba(236, 239, 250, .30), 28px 0 0 rgba(236, 239, 250, .30);
+  background: rgba(255, 255, 255, .30);
+  box-shadow: 14px 0 0 rgba(255, 255, 255, .30), 28px 0 0 rgba(255, 255, 255, .30);
 }
 
 body.offer-ui:not(#wa-theme-off) .home-today .home-lede::after {
@@ -1180,15 +1204,15 @@ body.offer-ui:not(#wa-theme-off) .home-today .home-lede::after {
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
-  background: #1A2140;
-  color: #ECEFFA;
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
   box-shadow: inset 0 0 0 1px var(--mj-line);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) .home-today .home-lede {
-    background: #1A2140;
-    color: #ECEFFA;
+    background: var(--mj-paper-2);
+    color: var(--mj-text);
     box-shadow: inset 0 0 0 1px var(--mj-line);
   }
 }
@@ -1224,7 +1248,7 @@ body.offer-ui:not(#wa-theme-off) .sg-home-task-sub {
 body.offer-ui:not(#wa-theme-off) .home-task-count {
   min-width: 76px;
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
+  
   font-size: 40px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1274,8 +1298,8 @@ body.offer-ui:not(#wa-theme-off) .sg-side-head {
 }
 
 body.offer-ui:not(#wa-theme-off) .sg-side-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 15px;
+  
+  font-size: 14px;
   font-weight: 600;
   color: var(--mj-ink);
   letter-spacing: 0;
@@ -1296,8 +1320,7 @@ body.offer-ui:not(#wa-theme-off) .sg-side-row {
 
 body.offer-ui:not(#wa-theme-off) .sg-side-num {
   color: var(--mj-ink);
-  font-family: var(--mj-mono);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1311,7 +1334,6 @@ body.offer-ui:not(#wa-theme-off) .sg-activity-row {
 
 body.offer-ui:not(#wa-theme-off) .sg-activity-time {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1350,7 +1372,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-conversation > .wa-section-head
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-section-head h3 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
@@ -1407,13 +1429,12 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-conversation {
 
 body.offer-ui:not(#wa-theme-off) #view-agent #wa-status {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-notice {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-message {
@@ -1450,8 +1471,8 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-message-assistant strong::befor
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-welcome h4 {
-  font-family: var(--mj-serif);
-  font-size: 24px;
+  
+  font-size: 20px;
   color: var(--mj-ink);
 }
 
@@ -1472,7 +1493,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-prompts button {
   border: 1px solid var(--mj-line);
   background: var(--mj-paper);
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1562,11 +1583,11 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-job {
   border: 1px solid var(--mj-line);
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-job h4 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
@@ -1583,11 +1604,11 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-approval {
   border-radius: var(--mj-r-inner);
   background: var(--mj-brand-soft);
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-approval h4 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   color: var(--mj-ink);
 }
@@ -1598,7 +1619,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-progress {
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-steps {
@@ -1620,7 +1641,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-results {
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-results > label,
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form > label:not(.wa-check) {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form:not([hidden]) {
@@ -1632,23 +1653,23 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form:not([hidden]) {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-material-form h4 {
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   color: var(--mj-ink);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-check {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-document {
   color: var(--mj-text);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-document :is(h1, h2, h3) {
-  font-family: var(--mj-serif);
+  
   color: var(--mj-ink);
 }
 
@@ -1663,7 +1684,7 @@ body.offer-ui:not(#wa-theme-off) #view-agent .wa-quiet-dots i {
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-tool {
   border-bottom: 1px solid var(--mj-line);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-agent .wa-tool[data-state="running"] > span:last-child {
@@ -1706,14 +1727,13 @@ body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary {
   padding: 12px 18px;
   background: var(--mj-paper-2);
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
+  
   font-size: 16px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .sg-fold > summary::after {
   color: var(--mj-mute);
-  font-family: system-ui, sans-serif;
   font-size: 12px;
   font-weight: 500;
 }
@@ -1757,14 +1777,14 @@ body.offer-ui:not(#wa-theme-off) #view-data .belt-node {
   min-width: 92px;
   padding: 10px 12px;
   border: 1px solid var(--mj-line);
-  border-radius: var(--mj-r-inner);
+  border-radius: var(--mj-r-card);
   background: var(--mj-paper-2);
   color: var(--mj-text-2);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .belt-name {
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1772,7 +1792,6 @@ body.offer-ui:not(#wa-theme-off) #view-data .belt-name {
 
 body.offer-ui:not(#wa-theme-off) #view-data .belt-count,
 body.offer-ui:not(#wa-theme-off) #view-data .pipeline-count strong {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
   color: var(--mj-ink);
 }
@@ -1792,14 +1811,14 @@ body.offer-ui:not(#wa-theme-off) #view-data .pipeline-desc {
 
 body.offer-ui:not(#wa-theme-off) #view-data .focus-line {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-data .code-block {
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* ==========================================================================
@@ -1842,6 +1861,13 @@ body.offer-ui:not(#wa-theme-off) :is(input, select, textarea):focus-visible {
   outline-offset: 1px;
 }
 
+/* 切页时脚本把焦点交给页面标题（tabindex="-1"，不在 Tab 顺序里），
+   标题不是可操作控件，不画聚焦框，否则看起来像报错。
+   其它元素的键盘聚焦外框保持不变。 */
+body.offer-ui:not(#wa-theme-off) :is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* 切页动画沿用既有 sg-screen-in，只把时长收到 280ms */
 body.offer-ui:not(#wa-theme-off) .views > .view:not([hidden]) {
   animation-duration: 280ms;
@@ -1877,4 +1903,39 @@ body.offer-ui:not(#wa-theme-off) .home-task {
 /* 设置页底部的流水线概览、传送带与外部事件沿用旧样式里 10–11px 的辅助字，统一抬到 12px 下限 */
 body.offer-ui:not(#wa-theme-off) #view-data :is(.pipeline-index, .pipeline-count span, .external-event-detail, .external-event-time, .belt-index, .belt-unit, .kpi-label) {
   font-size: 12px;
+}
+
+
+/* ==========================================================================
+ * 信号语言收口：信号色只做标记，浅色下不做正文/链接文字色
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) .pipeline-index,
+body.offer-ui:not(#wa-theme-off) .jobs-manual-entry > summary::before,
+body.offer-ui:not(#wa-theme-off) .offerpilot-details summary::before,
+body.offer-ui:not(#wa-theme-off) .advanced-panel summary::before {
+  color: var(--mj-text);
+}
+
+body.offer-ui:not(#wa-theme-off) .offerpilot-step-index {
+  color: var(--mj-mute);
+  opacity: 1;
+}
+
+/* 旧页签：浅色近黑底白字，深色信号底近黑字 */
+body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active {
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+  }
 }

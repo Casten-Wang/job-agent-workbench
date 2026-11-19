@@ -42,12 +42,12 @@ class SignalBaseStylesTests(unittest.TestCase):
                 self.assertIn(f"body.offer-ui:not(#wa-theme-off) {selector}", self.css)
 
     def test_tokens_are_calibrated_for_light_and_dark(self):
-        self.assertIn("--ink-2: #55574F", self.css)
-        self.assertIn("--mute: #8D8F87", self.css)
-        self.assertIn("--line: rgba(13, 14, 12, .08)", self.css)
+        self.assertIn("--ink-2: #4A4C45", self.css)
+        self.assertIn("--mute: #6B6D65", self.css)
+        self.assertIn("--line: rgba(13, 14, 12, .10)", self.css)
         self.assertIn(':root[data-theme="dark"] body.offer-ui:not(#wa-theme-off)', self.css)
-        self.assertIn("--ink-2: #A3A59C", self.css)
-        self.assertIn("--mute: #6A6C64", self.css)
+        self.assertIn("--ink-2: #B0B2A8", self.css)
+        self.assertIn("--mute: #9A9C92", self.css)
 
     def test_status_becomes_a_floating_toast(self):
         status = _between(self.css, "#status.status {", "}")
@@ -62,7 +62,9 @@ class SignalBaseStylesTests(unittest.TestCase):
         self.assertIn("max-width: 1000px", home)
         day = _between(self.css, ".sg-home-day {", "}")
         self.assertIn("font-size: 140px", day)
-        self.assertIn("var(--sg-num)", day)
+        # 天数不再用等宽数字字体，强调靠字号 + tabular-nums
+        self.assertIn("font-variant-numeric: tabular-nums", day)
+        self.assertNotIn("var(--sg-num)", day)
 
     def test_settings_system_board_is_collapsed(self):
         self.assertIn("#view-data .sg-fold > summary", self.css)

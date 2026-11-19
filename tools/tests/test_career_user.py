@@ -145,3 +145,106 @@ class CareerUserBridgeTests(unittest.TestCase):
             self.assertIn('/career-resume.css',html)
             with self.assertRaises(backend.ApiError):
                 personal.print_document('/api/career-user/resumes/resume_test/print',{'mode':'demo'})
+
+
+class ResumeProfileEntryTests(unittest.TestCase):
+    """定制简历从个人资料带出经历：条目选择、字段映射与草稿裁剪。"""
+
+    PROFILE = {
+        "truth_confirmed": True,
+        "basic": {"name": "虚构候选人"},
+        "education": [],
+        "skills": {"tools": [], "strengths": []},
+        "experiences": [
+            {"company": "虚构公司甲", "title": "产品实习生", "start": "2026.06", "end": "2026.08",
+             "summary": "负责新用户引导改版，访谈 12 位用户。"},
+            {"company": "虚构公司乙", "title": "运营专员", "start": "2025.01", "end": "2025.06",
+             "summary": "维护社群。"},
+        ],
+        "projects": [
+            {"name": "虚构项目一", "role": "主设计", "start": "2026.01", "end": "2026.03",
+             "summary": "设计排课工具。"},
+        ],
+    }
+
+    def _dispatch(self, payload, profile=None, upstream=None):
+        with patch.object(backend, 'get_store'), \
+                patch.object(backend, 'profile_public', return_value=profile or self.PROFILE), \
+                patch.object(personal, 'upstream', return_value=upstream or {'project_id': 'project_test'}) as mocked:
+            result, status = personal.dispatch('POST', '/api/career-user/profile-experience', {'mode': 'user'}, payload)
+        return result, status, mocked
+
+    def test_profile_entries_compose_one_experience_import(self):
+        result, status, upstream = self._dispatch({
+            'items': [{'section': 'experiences', 'index': 0}, {'section': 'projects', 'index': 0}],
+            'role': '产品经理', 'jd': '负责需求分析', 'confirmed': True, 'model_consent': True,
+        })
+        self.assertEqual(status, 202)
+        self.assertEqual(result['project_id'], 'project_test')
+        self.assertEqual(upstream.call_args.args[1], '/v1/career/experience-import')
+        payload = upstream.call_args.args[2]
+        self.assertEqual(payload['kind'], 'internship')
+        self.assertEqual(payload['name'], '产品实习生')
+        self.assertEqual(payload['organization'], '虚构公司甲')
+        self.assertEqual(payload['position'], '产品实习生')
+        self.assertEqual(payload['role'], '产品经理')
+        self.assertIn('访谈 12 位用户', payload['context'])
+        self.assertIn('项目经历：虚构项目一', payload['source_text'])
+        self.assertIn('工作 / 实习经历：虚构公司甲 · 产品实习生（2026.06 - 2026.08）', payload['source_text'])
+        self.assertTrue(payload['confirmed'] and payload['model_consent'])
+
+    def test_profile_experience_requires_consent_role_and_known_entries(self):
+        base = {'items': [{'section': 'experiences', 'index': 0}], 'role': '产品经理',
+                'confirmed': True, 'model_consent': True}
+        with patch.object(backend, 'get_store'), \
+                patch.object(backend, 'profile_public', return_value=self.PROFILE), \
+                patch.object(personal, 'upstream') as upstream:
+            for change in ({'confirmed': False}, {'model_consent': False}, {'role': ' '},
+                           {'items': []}, {'items': [{'section': 'experiences', 'index': 9}]},
+                           {'items': [{'section': 'experiences', 'index': 0, 'note': '长' * 401}]},
+                           {'items': [{'section': 'photo', 'index': 0}]}):
+                with self.subTest(change=list(change)):
+                    with self.assertRaises(backend.ApiError):
+                        personal.dispatch('POST', '/api/career-user/profile-experience',
+                                          {'mode': 'user'}, {**base, **change})
+            with self.assertRaises(backend.ApiError):
+                personal.dispatch('POST', '/api/career-user/profile-experience', {'mode': 'demo'}, base)
+            upstream.assert_not_called()
+
+    def test_entry_note_backfills_missing_summary(self):
+        profile = dict(self.PROFILE)
+        profile['experiences'] = [{'company': '虚构公司丙', 'title': '实习生', 'start': '', 'end': '', 'summary': ''}]
+        _, _, upstream = self._dispatch({
+            'items': [{'section': 'experiences', 'index': 0, 'note': '整理竞品文档'}],
+            'role': '产品经理', 'confirmed': True, 'model_consent': True,
+        }, profile=profile)
+        payload = upstream.call_args.args[2]
+        self.assertEqual(payload['kind'], 'internship')
+        self.assertEqual(payload['context'], '整理竞品文档')
+        self.assertIn('本人补充：整理竞品文档', payload['source_text'])
+
+    def test_entry_without_summary_or_note_is_rejected(self):
+        profile = dict(self.PROFILE)
+        profile['projects'] = [{'name': '虚构项目二', 'role': '', 'start': '', 'end': '', 'summary': ''}]
+        with patch.object(backend, 'get_store'), \
+                patch.object(backend, 'profile_public', return_value=profile), \
+                patch.object(personal, 'upstream') as upstream:
+            with self.assertRaises(backend.ApiError):
+                personal.dispatch('POST', '/api/career-user/profile-experience', {'mode': 'user'}, {
+                    'items': [{'section': 'projects', 'index': 0}],
+                    'role': '产品经理', 'confirmed': True, 'model_consent': True,
+                })
+            upstream.assert_not_called()
+
+    def test_resume_draft_can_be_limited_to_checked_entries(self):
+        with patch.object(backend, 'get_store'), \
+                patch.object(backend, 'profile_public', return_value=self.PROFILE), \
+                patch.object(personal, 'upstream', return_value={'markdown': '# 虚构候选人'}) as upstream:
+            personal.dispatch('POST', '/api/career-user/resume-drafts', {'mode': 'user'}, {
+                'material_id': 'material_test',
+                'items': [{'section': 'projects', 'index': 0}, {'section': 'experiences', 'index': 1}],
+            })
+        sent = upstream.call_args.args[2]
+        self.assertEqual([row['company'] for row in sent['profile']['experiences']], ['虚构公司乙'])
+        self.assertEqual([row['name'] for row in sent['profile']['projects']], ['虚构项目一'])
+        self.assertNotIn('items', sent)

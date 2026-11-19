@@ -114,7 +114,9 @@ class HomeMarkupTests(unittest.TestCase):
             with self.subTest(selector=selector):
                 self.assertIn(selector, self.theme)
         block = self.theme[self.theme.index("/* 首页：今天要做的事"):]
-        self.assertIn('font-family: "Songti SC"', block)
+        # 2026-11 排版统一：首页大标题也走唯一无衬线栈
+        self.assertIn("font-family: var(--ui-font)", block)
+        self.assertNotIn('"Songti SC"', block)
         self.assertNotIn("border-radius", block)
         self.assertNotIn("box-shadow", block)
         self.assertIn("@media (max-width: 560px)", block)

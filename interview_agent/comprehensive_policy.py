@@ -409,6 +409,13 @@ def qa_reserve_seconds(duration_minutes: int) -> int:
     return 300 if duration_minutes >= 45 else 180
 
 
+MAX_WINDOW_SECONDS = 600  # 单个作答窗口最多计 10 分钟：人走开、页面放着不管，不能把一整天算进「有效作答」
+
+
+def _window_seconds(opened_at: Any, now: float) -> float:
+    return min(max(0.0, float(now) - float(opened_at)), float(MAX_WINDOW_SECONDS))
+
+
 def create_timer_state(duration_minutes: int) -> dict[str, Any]:
     """初始化有效作答计时状态。"""
     return {
@@ -436,8 +443,7 @@ def freeze_candidate_window(timer: dict[str, Any], now: float, reason: str) -> d
     updated = dict(timer)
     opened_at = updated.get("window_opened_at")
     if isinstance(opened_at, (int, float)):
-        delta = max(0.0, float(now) - float(opened_at))
-        updated["active_elapsed_seconds"] = float(updated.get("active_elapsed_seconds", 0.0)) + delta
+        updated["active_elapsed_seconds"] = float(updated.get("active_elapsed_seconds", 0.0)) + _window_seconds(opened_at, now)
         updated["window_opened_at"] = None
     updated["frozen_reason"] = reason
     if reason == "paused":
@@ -450,7 +456,7 @@ def get_active_elapsed_seconds(timer: dict[str, Any], now: float | None = None) 
     base = float(timer.get("active_elapsed_seconds", 0.0))
     opened_at = timer.get("window_opened_at")
     if now is not None and isinstance(opened_at, (int, float)) and timer.get("frozen_reason") is None:
-        base += max(0.0, float(now) - float(opened_at))
+        base += _window_seconds(opened_at, now)
     return int(round(base))
 
 

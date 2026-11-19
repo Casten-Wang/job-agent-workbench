@@ -103,18 +103,41 @@ POST /api/action
 {"action": "import-profile-cv", "mode": "user", "filename": "resume.pdf", "content_base64": "<文件原始字节的 Base64>"}
 ```
 
-上传文件调用（新增，可选字段 `filename`、`content_base64`）：
+页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT 和 PNG/JPG/WEBP 图片（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后发送给已配置模型的 `profile_extract` 阶段解析，不保存原始文件。加密 PDF 暂不支持。PDF 文字层不可用（字体无标准编码导致的乱码，或纯图片扫描件）时，后端用 macOS 自带 `sips` 把前 6 页渲染成图片，交给已配置的多模态模型逐字转写（`web/resume_vision.py`，不保存图片），转写文字再走同一条抽取链路，响应 `text_origin` 为 `image`；图片简历（PNG/JPG/WEBP，一次一张、宽度超过 1785 像素会缩小、不超过 4000 万像素）直接走同一条读图转写，响应会提示多页简历请改传 PDF；没有渲染器或模型不支持图片时，返回原先的「文字层乱码/无文字，请重新导出」提示并附上失败原因。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
 
-```http
-POST /api/action
-{"action": "import-profile-cv", "mode": "user", "filename": "resume.pdf", "content_base64": "<文件原始字节的 Base64>"}
-```
+### 3.1 长简历分段与原文核对
 
-页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后，完整文字发送给已配置的 `step-5-preview` Agent，经严格结构校验与原文核对后返回建议，不保存原始文件。加密或扫描图片 PDF 暂不支持，请先转成可复制文字的文件。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
+- 60000 字以内的简历照常一次解析；超过约 7000 字时按空行切分为每段不超过 6000 字的若干段，最多 3 路并发解析，再合并基本信息、技能与经历条目（按原文去重，每类最多 20 条）。
+- 某一段的输出被截断或未通过校验时，程序把该段对半再试（最多 3 层）；仍失败只影响该段，其余段的结果照常返回。
+- 每条教育/工作/项目记录以模型给出的「开头标题行」为锚点，在原文中定位并截取整段内容作为描述；标题行与该条的字段都在这一段原文中核对，核对不到的字段留空并提示。
+- 核对时忽略排版差异：空白、列表符号、软连字符、行尾连字符断行、全角/半角与大小写都不影响匹配，PDF 换行或全角数字因此不会让整条记录被丢弃。
+- 仍无法定位的条目和失败段落的原文放进 `unmatched_sections`，供用户对照手动补全；不引入任何「失败后按本地正则自动填字段」的回退。
 
-返回 `profile` 建议、`filename`、`source_text` 解析原文、`warnings` 和 `generation`。识别基本信息、求职意向、教育、工作/实习、项目经历、技能和简介；经历按条目附原文片段进行服务端核对，无法核对的字段留空并提示，不补造日期或成果。页面更新识别到的字段与经历列表，未识别的部分保留原资料，取消真实性勾选；**不会自动保存**。用户可逐项编辑，页面要求核对并勾选真实性确认后，仍通过 `save-profile` 保存。Agent 超时、不可用或返回无效结果时提示重试，原表单与已保存资料不变。
+### 3.2 响应字段（只增不改）
 
-个人 Agent 内部接口为鉴权的 `POST /v1/career/profile-import`（仅个人服务安装此路由），接收 `{"text":"完整简历文字"}`。复用现有 Python 模型适配器的 `profile_extract` 决策阶段，无文件读写、保存资料或面试状态变更。
+`profile` 建议、`filename`、`source_text` 解析原文、`warnings`、`generation` 保持不变，新增：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `failure` | string \| null | 需要用户重试或手工补全的原因；`null` 表示模型完整返回 |
+| `partial` | bool | 是否有段落或条目未能解析 |
+| `text_origin` | string | `text_layer`（直接读取文字）或 `image`（文字层不可用，经图片识别得到，界面会提示重点核对）；新增键 |
+| `unmatched_sections` | list | `[{"section": "工作经历", "text": "原文段落"}]`，单段最多 6000 字、合计最多 20000 字、最多 20 项 |
+
+`failure` 取值：
+
+- `truncated`：模型输出被截断
+- `timeout`：模型响应超时
+- `invalid_output`：模型结果未通过校验
+- `model_unconfigured`：未配置模型或密钥
+- `model_unavailable`：模型服务暂时不可用
+- `no_supported_fields`：未识别到可核对的内容
+
+`failure` 非空时，接口仍返回 200（`ok: true`）与本地解析的 `source_text`，未识别字段为空，`message` 是该情形的中文说明；原表单与已保存资料不变。`ok` 只在本地输入错误（文件名、大小、格式、编码）时为 `false`。
+
+识别基本信息、求职意向、教育、工作/实习、项目经历、技能和简介；经历按条目在原文中核对，无法核对的字段留空并提示，不补造日期或成果。**不会自动保存**。页面更新识别到的字段与经历列表，未识别的部分保留原资料，取消真实性勾选；用户逐项编辑并勾选真实性确认后，仍通过 `save-profile` 保存。
+
+个人 Agent 内部接口为鉴权的 `POST /v1/career/profile-import`（仅个人服务安装此路由），接收 `{"text":"完整简历文字"}`，返回同样的解析结果（含 `failure`、`partial`、`unmatched_sections`）。复用现有 Python 模型适配器的 `profile_extract` 决策阶段，无文件读写、保存资料或面试状态变更。
 
 岗位采集的评分简历和 ATS 检查入口也支持拖入；前者沿用 PDF/DOCX/MD 上传流程，后者仅选择 PDF，仍需点击「检查 PDF」，不会发送给模型。
 
@@ -131,7 +154,7 @@ POST /api/action
 - 要点中的 `[[ILLEGIBLE]]` 标记会被去掉，保留可读部分；去掉后几乎没有文字的要点直接丢弃。
 - 解析不到的字段保持空值，不推断期望薪资，`job_intent.titles` 留空。联系方式（电话/邮箱）照常提取进 `basic`。
 
-### 3.1 资料状态字段（GET 与快照的只增字段）
+### 3.3 资料状态字段（GET 与快照的只增字段）
 
 `GET /api/profile` 的 `profile` 对象，以及工作台快照的 `profile` 键，新增两个只读字段：
 
@@ -141,16 +164,6 @@ POST /api/action
 | `cv_available` | 本机是否有可读的 Markdown 简历可供导入 |
 
 页面据此决定是否在首次进入时自动预填一次草稿：仅当 `saved=false` 且 `cv_available=true` 时，预填结果只进入表单、不保存，并要求用户核对后再点「保存」。已保存过的资料（`saved=true`）不会被自动覆盖。
-
-页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后，完整文字发送给已配置的 `step-5-preview` Agent，经严格结构校验与原文核对后返回建议，不保存原始文件。加密或扫描图片 PDF 暂不支持，请先转成可复制文字的文件。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
-
-返回 `profile` 建议、`filename`、`source_text` 解析原文、`warnings` 和 `generation`。识别基本信息、求职意向、教育、工作/实习、项目经历、技能和简介；经历按条目附原文片段进行服务端核对，无法核对的字段留空并提示，不补造日期或成果。页面更新识别到的字段与经历列表，未识别的部分保留原资料，取消真实性勾选；**不会自动保存**。用户可逐项编辑，页面要求核对并勾选真实性确认后，仍通过 `save-profile` 保存。Agent 超时、不可用或返回无效结果时提示重试，原表单与已保存资料不变。
-
-个人 Agent 内部接口为鉴权的 `POST /v1/career/profile-import`（仅个人服务安装此路由），接收 `{"text":"完整简历文字"}`。复用现有 Python 模型适配器的 `profile_extract` 决策阶段，无文件读写、保存资料或面试状态变更。
-
-岗位采集的评分简历和 ATS 检查入口也支持拖入；前者沿用 PDF/DOCX/MD 上传流程，后者仅选择 PDF，仍需点击「检查 PDF」，不会发送给模型。
-
-兼容旧调用：同时省略 `filename` 与 `content_base64` 时，按上文修改时间规则读取较新的本机 Markdown 来源，使用本地规则预填草稿。显式上传文件仍由 Agent 解析；两条路径均不自动保存。
 
 ## 4. 被哪些模块使用
 

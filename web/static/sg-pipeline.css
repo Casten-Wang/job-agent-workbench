@@ -115,7 +115,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
   /* 行高交给 tr 的 48px 下限；徽标行内容约 38 + 上下各 5 = 48 */
   padding: 5px 12px;
   border-bottom: .5px solid var(--line);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.4;
   vertical-align: middle;
 }
@@ -131,7 +131,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 
 /* 选中行：左侧 3px 信号色条 */
 body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) .data-table tbody tr:has(input[type="checkbox"]:checked) td:first-child {
-  box-shadow: inset 3px 0 0 #9BC21A;
+  box-shadow: inset 3px 0 0 var(--mj-brand);
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) .data-table tbody tr:has(input[type="checkbox"]:checked) td:first-child {
@@ -154,7 +154,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
   display: inline-block;
   min-width: 2.6em;
   white-space: nowrap;
-  font-family: var(--sg-num);
+  
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   text-align: right;
@@ -295,7 +295,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-badge.sg-platform-tag {
   border-radius: 999px;
   background: transparent;
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -312,7 +312,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
   border-radius: 4px;
   background: var(--ink);
   color: var(--bg);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
 }
@@ -419,7 +419,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card .panel-head {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card .panel-head h4 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -.01em;
 }
@@ -454,7 +454,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body strong {
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body p {
   margin: 2px 0 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -465,7 +465,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body .hint {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-checks .notice {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
@@ -478,7 +478,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .checkbox-label {
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -552,7 +552,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 #9BC21A;
+  box-shadow: inset 3px 0 0 var(--mj-brand);
 }
 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-active {

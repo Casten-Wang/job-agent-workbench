@@ -1,98 +1,101 @@
 /* Local-only workbench. No remote assets, no shadows, no rounded panels. */
 
 :root {
-  --bg: #f5f7f7;
-  --surface: #fcfdfd;
-  --ink: #142a33;
-  --ink-2: #52666d;
-  --line: #d8e3e5;
-  --accent: #0d5961;
-  --accent-fill: #0d5961;
+  --bg: #f2f3f0;
+  --surface: #ffffff;
+  --ink: #0d0e0c;
+  --ink-2: #4a4c45;
+  --mute: #6b6d65;
+  --line: rgba(13, 14, 12, 0.10);
+  --accent: #0d0e0c;
+  --accent-fill: #0d0e0c;
   --accent-ink: #ffffff;
-  --accent-soft: #e4efee;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --stage-0: #86b6ef;
-  --stage-1: #5598e7;
-  --stage-2: #2a78d6;
-  --stage-3: #1c5cab;
-  --stage-4: #104281;
+  --accent-soft: #e9eae4;
+  --series-1: #0d0e0c;
+  --series-2: #9bc21a;
+  --series-3: #8d8f87;
+  --stage-0: #e6e8e0;
+  --stage-1: #c9ccbf;
+  --stage-2: #9ea293;
+  --stage-3: #6e7266;
+  --stage-4: #0d0e0c;
   --good: #0c6b4a;
   --good-bg: #e3f3eb;
   --warn: #8a4b00;
   --warn-bg: #fbefdc;
   --bad: #a32a2a;
   --bad-bg: #fbe8e6;
-  --neutral-bg: #edf2f3;
-  --focus: #0d5961;
-  --chart-grid: #e2eaec;
-  --code-bg: #eef3f4;
-  --font: "Avenir Next", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --neutral-bg: #f7f8f5;
+  --focus: #0d0e0c;
+  --chart-grid: #e6e8e0;
+  --code-bg: #f7f8f5;
+  --font: var(--ui-font);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0d1b22;
-    --surface: #14232e;
-    --ink: #e8f2f1;
-    --ink-2: #a8bdc0;
-    --line: #2b414b;
-    --accent: #8fd6cf;
-    --accent-fill: #8fd6cf;
-    --accent-ink: #06232a;
-    --accent-soft: #17323a;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --stage-0: #cde2fb;
-    --stage-1: #9ec5f4;
-    --stage-2: #6da7ec;
-    --stage-3: #3987e5;
-    --stage-4: #256abf;
+    --bg: #0a0b09;
+    --surface: #141512;
+    --ink: #f1f2ec;
+    --ink-2: #b0b2a8;
+    --mute: #9a9c92;
+    --line: rgba(241, 242, 236, 0.12);
+    --accent: #f1f2ec;
+    --accent-fill: #f1f2ec;
+    --accent-ink: #0b0c08;
+    --accent-soft: #23251c;
+    --series-1: #f1f2ec;
+    --series-2: #d2f53c;
+    --series-3: #6a6c64;
+    --stage-0: #2a2c26;
+    --stage-1: #44463e;
+    --stage-2: #6b6e63;
+    --stage-3: #a3a59c;
+    --stage-4: #f1f2ec;
     --good: #7fe0bd;
     --good-bg: #12332a;
     --warn: #ffcf8a;
     --warn-bg: #332815;
     --bad: #ffb3ab;
     --bad-bg: #351d1c;
-    --neutral-bg: #1c2e38;
-    --focus: #8fd6cf;
-    --chart-grid: #29404a;
-    --code-bg: #0f1d25;
+    --neutral-bg: #1b1c18;
+    --focus: #d2f53c;
+    --chart-grid: rgba(241, 242, 236, 0.12);
+    --code-bg: #1b1c18;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0d1b22;
-  --surface: #14232e;
-  --ink: #e8f2f1;
-  --ink-2: #a8bdc0;
-  --line: #2b414b;
-  --accent: #8fd6cf;
-  --accent-fill: #8fd6cf;
-  --accent-ink: #06232a;
-  --accent-soft: #17323a;
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --stage-0: #cde2fb;
-  --stage-1: #9ec5f4;
-  --stage-2: #6da7ec;
-  --stage-3: #3987e5;
-  --stage-4: #256abf;
+  --bg: #0a0b09;
+  --surface: #141512;
+  --ink: #f1f2ec;
+  --ink-2: #b0b2a8;
+  --mute: #9a9c92;
+  --line: rgba(241, 242, 236, 0.12);
+  --accent: #f1f2ec;
+  --accent-fill: #f1f2ec;
+  --accent-ink: #0b0c08;
+  --accent-soft: #23251c;
+  --series-1: #f1f2ec;
+  --series-2: #d2f53c;
+  --series-3: #6a6c64;
+  --stage-0: #2a2c26;
+  --stage-1: #44463e;
+  --stage-2: #6b6e63;
+  --stage-3: #a3a59c;
+  --stage-4: #f1f2ec;
   --good: #7fe0bd;
   --good-bg: #12332a;
   --warn: #ffcf8a;
   --warn-bg: #332815;
   --bad: #ffb3ab;
   --bad-bg: #351d1c;
-  --neutral-bg: #1c2e38;
-  --focus: #8fd6cf;
-  --chart-grid: #29404a;
-  --code-bg: #0f1d25;
+  --neutral-bg: #1b1c18;
+  --focus: #d2f53c;
+  --chart-grid: rgba(241, 242, 236, 0.12);
+  --code-bg: #1b1c18;
   color-scheme: dark;
 }
 
@@ -114,8 +117,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -135,7 +137,7 @@ button, input, select, textarea {
 }
 
 code {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 0.92em;
   background: var(--code-bg);
   padding: 0.08em 0.3em;
@@ -213,7 +215,7 @@ a {
 }
 
 .brand-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1.3;
@@ -221,7 +223,7 @@ a {
 
 .brand-sub {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   letter-spacing: 0.02em;
 }
@@ -263,7 +265,7 @@ a {
 }
 
 .control-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.06em;
   color: var(--ink-2);
@@ -310,7 +312,7 @@ a {
 
 .hint {
   margin-top: 6px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--ink-2);
 }
@@ -319,7 +321,7 @@ a {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--ink-2);
 }
@@ -343,7 +345,7 @@ a {
 }
 
 .topbar-heading h1 {
-  font-size: 25px;
+  font-size: 20px;
   line-height: 1.2;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -353,7 +355,7 @@ a {
   margin-top: 7px;
   padding-left: 10px;
   border-left: 3px solid var(--accent);
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-2);
   max-width: 70ch;
 }
@@ -375,14 +377,14 @@ a {
 }
 
 .meta-line {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .loading-note {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--accent);
 }
 
@@ -435,7 +437,7 @@ a {
 }
 
 .filter-field label {
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   color: var(--ink-2);
 }
@@ -480,7 +482,7 @@ a {
 .view-lede {
   margin-top: -8px;
   max-width: 78ch;
-  font-size: 13.5px;
+  font-size: 14px;
   color: var(--ink-2);
 }
 
@@ -503,7 +505,7 @@ a {
 }
 
 .panel-head h3 {
-  font-size: 15.5px;
+  font-size: 16px;
   font-weight: 650;
   line-height: 1.35;
 }
@@ -608,26 +610,26 @@ a {
 .belt-node.stage-4 { border-top-color: var(--stage-4); }
 
 .belt-index {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
 .belt-name {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.3;
 }
 
 .belt-count {
   margin-top: auto;
-  font-size: 25px;
+  font-size: 20px;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .belt-unit {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -662,13 +664,13 @@ a {
 }
 
 .kpi-label {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
 .kpi-value {
   margin-top: 2px;
-  font-size: 25px;
+  font-size: 20px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -705,7 +707,7 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -758,21 +760,18 @@ a {
 
 .chart-axis-text {
   fill: var(--ink-2);
-  font-family: var(--font);
-  font-size: 10.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .chart-category-text {
   fill: var(--ink-2);
-  font-family: var(--font);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .chart-bar-label {
   fill: var(--ink);
-  font-family: var(--font);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -803,7 +802,7 @@ a {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -826,7 +825,7 @@ a {
   width: 100%;
   min-width: 540px;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -835,7 +834,7 @@ a {
   padding: 7px 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   background: var(--bg);
 }
@@ -850,7 +849,7 @@ a {
 
 .data-table th {
   font-weight: 650;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
   background: var(--bg);
   white-space: nowrap;
@@ -892,8 +891,8 @@ a {
 }
 
 .cell-mono {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  font-family: var(--ui-font); font-variant-numeric: tabular-nums;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -938,7 +937,7 @@ a {
 
 .button-small {
   padding: 3px 7px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -1023,7 +1022,7 @@ textarea:focus-visible {
 }
 
 .form-field label {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -1042,7 +1041,7 @@ textarea:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink);
 }
 
@@ -1059,7 +1058,7 @@ textarea:focus-visible {
   padding: 0 5px;
   border: 1px solid currentColor;
   border-radius: 2px;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.55;
   white-space: nowrap;
 }
@@ -1090,7 +1089,7 @@ textarea:focus-visible {
   border-left: 3px solid var(--warn);
   background: var(--warn-bg);
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -1115,11 +1114,11 @@ textarea:focus-visible {
   min-width: 104px;
   max-width: 150px;
   padding: 3px 5px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .terminal-note {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -1129,7 +1128,7 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   background: var(--bg);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -1161,7 +1160,7 @@ textarea:focus-visible {
 }
 
 .download-link {
-  font-size: 12.5px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -1197,13 +1196,13 @@ textarea:focus-visible {
   grid-template-columns: minmax(86px, 140px) minmax(0, 1fr);
   gap: 5px 12px;
   margin: 8px 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .detail-list dt {
   color: var(--ink-2);
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+  font-size: 12px;
 }
 
 .detail-list dd {
@@ -1223,7 +1222,7 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--neutral-bg);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -1243,7 +1242,7 @@ textarea:focus-visible {
 }
 
 .card-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }
@@ -1277,7 +1276,7 @@ textarea:focus-visible {
 
 .card ul {
   margin: 4px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .card li {
@@ -1287,7 +1286,7 @@ textarea:focus-visible {
 
 details.card > summary {
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -1316,7 +1315,7 @@ details.card[open] > summary {
   gap: 4px 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .activity-item:last-child {
@@ -1325,7 +1324,7 @@ details.card[open] > summary {
 
 .activity-time {
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -1337,7 +1336,7 @@ details.card[open] > summary {
 .activity-detail {
   grid-column: 2 / 3;
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -1357,8 +1356,8 @@ details.card[open] > summary {
   border: 1px solid var(--line);
   background: var(--code-bg);
   color: var(--ink);
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+  font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1368,7 +1367,7 @@ details.card[open] > summary {
   padding: 16px 12px;
   border: 1px dashed var(--line);
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -1419,7 +1418,7 @@ details.card[open] > summary {
 }
 
 .chat-choice-set legend {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
   padding: 0;
   margin-bottom: 4px;
@@ -1602,7 +1601,7 @@ details.card[open] > summary {
 
 .chat-debrief-heading {
   margin: 0 0 8px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
   color: var(--ink);
@@ -1763,7 +1762,7 @@ details.card[open] > summary {
   padding: 18px 12px;
   border: 1px dashed var(--line);
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .footer {
@@ -1771,7 +1770,7 @@ details.card[open] > summary {
   padding-top: 14px;
   border-top: 1px solid var(--line);
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 

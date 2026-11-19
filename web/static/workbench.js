@@ -6,7 +6,23 @@
   const legacy = new URLSearchParams(location.search).get('workbench') === 'legacy';
   if (legacy) {
     const link = document.createElement('a');link.href='/';link.textContent='切回统一工作台';
-    document.querySelector('.topbar').append(link);return;
+    document.querySelector('.topbar').append(link);
+    // 旧版模式也要让模拟面试三个页签可用（面板显隐由 CSS 的 data-iv-mode 控制）。
+    const ivView = document.getElementById('view-interview');
+    const setLegacyIvMode = mode => {
+      if (!ivView) return;
+      ivView.dataset.ivMode = mode;
+      document.querySelectorAll('[data-iv-tab]').forEach(btn => {
+        const active = btn.dataset.ivTab === mode;
+        btn.classList.toggle('is-active', active);
+        if (active) btn.setAttribute('aria-current', 'page'); else btn.removeAttribute('aria-current');
+      });
+      if (mode === 'tools') showInterviewModule(null);
+      else if (mode === 'project') { const cu = document.getElementById('cu-interview-panel'); if (cu) cu.hidden = false; }
+    };
+    document.querySelectorAll('[data-iv-tab]').forEach(btn => btn.addEventListener('click', () => setLegacyIvMode(btn.dataset.ivTab || 'ci')));
+    setLegacyIvMode('ci');
+    return;
   }
   const node = (tag,text,cls) => {const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
   // 线性图标（24×24，currentColor 描边）；用 DOM 创建，符合 CSP（不使用内联样式或 innerHTML）。

@@ -51,8 +51,8 @@ class SignalToolsUiTest(unittest.TestCase):
 
     def test_unconnected_agent_cards_move_to_page_bottom_details(self):
         html = read("index.html")
-        self.assertEqual(html.count('<details class="sg-dev-note">'), 3)
-        for marker in ('id="profile-api-title"', 'id="push-agent-title"', 'id="resume-agent-title"'):
+        self.assertEqual(html.count('<details class="sg-dev-note">'), 2)
+        for marker in ('id="profile-api-title"', 'id="push-agent-title"'):
             with self.subTest(marker=marker):
                 self.assertIn(marker, html)
         # 四页视图中不再保留旧的编号角标，避免与左侧导航编号冲突（走查第 9 条）。

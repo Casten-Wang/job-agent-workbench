@@ -3,22 +3,22 @@
 body.offer-ui,
 body.wb-enabled,
 body:has(#view-workbench:not([hidden]) #wa-panel:not([hidden])) {
-  --bg: #f5f5f3;
-  --surface: #faf9f6;
-  --panel-bg: #ffffff;
-  --header-bg: #faf9f6;
-  --ink: #292825;
-  --ink-2: #55534d;
-  --mute: #737068;
-  --line: #deddd6;
-  --accent: #292825;
-  --accent-fill: #ad5132;
-  --accent-ink: #ffffff;
-  --accent-soft: #eeede8;
-  --pill: #eeede8;
-  --wa-elevated: #ffffff;
-  --wa-brand: #ad5132;
-  --wa-focus: #184f95;
+  --bg: #F2F3F0;
+  --surface: #FFFFFF;
+  --panel-bg: #FFFFFF;
+  --header-bg: #F7F8F5;
+  --ink: #0D0E0C;
+  --ink-2: #4A4C45;
+  --mute: #6B6D65;
+  --line: rgba(13, 14, 12, 0.10);
+  --accent: #0D0E0C;
+  --accent-fill: #0D0E0C;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E9EAE4;
+  --pill: #E9EAE4;
+  --wa-elevated: #FFFFFF;
+  --wa-brand: #0D0E0C;
+  --wa-focus: #0D0E0C;
   --wa-medium: 500;
   --wa-semibold: 600;
   --good: #166534;
@@ -27,8 +27,8 @@ body:has(#view-workbench:not([hidden]) #wa-panel:not([hidden])) {
   --warn-bg: #ffedd5;
   --bad: #991b1b;
   --bad-bg: #fee2e2;
-  --neutral-bg: #eeede8;
-  --code-bg: #eeede8;
+  --neutral-bg: #F7F8F5;
+  --code-bg: #F7F8F5;
   --radius-card: 12px;
   --shadow-card: none;
   --shadow-soft: none;
@@ -301,7 +301,7 @@ body.wb-enabled #view-workbench {
 .wa-workspace button { min-height:34px; border-radius:6px; font-size:12px; font-weight:var(--wa-medium,500); box-shadow:none; transition:background 120ms,color 120ms,transform 70ms; }
 .wa-workspace button:not(:disabled):active { transform:scale(.98); }
 .wa-workspace button:disabled { opacity:.45; cursor:not-allowed; }
-.wa-workspace :is(button,input,select,textarea,summary,a):focus-visible,.wa-tabs button:focus-visible { outline:2px solid var(--wa-focus,#184f95); outline-offset:2px; }
+.wa-workspace :is(button,input,select,textarea,summary,a):focus-visible,.wa-tabs button:focus-visible { outline:2px solid var(--wa-focus,#0D0E0C); outline-offset:2px; }
 .wa-workspace .button-quiet { background:transparent; color:var(--ink-2); border:.5px solid transparent; }
 .wa-workspace .button-quiet:not(:disabled):hover { background:var(--accent-soft); color:var(--ink); }
 .wa-sessions { display:flex; flex-direction:column; min-height:0; min-width:0; padding:16px 12px; border-right:.5px solid var(--line); background:color-mix(in srgb,var(--accent-soft) 38%,var(--surface)); }
@@ -377,8 +377,8 @@ body.wb-enabled #view-workbench {
 .wa-composer-actions { margin-top:10px; }
 .wa-key-hint { margin-left:auto; font-size:12px; color:var(--mute); }
 #wa-send,#wa-stop { margin-left:4px; border:0; border-radius:6px; padding:6px 12px; }
-#wa-send { background:var(--wa-brand,#ad5132); color:#fff; }
-#wa-send:not(:disabled):hover { background:color-mix(in srgb,var(--wa-brand,#ad5132) 88%,#000); }
+#wa-send { background:var(--wa-brand,#0D0E0C); color:var(--accent-ink,#FFFFFF); }
+#wa-send:not(:disabled):hover { background:color-mix(in srgb,var(--wa-brand,#0D0E0C) 88%,var(--accent-ink,#FFFFFF)); }
 #wa-stop { border:.5px solid var(--line); }
 .wa-context { margin-bottom:10px; font-size:12px; color:var(--mute); }
 .wa-context-scope { display:inline-flex; align-items:center; gap:6px; }
@@ -431,22 +431,22 @@ body.wb-enabled #view-workbench {
 @media(prefers-color-scheme:dark) {
   :root:not([data-theme]) body.offer-ui,
   :root:not([data-theme]) body.wb-enabled {
-    --bg: #20201e;
-    --surface: #262624;
-    --panel-bg: #30302d;
-    --header-bg: #262624;
-    --wa-elevated: #30302d;
-    --ink: #eeeeea;
-    --ink-2: #c4c2b9;
-    --mute: #aaa79e;
-    --line: #46453f;
-    --accent: #eeeeea;
-    --accent-fill: #e8a083;
-    --accent-ink: #20201e;
-    --accent-soft: #30302d;
-    --pill: #30302d;
-    --wa-brand: #e8a083;
-    --wa-focus: #8ab4ed;
+    --bg: #0A0B09;
+    --surface: #141512;
+    --panel-bg: #1B1C18;
+    --header-bg: #141512;
+    --wa-elevated: #1B1C18;
+    --ink: #F1F2EC;
+    --ink-2: #B0B2A8;
+    --mute: #9A9C92;
+    --line: rgba(241, 242, 236, 0.12);
+    --accent: #F1F2EC;
+    --accent-fill: #F1F2EC;
+    --accent-ink: #0B0C08;
+    --accent-soft: #23251C;
+    --pill: #23251C;
+    --wa-brand: #D2F53C;
+    --wa-focus: #D2F53C;
     --wa-medium: 400;
     --wa-semibold: 500;
     --good: #86efac;
@@ -455,30 +455,30 @@ body.wb-enabled #view-workbench {
     --warn-bg: #3b2514;
     --bad: #fca5a5;
     --bad-bg: #3b1c1c;
-    --neutral-bg: #30302d;
-    --code-bg: #20201e;
+    --neutral-bg: #1B1C18;
+    --code-bg: #1B1C18;
   }
-  :root:not([data-theme]) #wa-send { color: #262624; }
+  :root:not([data-theme]) #wa-send { color: #0B0C08; }
 }
 
 :root[data-theme="dark"] body.offer-ui,
 :root[data-theme="dark"] body.wb-enabled {
-  --bg: #20201e;
-  --surface: #262624;
-  --panel-bg: #30302d;
-  --header-bg: #262624;
-  --wa-elevated: #30302d;
-  --ink: #eeeeea;
-  --ink-2: #c4c2b9;
-  --mute: #aaa79e;
-  --line: #46453f;
-  --accent: #eeeeea;
-  --accent-fill: #e8a083;
-  --accent-ink: #20201e;
-  --accent-soft: #30302d;
-  --pill: #30302d;
-  --wa-brand: #e8a083;
-  --wa-focus: #8ab4ed;
+  --bg: #0A0B09;
+  --surface: #141512;
+  --panel-bg: #1B1C18;
+  --header-bg: #141512;
+  --wa-elevated: #1B1C18;
+  --ink: #F1F2EC;
+  --ink-2: #B0B2A8;
+  --mute: #9A9C92;
+  --line: rgba(241, 242, 236, 0.12);
+  --accent: #F1F2EC;
+  --accent-fill: #F1F2EC;
+  --accent-ink: #0B0C08;
+  --accent-soft: #23251C;
+  --pill: #23251C;
+  --wa-brand: #D2F53C;
+  --wa-focus: #D2F53C;
   --wa-medium: 400;
   --wa-semibold: 500;
   --good: #86efac;
@@ -487,10 +487,10 @@ body.wb-enabled #view-workbench {
   --warn-bg: #3b2514;
   --bad: #fca5a5;
   --bad-bg: #3b1c1c;
-  --neutral-bg: #30302d;
-  --code-bg: #20201e;
+  --neutral-bg: #1B1C18;
+  --code-bg: #1B1C18;
 }
-:root[data-theme="dark"] #wa-send { color: #262624; }
+:root[data-theme="dark"] #wa-send { color: #0B0C08; }
 
 @media(max-width:1180px) {
   .wa-workspace.wa-has-results { grid-template-columns:160px minmax(0,1fr); }
@@ -553,8 +553,8 @@ body.wb-enabled #view-workbench {
 /* 02 对话助理：全套复用队友云端版的沉浸式布局与配色，选择器限定在 #view-agent 显示时生效。 */
 body.offer-ui:not(#wa-theme-off) {
   --bg:#F2F3F0; --surface:#FFFFFF; --ink:#0D0E0C; --ink-2:#4A4C45;
-  --mute:#6B6D65; --line:rgba(13,14,12,.1); --accent-soft:#E7E9E1;
-  --wa-elevated:#fff; --wa-brand:#587400; --wa-focus:#184f95;
+  --mute:#6B6D65; --line:rgba(13,14,12,.1); --accent-soft:#E9EAE4;
+  --wa-elevated:#fff; --wa-brand:#0D0E0C; --wa-focus:#0D0E0C;
   --wa-medium:500; --wa-semibold:600; font-size:14px;
 }
 body.offer-ui:not(#wa-theme-off) :is(.ambient,.offer-ticker,.sidebar-boundary,.sidebar-block .hint,.nav-text small,.filter-bar,.nav__hl,.brand-sub) { display:none; }
@@ -583,9 +583,9 @@ body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-title { font-siz
 body.offer-ui:not(#wa-theme-off) #view-agent > .view-head .view-lede { font-size:12px; margin:4px 0 0; color:var(--mute); }
 body.offer-ui:not(#wa-theme-off) .sidebar { overflow-y:auto; }
 @media(prefers-color-scheme:dark) {
-  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#A9ABA2; --mute:#8E9086; --line:rgba(241,242,236,.1); --accent-soft:#1B1C18; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#B0B2A8; --mute:#9A9C92; --line:rgba(241,242,236,.12); --accent-soft:#23251C; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
 }
-:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#A9ABA2; --mute:#8E9086; --line:rgba(241,242,236,.1); --accent-soft:#1B1C18; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) { --bg:#0A0B09; --surface:#141512; --wa-elevated:#1B1C18; --ink:#F1F2EC; --ink-2:#B0B2A8; --mute:#9A9C92; --line:rgba(241,242,236,.12); --accent-soft:#23251C; --wa-brand:#D2F53C; --wa-focus:#D2F53C; --wa-medium:400; --wa-semibold:500; }
 
 /* 02 页与主站外壳适配（2026-11-18）
    1) 主站组件读 --op-* 令牌，这里在 02 页把它们指向本页调色，避免同页混用两套灰阶；
@@ -704,10 +704,10 @@ body.offer-ui:not(#wa-theme-off) :is(td, th) { border-color: var(--line); }
 body.offer-ui:not(#wa-theme-off) {
   --sg: #D2F53C;
   --sg-ink: #0B0C08;
-  --sg-num: "Avenir Next Condensed", "SF Compact Display", "Barlow Condensed", "DIN Condensed", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --sg-num: var(--ui-font);   /* 保留旧名，值统一为无衬线 */
   --sg-spring: linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 19.4%, 1.067, 1.089 26.9%, 1.079, 1.054 33.7%, 1.003 43.3%, .993 49.9%, 1.001 63.8%, 1);
   --sg-soft: cubic-bezier(.22, 1, .36, 1);
-  font-family: -apple-system, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--ui-font);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
@@ -723,7 +723,7 @@ body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index { color
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index { color: var(--sg-ink); opacity: .6; }
 body.offer-ui:not(#wa-theme-off) .sidebar .nav-group-label { color: var(--mute); }
 body.offer-ui:not(#wa-theme-off) .brand-rule { width: 8px; height: 8px; border-radius: 50%; background: var(--sg); box-shadow: 0 0 0 0 rgba(210,245,60,.6); animation: sg-pulse 2.6s var(--sg-soft) infinite; }
-[data-theme="light"] body.offer-ui:not(#wa-theme-off) .brand-rule { background: #9BC21A; }
+[data-theme="light"] body.offer-ui:not(#wa-theme-off) .brand-rule { background: var(--mj-brand); }
 @keyframes sg-pulse { 70% { box-shadow: 0 0 0 10px rgba(210,245,60,0); } 100% { box-shadow: 0 0 0 0 rgba(210,245,60,0); } }
 body.offer-ui:not(#wa-theme-off) .segmented { border-radius: 999px; background: var(--accent-soft); padding: 3px; }
 body.offer-ui:not(#wa-theme-off) .segmented button { border-radius: 999px; }
@@ -735,14 +735,14 @@ body.offer-ui:not(#wa-theme-off) .views > .view:not([hidden]) { animation: sg-sc
 
 /* 标题与数字：窄体大字就是版面主角 */
 body.offer-ui:not(#wa-theme-off) .view-title,
-body.offer-ui:not(#wa-theme-off) .home-title { font-family: var(--sg-num); font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
-body.offer-ui:not(#wa-theme-off) .home-title { font-size: 56px; }
+body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
 body.offer-ui:not(#wa-theme-off) .home-task-count,
 body.offer-ui:not(#wa-theme-off) .kpi-value,
-body.offer-ui:not(#wa-theme-off) .wb-counts strong { font-family: var(--sg-num); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+body.offer-ui:not(#wa-theme-off) .wb-counts strong { font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 40px; line-height: 1; }
-body.offer-ui:not(#wa-theme-off) .kpi-value { font-size: 44px; }
-body.offer-ui:not(#wa-theme-off) .home-lede { font-size: 19px; font-weight: 500; letter-spacing: -.01em; }
+body.offer-ui:not(#wa-theme-off) .kpi-value { font-size: 40px; }
+body.offer-ui:not(#wa-theme-off) .home-lede { font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
 body.offer-ui:not(#wa-theme-off) .home-task-label { font-family: inherit; font-size: 16px; font-weight: 600; }
 
 /* 首页「今天」：一块深色概览，信号色余光只出现在这里 */
@@ -782,7 +782,7 @@ body.offer-ui:not(#wa-theme-off) :is(.hub-tabs, .subtabs, [role="tablist"]) :is(
   body.offer-ui:not(#wa-theme-off) :is(.button, .nav-item) { transition: none !important; }
 }
 @media (max-width: 900px) {
-  body.offer-ui:not(#wa-theme-off) .home-title { font-size: 44px; }
+  body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
   body.offer-ui:not(#wa-theme-off) .view-title { font-size: 28px; }
   body.offer-ui:not(#wa-theme-off) .sidebar .nav-item { border-radius: 999px; }
   body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active { border-bottom-color: transparent; }
@@ -803,7 +803,7 @@ body.offer-ui:not(#wa-theme-off) fieldset > label { display: flex; align-items: 
 body.offer-ui:not(#wa-theme-off) label.cu-check, body.offer-ui:not(#wa-theme-off) label:has(> input[type="checkbox"]) { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
 
 body.offer-ui:not(#wa-theme-off) :is(.notice, .hint-box) { background: var(--accent-soft); color: var(--ink-2); border: 0; border-radius: 14px; box-shadow: inset 3px 0 0 var(--sg); padding: 12px 16px; line-height: 1.65; }
-[data-theme="light"] body.offer-ui:not(#wa-theme-off) :is(.notice, .hint-box) { box-shadow: inset 3px 0 0 #9BC21A; }
+[data-theme="light"] body.offer-ui:not(#wa-theme-off) :is(.notice, .hint-box) { box-shadow: inset 3px 0 0 var(--mj-brand); }
 body.offer-ui:not(#wa-theme-off) .notice-warn, body.offer-ui:not(#wa-theme-off) .notice-bad { background: var(--warn-bg); color: var(--warn); box-shadow: inset 3px 0 0 var(--warn); }
 body.offer-ui:not(#wa-theme-off) .notice b, body.offer-ui:not(#wa-theme-off) .notice strong { color: var(--ink); }
 
@@ -812,11 +812,8 @@ body.offer-ui:not(#wa-theme-off) .chip.is-done { background: var(--ink); color: 
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .chip.is-done { background: var(--sg); color: var(--sg-ink); }
 body.offer-ui:not(#wa-theme-off) .form-actions { border: 0; background: transparent; }
 
-/* 流水线子页签：文字页签，选中用信号色粗线（原来是方框按钮） */
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab { border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); padding: 7px 14px; font-weight: 600; transition: background .2s var(--sg-soft), color .2s var(--sg-soft); }
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab:hover { background: var(--accent-soft); color: var(--ink); }
-body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active { background: var(--ink); color: var(--bg); }
-:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .ui-hub-tab.is-active { background: var(--sg); color: var(--sg-ink); }
+/* 流水线子页签：样式只在 mj-base.css §8 定义一处（胶囊轨道 + 墨色当前项），
+   这里不再重复写，避免模拟面试页签被这里的 999px 圆角覆盖。 */
 
 /* 表格 / 折叠 */
 body.offer-ui:not(#wa-theme-off) table { border-collapse: collapse; }
@@ -836,7 +833,7 @@ body.offer-ui:not(#wa-theme-off) .status { border-radius: 12px; }
 }
 @media (max-width: 560px) {
   body.offer-ui:not(#wa-theme-off) .home-task { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
-  body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 34px; text-align: right; }
+  body.offer-ui:not(#wa-theme-off) .home-task-count { font-size: 40px; text-align: right; }
   body.offer-ui:not(#wa-theme-off) .home-task .button { grid-column: 1 / -1; justify-self: start; }
   body.offer-ui:not(#wa-theme-off) .home-title { font-size: 40px; }
 }

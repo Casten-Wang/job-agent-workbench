@@ -7,7 +7,7 @@
  * 1. 四个流水线页签共用的页头、页签、按钮、徽标、表格
  * ========================================================================== */
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-title {
-  font-size: 36px;
+  font-size: 40px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-lede {
@@ -160,7 +160,6 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .cell-mono {
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -232,13 +231,13 @@ body.offer-ui:not(#wa-theme-off) #view-collect .resume-dropzone:focus-visible {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-resume-main strong {
   color: var(--mj-ink);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-resume-main p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .resume-drop-status {
@@ -266,26 +265,24 @@ body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card h4 {
   margin: 0 0 8px;
-  font-family: var(--mj-serif);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--mj-ink);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-card .hint {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-task-line {
   margin: 0;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect :is(.cell-mono, .offerpilot-task-line .cell-mono) {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -306,8 +303,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs > .panel-head {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .offerpilot-jobs > .panel-head h4 {
   margin: 0;
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -334,8 +330,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card > .panel-head 
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-card > .panel-head h4 {
   margin: 0;
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--mj-ink);
@@ -368,7 +363,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body strong {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .collect-check-body p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
@@ -377,7 +372,7 @@ body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions {
 
 body.offer-ui:not(#wa-theme-off) #view-collect .sg-preflight-actions .checkbox-label {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-collect .integration-meta {
@@ -392,7 +387,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #vi
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) .integration-meta dd {
   margin: 0;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -419,7 +414,7 @@ body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason-label {
 
 body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason {
   min-height: 32px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-selection-count {
@@ -452,7 +447,6 @@ body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-platform {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-score {
-  font-family: var(--mj-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -542,7 +536,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-jobs, #view-queue) :is(#jobs-dossier,
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-toolbar {
   gap: 10px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .sg-bulk-count {
@@ -578,7 +572,7 @@ body.offer-ui:not(#wa-theme-off) #view-queue .queue-greeting-meta {
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-greetings > .muted {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-modal {
@@ -588,8 +582,7 @@ body.offer-ui:not(#wa-theme-off) #view-queue .queue-modal {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -631,7 +624,7 @@ body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-card {
 
 body.offer-ui:not(#wa-theme-off) #view-queue .queue-delivery-result {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-queue .sg-queue-delivery-platform,
@@ -655,8 +648,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar h3 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -695,7 +687,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-notice {
   border-left: 3px solid var(--mj-warn);
   background: var(--mj-warn-bg);
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-sidebar {
@@ -713,7 +705,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-sidebar-title {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-count {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -786,7 +777,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row.is-error .hr-platfo
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-row-detail {
   color: var(--mj-text);
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -849,8 +839,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation.is-unread .hr-conve
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-conversation-time {
-  color: var(--mj-mute);
-  font-family: var(--mj-mono);
+  color: var(--mj-text-2);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -879,7 +868,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .sg-platform-mark {
   border-radius: var(--mj-r-tag);
   background: var(--mj-ink);
   color: var(--mj-brand-ink);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-weight: 700;
 }
@@ -908,8 +896,7 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-head {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-thread-head h4 {
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
@@ -950,13 +937,12 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-label {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-title {
   color: var(--mj-ink);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-job-card-score {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1014,13 +1000,13 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-text {
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-system .hr-message-text {
   color: var(--mj-mute);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty,
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-empty-hint {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-block-reason {
@@ -1076,7 +1062,6 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-draft-count {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-draft-count {
-  font-family: var(--mj-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1085,8 +1070,8 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-composer .button {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-send {
-  min-height: 38px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 0 var(--sp-4);
   border-radius: var(--mj-r-control);
   background: var(--mj-ink);
   color: var(--mj-brand-ink);
@@ -1116,15 +1101,14 @@ body.offer-ui:not(#wa-theme-off) #view-mail #hr-reply-confirm-panel .hr-reply-di
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-head h3 {
-  font-family: var(--mj-serif);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--mj-ink);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-who {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-reply-text {
@@ -1154,8 +1138,8 @@ body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-summary {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-mail .mail-offline-note {
-  color: var(--mj-mute);
-  font-size: 12.5px;
+  color: var(--mj-text-2);
+  font-size: 13px;
 }
 
 /* ==========================================================================
@@ -1172,8 +1156,7 @@ body.offer-ui:not(#wa-theme-off) #view-profile #profile-meter.profile-meter {
 
 body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-progress-value {
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
-  font-size: 44px;
+  font-size: 40px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1277,7 +1260,6 @@ body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-item:hover {
 body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-state {
   border-radius: var(--mj-r-tag);
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1309,7 +1291,6 @@ body.offer-ui:not(#wa-theme-off) #view-profile .sg-profile-nav-note {
 body.offer-ui:not(#wa-theme-off) #view-profile .profile-section-title {
   margin: 28px 0 12px;
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
@@ -1323,7 +1304,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .sg-required {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--mj-spark);
+  color: var(--mj-bad);
   font-size: 12px;
   font-weight: 600;
   box-shadow: none;
@@ -1350,7 +1331,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .form-field lab
   display: block;
   margin-bottom: 6px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1395,18 +1376,17 @@ body.offer-ui:not(#wa-theme-off) #view-resume .resume-dropzone:focus-visible {
 
 body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone strong {
   color: var(--mj-ink);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-profile .profile-import-text {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1431,7 +1411,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-templat
 body.offer-ui:not(#wa-theme-off) #view-resume :is(.cu-source-choice, .cu-template-choice) legend {
   padding: 0 6px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1488,7 +1468,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .career-message {
 
 body.offer-ui:not(#wa-theme-off) #view-resume .career-code {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1500,11 +1480,11 @@ body.offer-ui:not(#wa-theme-off) #view-resume .cu-preview-frame {
   background: var(--mj-paper-2);
 }
 
+/* A4 预览是一张纸：任何主题下都保持白底深字，只保留外框与圆角。
+   纸张自身的墨色/强调色由 career-resume.css 的 --resume-* 提供。 */
 body.offer-ui:not(#wa-theme-off) #view-resume .cu-document.resume-sheet {
   border: 1px solid var(--mj-line);
   border-radius: var(--mj-r-tag);
-  background: var(--mj-paper);
-  color: var(--mj-text);
 }
 
 body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dt {
@@ -1514,7 +1494,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dt {
 
 body.offer-ui:not(#wa-theme-off) #view-resume .detail-list dd {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-saved {
@@ -1529,7 +1509,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-project {
 
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-sha {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 12px;
 }
 
@@ -1550,7 +1530,6 @@ body.offer-ui:not(#wa-theme-off) #view-resume .data-table td {
 }
 
 body.offer-ui:not(#wa-theme-off) #view-resume .resume-compare-cell {
-  font-family: var(--mj-mono);
   font-size: 12px;
 }
 
@@ -1558,7 +1537,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .ats-keyword,
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-ai-help,
 body.offer-ui:not(#wa-theme-off) #view-resume .sg-ai-test-note {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -1582,7 +1561,6 @@ body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-node:h
 
 body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-index {
   color: var(--mj-mute);
-  font-family: var(--mj-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1594,15 +1572,13 @@ body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-owner 
 
 body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .pipeline-name {
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview #interview-hub .sg-card-count strong {
   color: var(--mj-ink);
-  font-family: var(--mj-serif);
-  font-size: 44px;
+  font-size: 40px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1647,7 +1623,6 @@ body.offer-ui:not(#wa-theme-off) #view-interview .interview-module-nav {
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-progress {
   color: var(--mj-text-2);
-  font-family: var(--mj-mono);
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1663,7 +1638,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set {
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-choice-set legend {
   padding: 0 6px;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1695,7 +1670,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn {
   border-radius: var(--mj-r-card) var(--mj-r-card) var(--mj-r-card) 4px;
   background: var(--mj-paper);
   color: var(--mj-text);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-candidate {
@@ -1711,7 +1686,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-incomplete {
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-turn-note {
   color: var(--mj-warn);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-composer {
@@ -1733,7 +1708,7 @@ body.offer-ui:not(#wa-theme-off) #view-interview .chat-web-notice {
   border-radius: var(--mj-r-inner);
   background: var(--mj-warn-bg);
   color: var(--mj-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-debrief,
@@ -1798,7 +1773,7 @@ body.offer-ui:not(#wa-theme-off) #view-push .code-block {
   border-radius: var(--mj-r-inner);
   background: var(--mj-paper-2);
   color: var(--mj-text);
-  font-family: var(--mj-mono);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1838,7 +1813,7 @@ body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-intervie
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note > p {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note .integration-meta dt {
@@ -1848,11 +1823,10 @@ body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-intervie
 
 body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .sg-dev-note .integration-meta dd {
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push) :is(.integration-meta, .sg-dev-note, .career-message) code {
-  font-family: var(--mj-mono);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1926,6 +1900,246 @@ body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note[hidden] {
 body.offer-ui:not(#wa-theme-off) #view-mail .hr-card-note {
   margin: 0;
   color: var(--mj-text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
+}
+
+/* ==========================================================================
+ * 组件规范收口（UI 第 1 轮）
+ * 同类组件全站只有一种写法，数值全部取 mj-base / offer-theme 的 token：
+ *   主按钮 36 / 小号 30，圆角 8；输入控件 36（工具栏紧凑件 32），圆角 8；
+ *   卡片与卡片头圆角 12；徽标、标签 22 高、12px、600；提示文字 13px；
+ *   面板内小节标题 16 / 600。
+ * 选择器带视图 id，用来压过各页早先写下的 38px / 10px / 14px 等局部数值。
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .button:not(.button-small) {
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--mj-r-control);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .button-small {
+  min-height: 30px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--mj-r-control);
+  font-size: 13px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"])) {
+  min-height: 36px;
+  border-radius: var(--mj-r-control);
+  font-size: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) textarea {
+  border-radius: var(--mj-r-control);
+  font-size: 14px;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(.panel-head, .integration-head) {
+  border-radius: var(--mj-r-card) var(--mj-r-card) 0 0;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(.badge, .chip, .tag) {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--mj-r-tag);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .hint {
+  font-size: 13px;
+  line-height: var(--lh-body);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) :is(.panel h4, .integration-panel h4) {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 折叠标题：与正文次级色一致，不再用更浅的一档灰 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) summary {
+  color: var(--mj-text-2);
+}
+
+
+/* ==========================================================================
+ * 第 2 轮：定制简历卡片的信息层级
+ * 经历卡片：标题一行 / 类型+日期标签行 / 正文一段，三者不再挤在同一行；
+ * 生成结果卡片：每条「岗位相关 / 职责边界 / 待确认」改成「标签 + 一行说明」。
+ * 小字统一 12px、次级色（--mj-text-2），明暗两套主题都 ≥ AA。
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .cu-check > .cu-entry-body,
+body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .cu-check > .cu-claim-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-title {
+  display: block;
+  color: var(--mj-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-kind {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-period {
+  font-variant-numeric: tabular-nums;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-flag {
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--mj-line);
+  border-radius: var(--mj-r-tag);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-text {
+  display: block;
+  color: var(--mj-text-2);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-entry-text.is-empty {
+  color: var(--mj-mute);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-text {
+  display: block;
+  color: var(--mj-text);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--sp-2);
+  color: var(--mj-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-tag {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-weight: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .cu-claim-note-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+
+/* ==========================================================================
+ * 第 2 轮：旧页面信息层级收口
+ * 统一页面副标题、卡片标题字重、表单标签与折叠标题的档位；
+ * 只改字号/字重/颜色，不动结构与交互。既有规则多数带一个页面 id，
+ * 这里也带 id，避免只靠出现顺序取胜。
+ * ========================================================================== */
+
+/* 页面副标题一律用正文档（14px）：原来推送 / 个人资料 / 定制简历 / 设置是 13，
+   岗位池 / 审批 / HR 回复是 14，同一层信息两种字号。 */
+body.offer-ui:not(#wa-theme-off) .view-lede {
+  font-size: var(--fs-body);
+}
+
+/* 卡片标题一律 600：本地旧首页有一半卡片标题是 500，和同屏 600 的卡片混排。 */
+body.offer-ui:not(#wa-theme-off) #view-workbench h3 {
+  font-weight: 600;
+}
+
+/* 「运行状态总览 / 关键指标」是 12px 的小节标签，和其它 13px 的小节标题差一档。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .section-label {
+  font-size: var(--fs-label);
+}
+
+/* HR 面板头：会话标题 16px 是全站唯一的 16px 面板标题，抬到区块标题 20px。 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-topbar h3 {
+  font-size: var(--fs-section);
+}
+
+/* 「平台」筛选是表单标签，跟其它标签一样 13px / 次级色。 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-platform-filter {
+  color: var(--mj-text-2);
+  font-size: var(--fs-label);
+  font-weight: 500;
+}
+
+/* 筛选工具栏里的「选择理由」标签同理，原来 12px 与同行 13px 的复选标签不齐。 */
+body.offer-ui:not(#wa-theme-off) #view-jobs .jobs-override-reason-label {
+  color: var(--mj-text-2);
+  font-size: var(--fs-label);
+  font-weight: 500;
+}
+
+/* 「这页怎么用」的折叠标题与正文统一 13px，不再低一档。 */
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .sg-help > summary,
+body.offer-ui:not(#wa-theme-off) :is(#view-collect, #view-jobs, #view-queue, #view-mail, #view-profile, #view-resume, #view-interview, #view-push, #view-data) .sg-help > p {
+  font-size: var(--fs-label);
+}
+
+/* 个人资料的导入面板标题是面板内的动作标题，和大节标题同级 16/600；
+   原来 14/600 与下面的说明只差一档，看不出层次。 */
+body.offer-ui:not(#wa-theme-off) #view-profile .resume-dropzone > strong {
+  display: block;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+
+/* ==========================================================================
+ * 第 2 轮补充：深色导航未读角标的对比度
+ * 白字压品牌粉：浅色 4.15:1、深色 2.49:1；改用 --mj-bad 底 + --mj-brand-ink 字。
+ * 底色与字色都随主题明暗成对翻转，浅色 / 深色 / 跟随系统三套都 ≥5.8:1。
+ * ========================================================================== */
+body.offer-ui:not(#wa-theme-off) .sidebar .hr-nav-unread {
+  background: var(--mj-bad);
+  color: var(--mj-brand-ink);
 }

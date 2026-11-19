@@ -187,6 +187,14 @@ const state = {
   profileImportBusy: false,
   profileAutoPrefillTried: false,
   profilePrefillCount: 0,
+  // 简历导入：建议值、未采用项、未匹配段落；与用户已填内容分开保存，便于区分来源。
+  profileCvSuggestion: null,
+  profileCvPending: {},
+  profileCvListPending: {},
+  profileCvUnmatched: [],
+  profileCvWarnings: [],
+  profileCvSourceText: '',
+  profileCvTagsBound: false,
   hrConversations: [],
   hrConversationsLoaded: false,
   hrConversationsLoading: false,
@@ -364,6 +372,9 @@ const dom = {
   profileImportFile: document.getElementById('profile-import-file'),
   profileImportPreview: document.getElementById('profile-import-preview'),
   profileImportText: document.getElementById('profile-import-text'),
+  profileImportParagraphs: document.getElementById('profile-import-paragraphs'),
+  profileImportStatus: document.getElementById('profile-import-status'),
+  profileCvSuggest: document.getElementById('profile-cv-suggest'),
   profileDrop: document.getElementById('profile-resume-drop'),
   profileSave: document.getElementById('profile-save'),
   profileResult: document.getElementById('profile-result'),
@@ -2772,31 +2783,31 @@ const PROFILE_LIST_CONFIG = {
   education: {
     title: '教育经历',
     fields: [
-      { key: 'school', label: '学校', placeholder: '学校名称' },
-      { key: 'major', label: '专业', placeholder: '专业名称' },
+      { key: 'school', label: '学校', placeholder: '例如 某某大学' },
+      { key: 'major', label: '专业', placeholder: '例如 计算机科学与技术' },
       { key: 'degree', label: '学历', type: 'select', options: ['', '大专', '本科', '硕士', '博士', '其他'] },
-      { key: 'start', label: '开始', placeholder: '2018-09' },
-      { key: 'end', label: '结束', placeholder: '2022-06' },
+      { key: 'start', label: '开始', placeholder: '例如 2018-09' },
+      { key: 'end', label: '结束', placeholder: '例如 2022-06' },
       { key: 'summary', label: '补充说明', type: 'textarea', full: true }
     ]
   },
   experiences: {
     title: '工作经历',
     fields: [
-      { key: 'company', label: '公司', placeholder: '公司名称' },
-      { key: 'title', label: '职位', placeholder: '岗位名称' },
-      { key: 'start', label: '开始', placeholder: '2021-07' },
-      { key: 'end', label: '结束', placeholder: '2022-05' },
+      { key: 'company', label: '公司', placeholder: '例如 某某公司' },
+      { key: 'title', label: '职位', placeholder: '例如 产品实习生' },
+      { key: 'start', label: '开始', placeholder: '例如 2021-07' },
+      { key: 'end', label: '结束', placeholder: '例如 2022-05' },
       { key: 'summary', label: '做了什么（只写可核实事实）', type: 'textarea', full: true }
     ]
   },
   projects: {
     title: '项目经历',
     fields: [
-      { key: 'name', label: '项目名', placeholder: '项目名称' },
-      { key: 'role', label: '角色', placeholder: '你的角色' },
-      { key: 'start', label: '开始', placeholder: '2021-09' },
-      { key: 'end', label: '结束', placeholder: '2022-03' },
+      { key: 'name', label: '项目名', placeholder: '例如 报名系统改版' },
+      { key: 'role', label: '角色', placeholder: '例如 产品负责人' },
+      { key: 'start', label: '开始', placeholder: '例如 2021-09' },
+      { key: 'end', label: '结束', placeholder: '例如 2022-03' },
       { key: 'summary', label: '项目说明（只写可核实事实）', type: 'textarea', full: true }
     ]
   }
@@ -3049,12 +3060,19 @@ async function autoPrefillProfileFromCv() {
     if (data && data.message) setStatus(data.message, 'warn');
     return;
   }
-  // The form is empty before this point (saved=false), so overwriting needs no confirmation.
-  populateProfileForm(data.profile);
-  state.profileDirty = true;
-  state.profilePrefillCount = profileCountPrefilled(data.profile);
-  renderProfile(data.profile);
-  showInline(dom.profileResult, `已按你的简历预填了 ${state.profilePrefillCount} 项，请核对后保存。`, 'ok');
+  // The form is empty before this point (saved=false); the CV values still go through the
+  // suggestion path so every filled field carries the 「来自简历」marker.
+  const suggested = data.profile && typeof data.profile === 'object' ? data.profile : {};
+  state.profileCvSuggestion = suggested;
+  state.profileCvUnmatched = normalizeUnmatchedSections(data.unmatched_sections);
+  state.profileCvWarnings = Array.isArray(data.warnings) ? data.warnings : [];
+  renderResumeSourcePanel(data.source_text || '');
+  const applied = applyProfileSuggestion(suggested);
+  state.profileDirty = applied > 0;
+  state.profilePrefillCount = profileCountPrefilled(suggested);
+  renderProfile(suggested);
+  renderProfileCvSuggest();
+  showInline(dom.profileResult, `已按你的简历预填了 ${state.profilePrefillCount} 项（标「来自简历」），请核对后保存。`, 'ok');
 }
 
 function renderProfile(profile) {
@@ -3080,7 +3098,7 @@ function renderProfile(profile) {
   }
   if (dom.profileImport) {
     dom.profileImport.disabled = state.mode !== 'user' || state.profileImportBusy;
-    dom.profileImport.title = state.mode === 'user' ? '选择本地 PDF、DOCX、Markdown 或 TXT 简历，核对后保存' : '演示模式不读取真实简历；请切换到「我的 user」';
+    dom.profileImport.title = state.mode === 'user' ? '选择本地 PDF、DOCX、Markdown、TXT 或 PNG/JPG 简历，核对后保存' : '演示模式不读取真实简历；请切换到「我的 user」';
   }
   dom.profileDrop.setAttribute('aria-disabled', String(state.mode !== 'user' || state.profileImportBusy));
 }
@@ -3167,6 +3185,7 @@ async function saveProfileForm(event) {
   }
   state.profileDirty = false;
   state.profilePrefillCount = 0;
+  clearProfileCvImportState();
   populateProfileForm(data.profile);
   renderProfileMeter(data.profile.completeness);
   showInline(dom.profileResult, data.message || '个人资料已保存到本机。', 'ok');
@@ -3180,61 +3199,564 @@ function chooseProfileCv() {
   dom.profileImportFile.click();
 }
 
+/* 简历导入：失败时保留原文并按空行分段可复制；建议值与已保存值分开显示，不覆盖用户已填内容。 */
+
+const PROFILE_CV_FAILURE_HINTS = {
+  model_unconfigured: '还没配置 AI 接口，简历暂时解析不了。原文已经留在下方「简历原文」里，不会丢；配好模型后可以重新导入，也可以先照着原文手动填写。',
+  truncated: '简历较长，只读到一部分（通常是后半段没读完）。已经识别出的内容会照常填入，没覆盖到的请对照原文补上。',
+  invalid_output: '模型这次没有读出可用的资料。原文已保留，可以重试一次，或照着原文手动填写。',
+  timeout: '解析超时了。原文已保留，稍后重试一次；也可以先照着原文手动填写。',
+  no_supported_fields: '这份文件里没找到可识别的资料，可能是扫描件或纯图片。原文已保留，可以转成文字后重新导入，或直接手动填写。',
+  empty_text: '文件里没有读到文字，可能是扫描件或纯图片。可以转成文字后重新导入，或直接手动填写。',
+  invalid_response: '服务返回的内容无法解析。如果手头有原文，可以稍后重试。'
+};
+
+const PROFILE_CV_FALLBACK_HINT = '这次没能解析成功。已经拿到的原文会留在下方「简历原文」里，可以重试，也可以照着原文手动填写。';
+
+const PROFILE_CV_FIELDS = [
+  ['basic.name', '姓名', () => dom.profileName],
+  ['basic.city', '所在城市', () => dom.profileCity],
+  ['basic.email', '邮箱', () => dom.profileEmail],
+  ['basic.phone', '电话', () => dom.profilePhone],
+  ['basic.wechat', '微信', () => dom.profileWechat],
+  ['basic.links', '作品集 / 链接', () => dom.profileLinks],
+  ['job_intent.titles', '目标岗位', () => dom.profileTitles],
+  ['job_intent.cities', '目标城市', () => dom.profileTargetCities],
+  ['job_intent.salary_min', '期望月薪下限', () => dom.profileSalaryMin],
+  ['job_intent.salary_max', '期望月薪上限', () => dom.profileSalaryMax],
+  ['job_intent.availability', '到岗时间', () => dom.profileAvailability],
+  ['skills.tools', '工具 / 技能', () => dom.profileTools],
+  ['skills.strengths', '优势标签', () => dom.profileStrengths],
+  ['summary', '个人简介', () => dom.profileSummary]
+];
+
+const PROFILE_CV_LIST_LABELS = {
+  education: '教育经历',
+  experiences: '工作 / 实习经历',
+  projects: '项目经历'
+};
+
+function profileCvJoinValue(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean).join(', ');
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function profileCvFieldInput(path) {
+  const entry = PROFILE_CV_FIELDS.find((item) => item[0] === path);
+  return entry ? entry[2]() : null;
+}
+
+function profileCvFieldLabel(path) {
+  const entry = PROFILE_CV_FIELDS.find((item) => item[0] === path);
+  return entry ? entry[1] : path;
+}
+
+/* 把后端返回的 profile 形状摊平成「字段路径 → 文本」，只保留非空值。 */
+function profileCvSuggestedEntries(suggested) {
+  const source = suggested && typeof suggested === 'object' ? suggested : {};
+  const basic = source.basic || {};
+  const intent = source.job_intent || {};
+  const skills = source.skills || {};
+  const raw = {
+    'basic.name': basic.name,
+    'basic.city': basic.city,
+    'basic.email': basic.email,
+    'basic.phone': basic.phone,
+    'basic.wechat': basic.wechat,
+    'basic.links': basic.links,
+    'job_intent.titles': intent.titles,
+    'job_intent.cities': intent.cities,
+    'job_intent.salary_min': intent.salary_min,
+    'job_intent.salary_max': intent.salary_max,
+    'job_intent.availability': intent.availability,
+    'skills.tools': skills.tools,
+    'skills.strengths': skills.strengths,
+    summary: source.summary
+  };
+  return PROFILE_CV_FIELDS
+    .map(([path, label]) => ({ path, label, value: profileCvJoinValue(raw[path]) }))
+    .filter((entry) => entry.value);
+}
+
+function profileCvListRows(suggested, kind) {
+  const source = suggested && typeof suggested === 'object' ? suggested : {};
+  const rows = Array.isArray(source[kind]) ? source[kind] : [];
+  return rows.filter((row) => row && typeof row === 'object'
+    && Object.values(row).some((value) => String(value || '').trim()));
+}
+
+function profileCvListIsEmpty(kind) {
+  const container = profileListContainer(kind);
+  if (!container) return true;
+  const items = Array.from(container.querySelectorAll('.profile-item'));
+  return items.length === 0 || items.every((item) => Array.from(item.querySelectorAll('[data-field]'))
+    .every((input) => !String(input.value || '').trim()));
+}
+
+function markProfileCvField(scope) {
+  if (!scope) return;
+  const existing = Array.from(scope.children).some((node) => node.classList && node.classList.contains('profile-cv-tag'));
+  if (existing) return;
+  scope.append(el('span', { className: 'badge profile-cv-tag', text: '来自简历' }));
+}
+
+function clearProfileCvTags() {
+  if (!dom.profileForm) return;
+  dom.profileForm.querySelectorAll('.profile-cv-tag').forEach((tag) => tag.remove());
+}
+
+function profileCvTagCount() {
+  if (!dom.profileForm) return 0;
+  return dom.profileForm.querySelectorAll('.profile-cv-tag').length;
+}
+
+/* 保存后建议与原文都已过期，清空相关提示，避免误以为还有未采用的内容。 */
+function clearProfileCvImportState() {
+  state.profileCvSuggestion = null;
+  state.profileCvPending = {};
+  state.profileCvListPending = {};
+  state.profileCvUnmatched = [];
+  state.profileCvWarnings = [];
+  state.profileCvSourceText = '';
+  clearProfileCvTags();
+  if (dom.profileCvSuggest) {
+    dom.profileCvSuggest.hidden = true;
+    clear(dom.profileCvSuggest);
+  }
+  if (dom.profileImportStatus) {
+    dom.profileImportStatus.hidden = true;
+    clear(dom.profileImportStatus);
+  }
+  if (dom.profileImportPreview) dom.profileImportPreview.hidden = true;
+  if (dom.profileImportParagraphs) clear(dom.profileImportParagraphs);
+  if (dom.profileImportText) {
+    dom.profileImportText.textContent = '';
+    dom.profileImportText.hidden = false;
+  }
+}
+
+/* 用户改动某个字段或某条经历后，「来自简历」标记立即消失。 */
+function bindProfileCvTagClearing() {
+  if (state.profileCvTagsBound || !dom.profileForm) return;
+  state.profileCvTagsBound = true;
+  const drop = (event) => {
+    const target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+    const scope = target.closest('.profile-item') || target.closest('.form-field');
+    if (!scope) return;
+    const tag = Array.from(scope.children).find((node) => node.classList && node.classList.contains('profile-cv-tag'))
+      || scope.querySelector('.profile-cv-tag');
+    if (!tag) return;
+    tag.remove();
+    renderProfileCvSuggest();
+  };
+  dom.profileForm.addEventListener('input', drop);
+  dom.profileForm.addEventListener('change', drop);
+}
+
+function copyTextWithFallback(text) {
+  const area = document.createElement('textarea');
+  area.value = String(text || '');
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.top = '-1000px';
+  area.style.opacity = '0';
+  document.body.append(area);
+  area.select();
+  let copied = false;
+  try {
+    copied = Boolean(document.execCommand && document.execCommand('copy'));
+  } catch (error) {
+    copied = false;
+  }
+  area.remove();
+  return copied;
+}
+
+async function copyToClipboard(text, button, label = '复制') {
+  let copied = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(String(text || ''));
+      copied = true;
+    }
+  } catch (error) {
+    copied = false;
+  }
+  if (!copied) copied = copyTextWithFallback(text);
+  if (button) {
+    button.textContent = copied ? '已复制' : '请手动选中复制';
+    window.setTimeout(() => { button.textContent = label; }, 1800);
+  }
+  setStatus(copied ? '这段原文已复制。' : '浏览器没有允许自动复制，请手动选中这段文字。', copied ? 'ok' : 'warn');
+  return copied;
+}
+
+function copyTextButton(text, label = '复制') {
+  const button = el('button', {
+    className: 'button button-quiet button-small',
+    text: label,
+    attrs: { type: 'button' }
+  });
+  button.addEventListener('click', () => { copyToClipboard(text, button, label); });
+  return button;
+}
+
+function splitResumeParagraphs(text) {
+  return String(text || '')
+    .split(/\n\s*\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+/* 只读原文面板：按空行分段，每段可单独复制；失败时自动展开。 */
+function renderResumeSourcePanel(text, options = {}) {
+  const source = String(text || '');
+  if (!dom.profileImportPreview || !dom.profileImportParagraphs) return;
+  if (!source) {
+    dom.profileImportPreview.hidden = true;
+    clear(dom.profileImportParagraphs);
+    if (dom.profileImportText) dom.profileImportText.textContent = '';
+    return;
+  }
+  state.profileCvSourceText = source;
+  const paragraphs = splitResumeParagraphs(source);
+  clear(dom.profileImportParagraphs);
+  paragraphs.forEach((paragraph, index) => {
+    const row = el('div', { className: 'profile-import-paragraph' });
+    row.append(el('p', { className: 'profile-import-paragraph-text', text: paragraph }));
+    row.append(copyTextButton(paragraph, `复制第 ${index + 1} 段`));
+    dom.profileImportParagraphs.append(row);
+  });
+  if (dom.profileImportText) {
+    dom.profileImportText.textContent = source;
+    dom.profileImportText.hidden = paragraphs.length > 0;
+  }
+  dom.profileImportPreview.hidden = false;
+  if (options.open) dom.profileImportPreview.open = true;
+}
+
+function renderProfileImportStatus(kind, lines, options = {}) {
+  const box = dom.profileImportStatus;
+  if (!box) return;
+  clear(box);
+  box.hidden = false;
+  box.className = `action-result action-result-${kind} profile-import-status`;
+  const paragraph = el('p', { attrs: { role: 'status' } });
+  lines.filter(Boolean).forEach((line, index) => {
+    if (index) paragraph.append(el('br'));
+    paragraph.append(document.createTextNode(String(line)));
+  });
+  box.append(paragraph);
+  if (options.settings) {
+    const actions = el('p', { className: 'profile-import-actions' });
+    const button = el('button', {
+      className: 'button button-quiet button-small',
+      text: '去设置 AI 接口',
+      attrs: { type: 'button' }
+    });
+    button.addEventListener('click', openAiSettingsFromProfile);
+    actions.append(button);
+    box.append(actions);
+  }
+}
+
+function openAiSettingsFromProfile() {
+  showView('data');
+  window.setTimeout(() => {
+    const panel = document.getElementById('ai-settings-panel');
+    if (!panel) return;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const heading = panel.querySelector('h2, h3');
+    if (heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus({ preventScroll: true });
+    }
+  }, 120);
+}
+
+function renderProfileImportFailure(failure, message, hasSource) {
+  const hint = PROFILE_CV_FAILURE_HINTS[failure] || PROFILE_CV_FALLBACK_HINT;
+  const lines = [hint];
+  if (message && message !== hint) lines.push(`原因：${message}`);
+  lines.push('表单里的内容没有改动：框里仍是上次保存的资料，或你刚才填写的内容。');
+  if (!hasSource) lines.push('这次没能拿到简历原文；可以重新选择文件，或直接在下方手动填写。');
+  renderProfileImportStatus('error', lines, { settings: failure === 'model_unconfigured' });
+}
+
+function normalizeUnmatchedSections(value) {
+  const items = Array.isArray(value) ? value : [];
+  return items.map((item) => {
+    if (typeof item === 'string') return { label: '', text: item.trim() };
+    if (!item || typeof item !== 'object') return null;
+    const text = String(item.text || item.content || item.body || '').trim();
+    if (!text) return null;
+    const label = String(item.section || item.title || item.label || '').trim();
+    const index = Number.isInteger(item.index) ? `第 ${item.index + 1} 段` : '';
+    return { label: [label, index].filter(Boolean).join(' '), text };
+  }).filter(Boolean);
+}
+
+/* 只填空着的字段；与已填内容不同的值进入待选列表，绝不覆盖。返回实际填入的项数。 */
+function applyProfileSuggestion(suggested, options = {}) {
+  if (options.reset) {
+    clearProfileCvTags();
+    state.profileCvPending = {};
+    state.profileCvListPending = {};
+  }
+  bindProfileCvTagClearing();
+  let applied = 0;
+  profileCvSuggestedEntries(suggested).forEach((entry) => {
+    const input = profileCvFieldInput(entry.path);
+    if (!input) return;
+    const current = String(input.value || '').trim();
+    if (!current) {
+      input.value = entry.value;
+      markProfileCvField(input.closest('.form-field'));
+      applied += 1;
+    } else if (current !== entry.value) {
+      state.profileCvPending[entry.path] = entry.value;
+    }
+  });
+  Object.keys(PROFILE_CV_LIST_LABELS).forEach((kind) => {
+    const rows = profileCvListRows(suggested, kind);
+    if (!rows.length) return;
+    if (profileCvListIsEmpty(kind)) {
+      appendCvProfileRows(kind, rows, { replace: true });
+      applied += rows.length;
+    } else {
+      state.profileCvListPending[kind] = rows;
+    }
+  });
+  return applied;
+}
+
+function appendCvProfileRows(kind, rows, options = {}) {
+  const container = profileListContainer(kind);
+  if (!container) return;
+  if (options.replace) clear(container);
+  const before = container.querySelectorAll('.profile-item').length;
+  rows.forEach((row) => addProfileRow(kind, row, false));
+  Array.from(container.querySelectorAll('.profile-item')).slice(before).forEach((item) => {
+    markProfileCvField(item.querySelector('.profile-item-head'));
+  });
+  state.profileDirty = true;
+}
+
+function adoptProfileCvField(path) {
+  const value = state.profileCvPending[path];
+  const input = profileCvFieldInput(path);
+  if (value === undefined || !input) return;
+  input.value = value;
+  markProfileCvField(input.closest('.form-field'));
+  delete state.profileCvPending[path];
+  state.profileDirty = true;
+  renderProfile(state.snapshot && state.snapshot.profile);
+  renderProfileCvSuggest();
+}
+
+function adoptProfileCvList(kind) {
+  const rows = state.profileCvListPending[kind];
+  if (!rows || !rows.length) return;
+  appendCvProfileRows(kind, rows);
+  delete state.profileCvListPending[kind];
+  renderProfile(state.snapshot && state.snapshot.profile);
+  renderProfileCvSuggest();
+}
+
+function adoptAllProfileCvSuggestions() {
+  Object.entries(state.profileCvPending || {}).forEach(([path, value]) => {
+    const input = profileCvFieldInput(path);
+    if (!input) return;
+    input.value = value;
+    markProfileCvField(input.closest('.form-field'));
+  });
+  state.profileCvPending = {};
+  Object.keys(state.profileCvListPending || {}).forEach((kind) => {
+    appendCvProfileRows(kind, state.profileCvListPending[kind]);
+  });
+  state.profileCvListPending = {};
+  state.profileDirty = true;
+  renderProfile(state.snapshot && state.snapshot.profile);
+  renderProfileCvSuggest();
+}
+
+function profileCvShortValue(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+}
+
+function renderProfileCvSuggest() {
+  const box = dom.profileCvSuggest;
+  if (!box) return;
+  clear(box);
+  const pending = Object.entries(state.profileCvPending || {});
+  const listPending = Object.entries(state.profileCvListPending || {})
+    .filter(([, rows]) => Array.isArray(rows) && rows.length);
+  const unmatched = state.profileCvUnmatched || [];
+  const warnings = state.profileCvWarnings || [];
+  const applied = profileCvTagCount();
+  if (!state.profileCvSuggestion && !applied && !pending.length && !listPending.length && !unmatched.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const parts = [];
+  if (applied) parts.push(`已从简历填入 ${applied} 项，标了「来自简历」，改过就消失`);
+  if (pending.length) parts.push(`${pending.length} 项与你当前填写的内容不同，没有覆盖`);
+  if (listPending.length) parts.push(`${listPending.length} 类经历建议还没填入`);
+  box.append(el('p', {
+    className: 'profile-cv-suggest-lead',
+    text: parts.length ? `${parts.join('；')}。` : '这次没有可以自动填入的建议，请对照下方「简历原文」手动补充。',
+    attrs: { role: 'status' }
+  }));
+
+  if (pending.length || listPending.length) {
+    const list = el('div', { className: 'profile-cv-suggest-list' });
+    pending.forEach(([path, value]) => {
+      const row = el('div', { className: 'profile-cv-suggest-item' });
+      row.append(el('span', { className: 'profile-cv-suggest-label', text: profileCvFieldLabel(path) }));
+      row.append(el('span', { className: 'profile-cv-suggest-value', text: profileCvShortValue(value) }));
+      const adopt = el('button', {
+        className: 'button button-quiet button-small',
+        text: '采用',
+        attrs: { type: 'button', 'aria-label': `采用简历里的${profileCvFieldLabel(path)}` }
+      });
+      adopt.addEventListener('click', () => adoptProfileCvField(path));
+      row.append(adopt);
+      list.append(row);
+    });
+    listPending.forEach(([kind, rows]) => {
+      const row = el('div', { className: 'profile-cv-suggest-item' });
+      row.append(el('span', { className: 'profile-cv-suggest-label', text: PROFILE_CV_LIST_LABELS[kind] }));
+      row.append(el('span', {
+        className: 'profile-cv-suggest-value',
+        text: `简历里有 ${rows.length} 条，表单里已有内容，未自动追加`
+      }));
+      const adopt = el('button', {
+        className: 'button button-quiet button-small',
+        text: '追加',
+        attrs: { type: 'button', 'aria-label': `追加简历里的${PROFILE_CV_LIST_LABELS[kind]}建议` }
+      });
+      adopt.addEventListener('click', () => adoptProfileCvList(kind));
+      row.append(adopt);
+      list.append(row);
+    });
+    box.append(list);
+    const actions = el('p', { className: 'profile-cv-suggest-actions' });
+    const adoptAll = el('button', {
+      className: 'button button-quiet button-small',
+      text: '采用全部建议',
+      attrs: { type: 'button' }
+    });
+    adoptAll.addEventListener('click', adoptAllProfileCvSuggestions);
+    actions.append(adoptAll);
+    box.append(actions);
+  }
+
+  const warningText = reasonText(warnings);
+  if (warningText) {
+    box.append(el('p', { className: 'profile-cv-suggest-warn', text: `提醒：${warningText}` }));
+  }
+
+  if (unmatched.length) {
+    const wrap = el('div', { className: 'profile-cv-unmatched' });
+    wrap.append(el('p', { className: 'profile-cv-unmatched-title', text: '这几段没能自动填入，请手动补充：' }));
+    unmatched.forEach((item) => {
+      const row = el('div', { className: 'profile-cv-unmatched-item' });
+      if (item.label) row.append(el('span', { className: 'profile-cv-unmatched-label', text: item.label }));
+      row.append(el('p', { className: 'profile-cv-unmatched-text', text: item.text }));
+      row.append(copyTextButton(item.text, '复制这一段'));
+      wrap.append(row);
+    });
+    box.append(wrap);
+  }
+}
+
+/* 原始 fetch：失败响应里的 failure / source_text 也要拿到，不能被 parseResponse 丢掉。 */
+async function requestProfileImport(payload) {
+  const response = await fetch('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ action: 'import-profile-cv', mode: state.mode, ...payload })
+  });
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = null;
+  }
+  if (!data || typeof data !== 'object') {
+    const error = new Error(`服务返回的内容无法解析（HTTP ${response.status}）。`);
+    error.failure = 'invalid_response';
+    throw error;
+  }
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || data.message || `简历导入没有完成（HTTP ${response.status}）。`);
+    error.failure = typeof data.failure === 'string' ? data.failure : '';
+    error.sourceText = typeof data.source_text === 'string' ? data.source_text : '';
+    throw error;
+  }
+  return data;
+}
+
 async function importProfileFromCv(file) {
   if (!file || !file.name || state.profileImportBusy) return;
   if (state.mode !== 'user') {
     setStatus('演示模式不读取真实简历；请切换到「我的 user」。', 'warn');
     return;
   }
-  if (!/\.(pdf|docx|md|txt)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
-    showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD 或 TXT 文件，最大 5 MB。', 'error');
+  if (!/\.(pdf|docx|md|txt|png|jpe?g|webp)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
+    showInline(dom.profileResult, '请选择非空的 PDF、DOCX、MD、TXT 或 PNG/JPG 文件，最大 5 MB。', 'error');
     return;
   }
-  if (state.profileDirty && !window.confirm('Agent 会更新识别到的资料及教育、工作和项目经历；未识别的资料保留。继续吗？')) return;
+  const confirmedDirty = state.profileDirty
+    ? window.confirm('解析结果只会填进还空着的输入框；与已填写内容不同的建议会先列出来，由你决定是否采用，不会直接覆盖。继续吗？')
+    : true;
+  if (!confirmedDirty) return;
   const seq = ++state.profileImportSeq;
+  state.profileAutoPrefillTried = true;
   state.profileImportBusy = true;
   dom.profileImport.disabled = true;
   dom.profileImport.setAttribute('aria-busy', 'true');
   dom.profileDrop.setAttribute('aria-disabled', 'true');
   dom.profileSave.disabled = true;
-  dom.profileImportPreview.hidden = true;
-  dom.profileImportText.textContent = '';
-  showInline(dom.profileResult, '正在读取简历文件…', 'info');
+  renderProfileImportStatus('info', ['正在读取简历文件…']);
   try {
     const contentBase64 = await readFileAsBase64(file);
     if (state.mode !== 'user' || seq !== state.profileImportSeq) return;
-    showInline(dom.profileResult, 'Agent 正在解析整份简历及教育、工作、项目经历，请稍候…', 'info');
-    const data = await postAction('import-profile-cv', { mode: 'user', filename: file.name, content_base64: contentBase64 });
+    renderProfileImportStatus('info', ['Agent 正在解析整份简历及教育、工作、项目经历，请稍候…']);
+    const data = await requestProfileImport({ filename: file.name, content_base64: contentBase64 });
     if (state.mode !== 'user' || seq !== state.profileImportSeq) return;
-    if (data.ok === false) throw new Error(data.message || '简历导入失败，请重新选择。');
-    const profile = collectProfileForm();
-    const suggested = data.profile || {};
-    Object.entries(suggested.basic || {}).forEach(([key, value]) => {
-      if (value) profile.basic[key] = value;
-    });
-    profile.skills.tools = [...new Set([...profile.skills.tools, ...(suggested.skills?.tools || [])])];
-    profile.skills.strengths = [...new Set([...profile.skills.strengths, ...(suggested.skills?.strengths || [])])];
-    ['education', 'experiences', 'projects'].forEach((key) => {
-      if (suggested[key]?.length) profile[key] = suggested[key];
-    });
-    ['titles', 'cities', 'availability'].forEach((key) => {
-      if (suggested.job_intent?.[key]?.length) profile.job_intent[key] = suggested.job_intent[key];
-    });
-    if (suggested.summary) profile.summary = suggested.summary;
-    profile.truth_confirmed = false;
-    populateProfileForm(profile);
-    state.profileDirty = true;
-    state.profilePrefillCount = profileCountPrefilled(profile);
-    renderProfile(profile);
-    dom.profileImportText.textContent = data.source_text || '';
-    dom.profileImportPreview.hidden = !data.source_text;
+    const suggested = data.profile && typeof data.profile === 'object' ? data.profile : {};
+    state.profileCvSuggestion = suggested;
+    state.profileCvUnmatched = normalizeUnmatchedSections(data.unmatched_sections);
+    state.profileCvWarnings = Array.isArray(data.warnings) ? data.warnings : [];
+    renderResumeSourcePanel(data.source_text || '');
+    const applied = applyProfileSuggestion(suggested, { reset: true });
+    if (applied) {
+      state.profileDirty = true;
+      state.profilePrefillCount = Math.max(state.profilePrefillCount, applied);
+    }
+    renderProfile(state.snapshot && state.snapshot.profile);
+    renderProfileCvSuggest();
     const counts = `教育 ${suggested.education?.length || 0} 条 · 工作/实习 ${suggested.experiences?.length || 0} 条 · 项目 ${suggested.projects?.length || 0} 条。`;
-    showInline(dom.profileResult, [data.message, counts, ...(data.warnings || [])].join('\n'), data.warnings?.length ? 'warn' : 'ok');
+    const lines = [data.message || '简历已解析。'];
+    if (applied) lines.push(`已填入 ${applied} 项还空着的字段，标了「来自简历」；这些只是草稿，核对后保存。`);
+    else lines.push('表单里已经有内容，建议值列在下方，等你决定是否采用。');
+    lines.push(counts);
+    renderProfileImportStatus(state.profileCvWarnings.length ? 'warn' : 'ok', lines);
     setStatus('简历已解析，请核对并确认真实性后保存。', 'ok');
   } catch (error) {
     if (state.mode === 'user' && seq === state.profileImportSeq) {
-      showInline(dom.profileResult, friendlyError(error), 'error');
-      setStatus(friendlyError(error), 'error');
+      const failure = String(error.failure || '');
+      const source = String(error.sourceText || '');
+      if (source) renderResumeSourcePanel(source, { open: true });
+      const message = friendlyError(error);
+      renderProfileImportFailure(failure, message, Boolean(source || state.profileCvSourceText));
+      renderProfileCvSuggest();
+      setStatus(message, 'error');
     }
   } finally {
     state.profileImportBusy = false;
@@ -8398,7 +8920,7 @@ function renderVariants(snapshot) {
         el('div', { className: 'resume-compare-cell' }, [compareButton])
       ];
     }),
-    emptyText: '还没有保存经历变体；保存后才能与主稿对比。',
+    emptyText: '还没有已保存的经历变体；已保存的变体会在这里与主稿逐段对比。',
     className: 'data-table-wide'
   });
 }
@@ -8911,7 +9433,9 @@ function bindEvents() {
     button.addEventListener('click', () => showView(button.dataset.view));
   });
 
-  document.querySelectorAll('.ui-hub-tab').forEach((button) => {
+  // 只有带 data-view 的页签才是跨页跳转；页内页签（如模拟面试三个标签）由各自模块处理，
+  // 不能对它们调用 showView(undefined)，否则所有面板被隐藏、整页空白。
+  document.querySelectorAll('.ui-hub-tab[data-view]').forEach((button) => {
     button.addEventListener('click', () => showView(button.dataset.view));
   });
 

@@ -29,8 +29,8 @@
   font-weight: var(--wa-medium, 500);
   padding: 4px 10px;
   border-radius: 999px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
-  background: var(--bg, #f5f5f3);
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
+  background: var(--bg, #F2F3F0);
   color: var(--ink-2);
 }
 
@@ -40,19 +40,22 @@
 }
 
 .ci-timer.is-qa {
-  border-color: var(--wa-brand, #ad5132);
-  background: var(--accent-soft, rgba(173, 81, 50, 0.1));
-  color: var(--wa-brand, #ad5132);
+  border-color: var(--wa-brand, #0D0E0C);
+  background: var(--accent-soft, rgba(13, 14, 12, 0.06));
+  color: var(--wa-brand, #0D0E0C);
 }
 
 .ci-knowledge-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 14px;
-  padding: 8px 12px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
-  border-radius: 8px;
-  background: var(--bg, #f5f5f3);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mj-text-2);
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
 }
 
 .ci-transcript {
@@ -65,15 +68,15 @@
   scrollbar-gutter: stable;
   padding: 16px;
   margin: 12px 0;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
   border-radius: 12px;
-  background: var(--bg, #f5f5f3);
+  background: var(--bg, #F2F3F0);
 }
 
 .ci-msg {
   padding: 12px 14px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
   white-space: pre-wrap;
   line-height: 1.6;
   font-size: 14px;
@@ -89,8 +92,8 @@
 .ci-msg.is-user {
   align-self: flex-end;
   max-width: 82%;
-  background: var(--accent-soft, rgba(173, 81, 50, 0.08));
-  border-color: color-mix(in srgb, var(--wa-brand, #ad5132) 28%, var(--line, rgba(20, 20, 19, 0.12)));
+  background: var(--accent-soft, rgba(13, 14, 12, 0.05));
+  border-color: color-mix(in srgb, var(--wa-brand, #0D0E0C) 28%, var(--line, rgba(13, 14, 12, 0.12)));
 }
 
 .ci-msg-meta {
@@ -110,7 +113,7 @@
   flex-wrap: wrap;
   padding: 10px 14px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
   background: var(--warn-bg, rgba(154, 91, 19, 0.08));
   margin: 8px 0;
   font-size: 14px;
@@ -121,14 +124,14 @@
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
   border-radius: 12px;
   background: var(--wa-elevated, var(--surface, #ffffff));
   margin-top: 12px;
 }
 
 .ci-code-box {
-  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-family: var(--code-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -167,7 +170,7 @@
   gap: 10px;
   padding: 14px 16px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.14));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.14));
   background: var(--wa-elevated, var(--surface, #ffffff));
 }
 
@@ -190,7 +193,7 @@
 
 .ci-step-item.is-active {
   font-weight: var(--wa-medium, 500);
-  color: var(--wa-brand, #ad5132);
+  color: var(--wa-brand, #0D0E0C);
 }
 
 .ci-step-item.is-done {
@@ -203,7 +206,7 @@
   background: linear-gradient(
     90deg,
     rgba(128, 128, 128, 0.12),
-    rgba(173, 81, 50, 0.28),
+    rgba(128, 128, 128, 0.24),
     rgba(128, 128, 128, 0.12)
   );
   background-size: 200% 100%;
@@ -261,17 +264,828 @@
 .ci-card {
   padding: 14px 16px;
   border-radius: 8px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
-  background: var(--bg, #f5f5f3);
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
+  background: var(--bg, #F2F3F0);
 }
 
 .ci-quote {
   font-size: 12px;
   line-height: 1.6;
   padding: 8px 12px;
-  border: 0.5px solid var(--line, rgba(20, 20, 19, 0.12));
+  border: 0.5px solid var(--line, rgba(13, 14, 12, 0.12));
   border-radius: 6px;
   background: var(--wa-elevated, var(--surface, #ffffff));
   color: var(--ink-2);
   margin: 6px 0;
+}
+
+/* ==========================================================================
+ * 全局排版统一层
+ * --------------------------------------------------------------------------
+ * 本文件是 index.html 里最后引入的样式表，所以把「跨页面的排版与组件规则」放在
+ * 末尾，保证压过前面各层的旧规则；页面专属的微调仍写在各自样式表里。
+ * 取值只来自 offer-theme.css :root 的 --fs-* / --sp-* / --r-* / --mj-*。
+ * 前缀统一带 body.offer-ui:not(#wa-theme-off)；个别被旧规则用更高特异性覆盖的
+ * 地方重复一次 :not()，只抬高一级特异性，不用 !important。
+ * ========================================================================== */
+
+/* 0. 旧 token 复位 ------------------------------------------------------
+ * workbench-agent.css（比 mj-base.css 后加载）在全站重新定义了 --bg / --ink /
+ * --accent-soft / --wa-brand 等旧 token，导致同一页面里两套灰阶和荧光绿同时出现。
+ * 这里按 mj-base 的墨靛 token 再指一遍，深色随 :root[data-theme] 自动跟随。
+ */
+/* 重复 :not(#wa-theme-off) 是为了压过 workbench-agent.css 里
+   :root[data-theme="dark"] / prefers-color-scheme 两块的更高特异性；值仍是
+   var(--mj-*)，深浅色自动跟随，不需要再写一份深色。 */
+:root body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) {
+  --bg: var(--mj-canvas);
+  --surface: var(--mj-paper);
+  --panel-bg: var(--mj-paper);
+  --header-bg: var(--mj-paper);
+  --ink: var(--mj-text);
+  --ink-2: var(--mj-text-2);
+  --mute: var(--mj-mute);
+  --line: var(--mj-line);
+  --accent: var(--mj-ink);
+  --accent-fill: var(--mj-ink);
+  --accent-soft: var(--mj-brand-soft);
+  --pill: var(--mj-paper-2);
+  --on-ink: var(--mj-brand-ink);
+  --sg: var(--mj-brand);
+  --sg-ink: var(--mj-brand-ink);
+  --wa-brand: var(--mj-brand);
+  --wa-focus: var(--mj-brand);
+  --wa-elevated: var(--mj-paper);
+  --wa-medium: 500;
+  --wa-semibold: 600;
+}
+
+body.offer-ui:not(#wa-theme-off) .sidebar {
+  border-right: 1px solid var(--mj-line);
+  background: var(--mj-glass);
+  backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .topbar {
+  border-bottom: 1px solid var(--mj-line);
+  background: var(--mj-glass);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#ci-timer-badge, .ci-timer) {
+  border: 1px solid var(--mj-line);
+  border-radius: var(--r-pill);
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+  font-size: var(--fs-aux);
+  font-weight: 500;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#ci-timer-badge, .ci-timer).is-qa {
+  border-color: var(--mj-brand);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+}
+
+/* 1. 基础排版 ------------------------------------------------------------ */
+body.offer-ui:not(#wa-theme-off) {
+  font-family: var(--ui-font);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--mj-text);
+  /* 旧「信号」层把 --sg 设成荧光绿 #D2F53C，这里收回到品牌色，全站只剩一套强调色 */
+  --sg: var(--mj-brand);
+}
+
+body.offer-ui:not(#wa-theme-off) .home-title {
+  font-family: var(--ui-font);
+  font-size: var(--fs-display);
+  font-weight: 600;
+  line-height: var(--lh-title);
+  letter-spacing: -.01em;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(h1, h2, h3, h4, h5, h6, button, input, select, textarea) {
+  font-family: var(--ui-font);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(h1, h2, h3, h4) {
+  letter-spacing: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(code, pre, kbd, samp, .code-block, .career-code, .ci-code-box) {
+  font-family: var(--code-font);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(small, .hint, .meta-line, .panel-note, .view-lede) {
+  letter-spacing: 0;
+}
+
+/* 2. 页头与页签 ---------------------------------------------------------- */
+body.offer-ui:not(#wa-theme-off) :is(.views > .view, .wb-main > .view) {
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off) .view-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  padding: 0 0 var(--sp-4);
+  border-bottom: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) .view-head-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .view-title {
+  margin: 0;
+  font-family: var(--ui-font);
+  font-size: var(--fs-page);
+  font-weight: 600;
+  line-height: var(--lh-title);
+  letter-spacing: -.01em;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) .view-lede {
+  max-width: 76ch;
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-body);
+  font-weight: 400;
+  line-height: var(--lh-body);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .view-head .sg-help {
+  margin: 0;
+  font-size: var(--fs-label);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .view-head .sg-help > summary {
+  font-size: var(--fs-label);
+  color: var(--mj-text-2);
+}
+
+/* 页签：全站只有一种——浅品牌底胶囊轨道 + 墨色当前项（定义在 mj-base.css §8）。
+   这里只补外壳特有的两件事。 */
+body.offer-ui:not(#wa-theme-off) .view-head-row > .ui-hub-tabs {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* showView('interview') 会清掉三个页签的 is-active（它们没有 data-view），
+   而页面仍停在上次的模式上；没有选中项时按 data-iv-mode 补上当前页签，
+   没有模式时停在第 1 个，避免「一个都没选中」。 */
+body.offer-ui:not(#wa-theme-off) #view-interview:not([data-iv-mode]) .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab:first-child,
+body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="ci"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="ci"],
+body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="project"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="project"],
+body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="tools"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="tools"] {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+}
+
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview:not([data-iv-mode]) .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab:first-child,
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="ci"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="ci"],
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="project"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="project"],
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) #view-interview[data-iv-mode="tools"] .iv-mode-tabs:not(:has(.ui-hub-tab.is-active)) .ui-hub-tab[data-iv-tab="tools"] {
+  background: var(--mj-brand);
+}
+
+/* 3. 卡片面板 ------------------------------------------------------------ */
+body.offer-ui:not(#wa-theme-off) .panel {
+  padding: var(--sp-4);
+  border: 1px solid var(--mj-line);
+  border-radius: var(--r-card);
+  background: var(--mj-paper);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .panel-head {
+  align-items: flex-start;
+  gap: var(--sp-4);
+  margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--mj-line);
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.panel-head h3, .integration-head h3, .panel h3) {
+  font-family: var(--ui-font);
+  font-size: var(--fs-section);
+  font-weight: 600;
+  line-height: var(--lh-title);
+  letter-spacing: 0;
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) .panel-head > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.offer-ui:not(#wa-theme-off) .panel-head > div:last-child:not(:first-child) {
+  flex: 0 0 auto;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.panel-head > div:last-child:not(:first-child), .profile-head-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.panel-note, .integration-head p, .panel-head p) {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.hint, .sg-disabled-reason) {
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.panel-count, .badge, .chip, .tag) {
+  font-size: var(--fs-label);
+}
+
+body.offer-ui:not(#wa-theme-off) .badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-size: var(--fs-aux);
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+/* 状态色只用「浅底 + 同色深字」一组配对，保证 ≥4.5:1 */
+body.offer-ui:not(#wa-theme-off) :is(.badge-good, .badge-ok, .badge-success, .badge-done, .is-good) {
+  background: var(--mj-good-bg);
+  color: var(--mj-good);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.badge-warn, .badge-warning, .badge-pending, .is-warn) {
+  background: var(--mj-warn-bg);
+  color: var(--mj-warn);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.badge-bad, .badge-danger, .badge-error, .is-bad) {
+  background: var(--mj-bad-bg);
+  color: var(--mj-bad);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.badge-muted, .badge-neutral, .badge-quiet) {
+  background: var(--mj-paper-2);
+  color: var(--mj-text-2);
+}
+
+/* 面板内的小节标题（简历页的 1./2./3. 步骤）：与卡片标题同一层级 */
+body.offer-ui:not(#wa-theme-off) .panel h4 {
+  margin: var(--sp-5) 0 var(--sp-2);
+  font-family: var(--ui-font);
+  font-size: var(--fs-title);
+  font-weight: 600;
+  line-height: var(--lh-title);
+  color: var(--mj-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) .panel > h4:first-child,
+body.offer-ui:not(#wa-theme-off) .panel > :first-child > h4:first-child {
+  margin-top: 0;
+}
+
+/* 步骤里的说明文字与控件之间固定 8px，段落之间 12px */
+body.offer-ui:not(#wa-theme-off) #view-resume .panel .hint {
+  margin: 0 0 var(--sp-3);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume .panel :is(h4 + .hint, h4 + p.hint) {
+  margin-top: 0;
+}
+
+/* 4. 按钮 ---------------------------------------------------------------- */
+body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mj-brand) 88%, var(--mj-brand-ink));
+  color: var(--mj-brand-ink);
+}
+
+body.offer-ui:not(#wa-theme-off) .button:active:not(:disabled) {
+  transform: scale(.98);
+}
+
+body.offer-ui:not(#wa-theme-off) .button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 次按钮：描边 */
+body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button-quiet {
+  border-color: var(--mj-line);
+  background: var(--mj-paper);
+  color: var(--mj-ink);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .button-quiet:hover:not(:disabled) {
+  border-color: var(--mj-brand);
+  background: var(--mj-brand-soft);
+  color: var(--mj-ink);
+}
+
+/* 文字按钮 */
+body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .button-danger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--mj-bad);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .button-danger:hover:not(:disabled) {
+  background: var(--mj-bad-bg);
+  color: var(--mj-bad);
+}
+
+body.offer-ui:not(#wa-theme-off) .button-small {
+  min-height: 30px;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-label);
+}
+
+body.offer-ui:not(#wa-theme-off) .button-row,
+body.offer-ui:not(#wa-theme-off) .form-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-2) var(--sp-3);
+}
+
+body.offer-ui:not(#wa-theme-off) .form-actions .hint {
+  margin: 0;
+}
+
+/* 5. 表单与文件选择 ------------------------------------------------------ */
+body.offer-ui:not(#wa-theme-off) .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off) .form-field {
+  gap: var(--sp-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .form-field.full,
+body.offer-ui:not(#wa-theme-off) .form-grid > .full {
+  grid-column: 1 / -1;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.form-field > label, .form-field > .form-label, .form-field label) {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  margin: 0;
+  font-size: var(--fs-label);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), select, textarea) {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--mj-line);
+  border-radius: var(--r-control);
+  background: var(--mj-paper);
+  color: var(--mj-text);
+  font-size: var(--fs-body);
+  line-height: 1.4;
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) textarea {
+  min-height: 88px;
+  padding: var(--sp-2) var(--sp-3);
+  line-height: var(--lh-body);
+  resize: vertical;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(input, select, textarea)::placeholder {
+  color: var(--mj-mute);
+  opacity: 1;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(input, select, textarea):focus-visible {
+  border-color: var(--mj-brand);
+  outline: 2px solid var(--mj-brand);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) select {
+  padding-right: var(--sp-4);
+}
+
+/* 必填标记：与标签同行的 12px 灰红小字，不再是漂浮红点 */
+body.offer-ui:not(#wa-theme-off) :is(.sg-required, .profile-required-mark) {
+  display: inline;
+  margin: 0 0 0 var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mj-bad);
+  font-size: var(--fs-aux);
+  font-weight: 500;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+/* 原生文件按钮：与次按钮一致 */
+body.offer-ui:not(#wa-theme-off) input[type="file"] {
+  width: 100%;
+  font-size: var(--fs-label);
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) input[type="file"]::file-selector-button {
+  min-height: 30px;
+  margin: 0 var(--sp-3) 0 0;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--mj-line);
+  border-radius: var(--r-control);
+  background: var(--mj-paper);
+  color: var(--mj-ink);
+  font-family: var(--ui-font);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+body.offer-ui:not(#wa-theme-off) input[type="file"]::file-selector-button:hover {
+  border-color: var(--mj-brand);
+  background: var(--mj-brand-soft);
+}
+
+/* 拖拽区：只保留一层虚线，内部不再画白底输入条（去掉框中框） */
+body.offer-ui:not(#wa-theme-off) :is(.resume-dropzone, .dropzone, [class*="dropzone"]) {
+  padding: var(--sp-4);
+  border: 1px dashed var(--mj-line);
+  border-radius: var(--r-card);
+  background: var(--mj-paper-2);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.resume-dropzone, .dropzone, [class*="dropzone"]) :is(input[type="file"], input[readonly], input:disabled) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.resume-dropzone, .dropzone)[class*="is-drag"] {
+  border-color: var(--mj-brand);
+  background: var(--mj-brand-soft);
+}
+
+/* 进度条：浅色轨道 + 品牌色填充，避免 100% 时只剩一条孤线 */
+body.offer-ui:not(#wa-theme-off) .profile-meter-bar {
+  position: relative;
+  display: block;
+  height: 6px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--mj-ink) 10%, transparent);
+  overflow: hidden;
+}
+
+body.offer-ui:not(#wa-theme-off) .profile-meter-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mj-brand);
+}
+
+/* 6. 表格 ---------------------------------------------------------------- */
+body.offer-ui:not(#wa-theme-off) :is(table, .data-table) {
+  font-size: var(--fs-label);
+}
+
+body.offer-ui:not(#wa-theme-off) thead th {
+  font-size: var(--fs-aux);
+  font-weight: 600;
+  color: var(--mj-text-2);
+  background: var(--mj-paper-2);
+}
+
+/* 7. 左右两栏 ------------------------------------------------------------ */
+body.offer-ui:not(#wa-theme-off) :is(.two-col, .chart-grid, .report-grid) {
+  align-items: stretch;
+}
+
+body.offer-ui:not(#wa-theme-off) .two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off) .two-col > .panel {
+  height: 100%;
+}
+
+/* 8. 侧栏导航与顶栏 ------------------------------------------------------ */
+body.offer-ui:not(#wa-theme-off) .sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 36px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
+  color: var(--mj-text-2);
+  font-size: var(--fs-body);
+  font-weight: 400;
+  line-height: 1.4;
+  box-shadow: none;
+}
+
+/* 编号用正文无衬线 + 等宽数字，不再用等宽字体 */
+body.offer-ui:not(#wa-theme-off) .sidebar .nav-index {
+  font-family: var(--ui-font);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-aux);
+  font-weight: 500;
+  color: var(--mj-mute);
+  letter-spacing: 0;
+}
+
+body.offer-ui:not(#wa-theme-off) .sidebar .nav-item:hover {
+  background: var(--mj-paper-2);
+  color: var(--mj-ink);
+}
+
+/* 激活态只有一种：整块实心（第 3 轮信号规范）——浅色近黑底白字、深色信号底近黑字，
+   不再有浅底胶囊与 2px 左指示条。 */
+body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active,
+body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item[aria-current="page"] {
+  background: var(--mj-ink);
+  color: var(--mj-brand-ink);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index {
+  color: var(--mj-brand-ink);
+  opacity: .72;
+}
+
+/* 深色下旧导航规则特异性 (1,5,1)，这里用同样的 :root 前缀 + 重复 :not() 压过 */
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active,
+:root[data-theme="dark"] body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item[aria-current="page"] {
+  background: var(--mj-brand);
+  color: var(--mj-brand-ink);
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item.is-active,
+  :root:not([data-theme]) body.offer-ui:not(#wa-theme-off):not(#wa-theme-off) .sidebar .nav-item[aria-current="page"] {
+    background: var(--mj-brand);
+    color: var(--mj-brand-ink);
+    box-shadow: none;
+  }
+}
+
+body.offer-ui:not(#wa-theme-off) .nav__hl {
+  background: transparent;
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) .sidebar .nav-group-label,
+body.offer-ui:not(#wa-theme-off) .sidebar .nav-group-title {
+  font-size: var(--fs-aux);
+  font-weight: 500;
+  color: var(--mj-mute);
+  letter-spacing: .02em;
+}
+
+body.offer-ui:not(#wa-theme-off) :is(#topbar-title, .topbar h1) {
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--mj-mute);
+}
+
+/* 9. 任务式外壳 ---------------------------------------------------------- */
+body.offer-ui:not(#wa-theme-off) .wb-main :is(h2, h3) {
+  font-family: var(--ui-font);
+}
+
+body.offer-ui:not(#wa-theme-off) .wb-main .view-head-row {
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off) .wb-main .form-grid {
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off) :is(.wb-card, .wb-panel) {
+  border-radius: var(--r-card);
+  border: 1px solid var(--mj-line);
+  box-shadow: none;
+}
+
+/* 10. 综合模拟面试表单：等宽三列，标签与控件固定 8px --------------------- */
+body.offer-ui:not(#wa-theme-off) #ci-setup-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--sp-4);
+}
+
+body.offer-ui:not(#wa-theme-off) #ci-setup-form .form-field {
+  gap: var(--sp-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #ci-setup-form .form-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+body.offer-ui:not(#wa-theme-off) #ci-setup-form .form-field:has(#ci-prev-session) {
+  grid-column: span 2;
+}
+
+body.offer-ui:not(#wa-theme-off) #ci-status-msg {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-label);
+  color: var(--mj-mute);
+}
+
+body.offer-ui:not(#wa-theme-off) #ci-status-msg[data-error="true"] {
+  color: var(--mj-bad);
+}
+
+/* 11. 窄屏：两列/三列都收成一列，避免新的横向溢出 ----------------------- */
+@media (max-width: 900px) {
+  body.offer-ui:not(#wa-theme-off) :is(.form-grid, .two-col) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.offer-ui:not(#wa-theme-off) #ci-setup-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.offer-ui:not(#wa-theme-off) #ci-setup-form .form-field:has(#ci-prev-session) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* 行内代码：底色与文字都跟随主题（深色下原来是浅底浅字，1.74:1） */
+body.offer-ui:not(#wa-theme-off) code:not(pre code) {
+  padding: 1px var(--sp-1);
+  border-radius: var(--mj-r-tag);
+  background: var(--mj-paper-2);
+  color: var(--mj-text);
+  font-family: var(--code-font);
+  font-size: var(--fs-aux);
+}
+
+/* ---------- 12. 对比度补充（WCAG AA 4.5:1） ----------
+   12px 辅助字与必填标记在浅底/品牌浅底上低于 4.5:1，这里统一提到次级文字色；
+   流水线步骤号原来是粉色强调，与「单一强调色」规则冲突，改为次级文字。 */
+body.offer-ui:not(#wa-theme-off) .section-label {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .sg-help > summary {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .pipeline-index {
+  color: var(--mj-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 深色下「我发出的」气泡时间戳只有 4.4:1，改用正文次级色 */
+body.offer-ui:not(#wa-theme-off) #view-mail .hr-message-me .hr-message-meta {
+  color: var(--mj-text-2);
+}
+
+/* ---------- 13. 定制简历：四步流程的当前步 ----------
+   页面没有 JS 步骤状态，这里用 :has() 读表单本身：
+   目标岗位空着 → 第 1 步是当前步；已填 → 第 3 步（勾选真实性并生成）是当前步。
+   当前步有品牌色轨道、实心节点和「当前」小签，其余步骤是灰轨道，四步顺序一眼可见。 */
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal > :is(#cu-step-target, #cu-step-material, #cu-step-generate, #cu-resume-preview) {
+  position: relative;
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-5);
+  border-left: 3px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal > :is(#cu-step-target, #cu-step-material, #cu-step-generate, #cu-resume-preview)::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: -6px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-pill);
+  background: var(--mj-paper);
+  box-shadow: inset 0 0 0 2px var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal > :is(#cu-step-target, #cu-step-material, #cu-step-generate, #cu-resume-preview) > h4:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:placeholder-shown) > #cu-step-target,
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-generate {
+  border-left-color: var(--mj-brand);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:placeholder-shown) > #cu-step-target::before,
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-generate::before {
+  background: var(--mj-brand);
+  box-shadow: none;
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:placeholder-shown) > #cu-step-target > h4::after,
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-generate > h4::after {
+  content: "当前";
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--mj-brand-soft);
+  color: var(--mj-brand);
+  font-size: var(--fs-aux);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* 第 1 步填好后轨道变「已完成」 */
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-target {
+  border-left-color: var(--mj-good);
+}
+
+body.offer-ui:not(#wa-theme-off) #view-resume #cu-personal:has(#cu-target-role:not(:placeholder-shown)) > #cu-step-target::before {
+  background: var(--mj-good);
+  box-shadow: none;
+}
+
+/* ---------- 14. 模拟面试：每个面板只有一处主操作 ----------
+   主操作所在的一行与上面的字段用一条线分开，眼睛直接落到唯一填充色的按钮上；
+   四张入口卡片的「进入」提示与页签同色，不再和正文同灰。 */
+body.offer-ui:not(#wa-theme-off) #view-interview :is(.form-actions, .career-actions, .ci-controls):has(> .button:not(.button-quiet):not(.button-danger)) {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--mj-line);
+}
+
+body.offer-ui:not(#wa-theme-off) #interview-hub .sg-card-enter {
+  color: var(--mj-brand);
+  font-weight: 600;
 }

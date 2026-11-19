@@ -21,17 +21,17 @@
   --accent-soft: #f4f4f5;
   --pill: #f4f4f5;
   --on-ink: #ffffff;
-  --offer-pink: #e4889c;
+  --offer-pink: #9BC21A;
   --danger: #b42318;
   --focus-ring: rgba(10, 10, 10, 0.28);
-  --series-1: #0a0a0a;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #f5d0d8;
-  --stage-1: #efb3c1;
-  --stage-2: #e4889c;
-  --stage-3: #c96b80;
-  --stage-4: #a44d62;
+  --series-1: #0D0E0C;
+  --series-2: #9BC21A;
+  --series-3: #8D8F87;
+  --stage-0: #E6E8E0;
+  --stage-1: #C9CCBF;
+  --stage-2: #9EA293;
+  --stage-3: #6E7266;
+  --stage-4: #0D0E0C;
   --good: #17663a;
   --good-bg: #e9f7ef;
   --warn: #8a4b00;
@@ -42,8 +42,33 @@
   --focus: #0a0a0a;
   --chart-grid: rgba(10, 10, 10, 0.08);
   --code-bg: #f4f4f5;
-  --font: "PingFang SC", "Source Han Sans SC", "Noto Sans SC", -apple-system,
-    BlinkMacSystemFont, "Microsoft YaHei", system-ui, sans-serif;
+  /* 唯一无衬线栈：全站正文、标题、数字都用它（2026-11 排版统一） */
+  --ui-font: "PingFang SC", "HarmonyOS Sans SC", "Source Han Sans SC", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Microsoft YaHei", system-ui, sans-serif;
+  --font: var(--ui-font);
+  /* 代码/哈希/ID 专用等宽；正文与数字一律用 --ui-font + tabular-nums */
+  --code-font: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* 字号刻度：只有这七档（另加首页大数字 140 / 窄屏 96，见 --fs-hero*） */
+  --fs-aux: 12px;        /* 辅助、hint、时间戳 */
+  --fs-label: 13px;      /* 表单标签、表格 */
+  --fs-body: 14px;       /* 正文 */
+  --fs-title: 16px;      /* 卡片标题 h3 */
+  --fs-section: 20px;    /* 区块标题 */
+  --fs-page: 28px;       /* 页面 h2 */
+  --fs-display: 40px;    /* KPI / 大计数 */
+  --fs-hero: 140px;      /* 首页日期 */
+  --fs-hero-sm: 96px;
+  --lh-body: 1.5;
+  --lh-title: 1.3;
+
+  /* 间距刻度 4 / 8 / 12 / 16 / 24 / 32 */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+
+  /* 圆角三档 + 唯一阴影 */
+  --r-control: 8px;
+  --r-card: 12px;
+  --r-pill: 999px;
+  --shadow-ui: 0 1px 2px rgba(16, 20, 30, .05), 0 8px 24px -12px rgba(16, 20, 30, .18);
   --radius-card: 28px;
   --shadow-card: 0 20px 60px rgba(10, 10, 10, 0.05);
   --shadow-soft: 0 10px 30px rgba(10, 10, 10, 0.03);
@@ -66,14 +91,14 @@
     --accent-soft: #232327;
     --pill: #232327;
     --on-ink: #0a0a0a;
-    --series-1: #f5f5f7;
-    --series-2: #e4889c;
-    --series-3: #8aa4ff;
-    --stage-0: #5b3a44;
-    --stage-1: #7d4d5b;
-    --stage-2: #a35f71;
-    --stage-3: #c97b8d;
-    --stage-4: #e39aab;
+    --series-1: #F1F2EC;
+    --series-2: #D2F53C;
+    --series-3: #6A6C64;
+    --stage-0: #2A2C26;
+    --stage-1: #44463E;
+    --stage-2: #6B6E63;
+    --stage-3: #A3A59C;
+    --stage-4: #F1F2EC;
     --good: #7fe0bd;
     --good-bg: #12332a;
     --warn: #ffcf8a;
@@ -105,14 +130,14 @@
   --accent-soft: #232327;
   --pill: #232327;
   --on-ink: #0a0a0a;
-  --series-1: #f5f5f7;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #5b3a44;
-  --stage-1: #7d4d5b;
-  --stage-2: #a35f71;
-  --stage-3: #c97b8d;
-  --stage-4: #e39aab;
+  --series-1: #F1F2EC;
+  --series-2: #D2F53C;
+  --series-3: #6A6C64;
+  --stage-0: #2A2C26;
+  --stage-1: #44463E;
+  --stage-2: #6B6E63;
+  --stage-3: #A3A59C;
+  --stage-4: #F1F2EC;
   --good: #7fe0bd;
   --good-bg: #12332a;
   --warn: #ffcf8a;
@@ -181,7 +206,7 @@
   overflow: hidden;
   pointer-events: none;
   color: #d4d4d8;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.28em;
   line-height: 26px;
@@ -234,7 +259,6 @@
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font);
 }
 
 .app-shell {
@@ -289,7 +313,7 @@ body {
 }
 
 .brand-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: 0;
@@ -297,7 +321,7 @@ body {
 
 .brand-sub {
   margin-top: 2px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--mute);
   letter-spacing: 0.02em;
 }
@@ -314,7 +338,7 @@ body {
 .nav-group-label {
   margin: 14px 12px 5px;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.14em;
 }
@@ -356,7 +380,7 @@ body {
 .nav-index {
   flex: 0 0 auto;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
@@ -389,13 +413,13 @@ body {
   display: block;
   margin: 0;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .control-label {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.08em;
   color: var(--mute);
@@ -421,7 +445,7 @@ body {
   background: transparent;
   padding: 6px 4px;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
   white-space: nowrap;
@@ -443,7 +467,7 @@ body {
   margin: 0;
   padding: 0 2px;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -466,7 +490,7 @@ body {
 }
 
 .topbar-heading h1 {
-  font-size: clamp(32px, 3.6vw, 46px);
+  font-size: var(--fs-page);
   font-weight: 600;
   line-height: 1.04;
   letter-spacing: -0.04em;
@@ -506,13 +530,13 @@ body {
 
 .meta-line {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   text-align: right;
 }
 
 .loading-note {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .status {
@@ -569,7 +593,7 @@ body {
 .filter-field label {
   margin-left: 12px;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 
@@ -601,7 +625,7 @@ body {
 
 .view-title {
   margin-top: 2px;
-  font-size: clamp(28px, 3.2vw, 38px);
+  font-size: var(--fs-page);
   font-weight: 600;
   letter-spacing: -0.035em;
 }
@@ -630,7 +654,7 @@ body {
 }
 
 .panel-head h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -644,7 +668,7 @@ body {
 .section-label {
   margin-bottom: 10px;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -737,11 +761,11 @@ body {
 
 .belt-index {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .belt-name {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -756,7 +780,7 @@ body {
 
 .belt-unit {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .belt-arrow {
@@ -789,12 +813,12 @@ body {
 
 .kpi-label {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .kpi-value {
   margin-top: 4px;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.035em;
@@ -833,7 +857,7 @@ body {
 }
 
 .data-table {
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .data-table caption {
@@ -841,7 +865,7 @@ body {
   border-bottom: 1px solid var(--line);
   background: transparent;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .data-table th,
@@ -853,7 +877,7 @@ body {
 .data-table th {
   background: transparent;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.03em;
 }
@@ -900,7 +924,7 @@ body {
 
 .button-small {
   padding: 6px 10px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .button-danger {
@@ -924,7 +948,7 @@ textarea {
   border-radius: 14px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 textarea {
@@ -953,14 +977,14 @@ textarea:focus-visible {
 
 .form-field label {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .badge {
   padding: 3px 9px;
   border: 0;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -990,7 +1014,7 @@ textarea:focus-visible {
   border-left: 3px solid var(--warn);
   border-radius: 14px;
   background: var(--warn-bg);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .notice-accent {
@@ -1027,7 +1051,7 @@ textarea:focus-visible {
 
 .activity-time {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .footer {
@@ -1035,7 +1059,7 @@ textarea:focus-visible {
   padding-top: 18px;
   border-top: 1px solid var(--line);
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .empty-state,
@@ -1083,8 +1107,8 @@ textarea:focus-visible {
 }
 
 .pipeline-node.status-connected {
-  border-color: rgba(228, 136, 156, 0.55);
-  box-shadow: 0 12px 36px rgba(228, 136, 156, 0.14);
+  border-color: color-mix(in srgb, var(--mj-brand) 45%, transparent);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--mj-brand) 14%, transparent);
 }
 
 .pipeline-top {
@@ -1096,20 +1120,20 @@ textarea:focus-visible {
 
 .pipeline-index {
   color: var(--offer-pink);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .pipeline-owner {
   color: var(--mute);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.3;
   text-align: right;
 }
 
 .pipeline-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.25;
 }
@@ -1117,7 +1141,7 @@ textarea:focus-visible {
 .pipeline-desc {
   flex: 1 1 auto;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1128,14 +1152,14 @@ textarea:focus-visible {
 }
 
 .pipeline-count strong {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.03em;
 }
 
 .pipeline-count span {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .pipeline-status {
@@ -1144,7 +1168,7 @@ textarea:focus-visible {
   border-radius: 999px;
   background: var(--neutral-bg);
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -1155,7 +1179,7 @@ textarea:focus-visible {
 }
 
 .pipeline-node.status-connected .pipeline-status {
-  background: rgba(228, 136, 156, 0.16);
+  background: color-mix(in srgb, var(--mj-brand) 12%, transparent);
   color: var(--ink);
 }
 
@@ -1172,7 +1196,7 @@ textarea:focus-visible {
 
 .pipeline-foot .hint {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .external-events {
@@ -1190,7 +1214,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 10px;
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .external-event-detail {
@@ -1207,7 +1231,7 @@ textarea:focus-visible {
 .integration-panel {
   border-style: dashed;
   background:
-    linear-gradient(135deg, rgba(228, 136, 156, 0.09), rgba(138, 164, 255, 0.09)),
+    linear-gradient(135deg, color-mix(in srgb, var(--mj-brand) 7%, transparent), color-mix(in srgb, var(--mj-spark) 7%, transparent)),
     var(--panel-bg);
 }
 
@@ -1263,14 +1287,14 @@ textarea:focus-visible {
 
 .integration-meta dt {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 
 .integration-meta dd {
   margin-top: 3px;
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1441,7 +1465,7 @@ textarea:focus-visible {
   }
 
   .topbar-heading h1 {
-    font-size: 32px;
+    font-size: 28px;
   }
 
   .kpi-row {
@@ -1589,7 +1613,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 6px 10px;
   margin: 8px 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .offerpilot-task-line strong {
@@ -1677,7 +1701,7 @@ textarea:focus-visible {
 
 .profile-meter-text {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-2);
 }
 
@@ -1707,7 +1731,7 @@ textarea:focus-visible {
   margin-left: 6px;
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   color: #fff;
   background: var(--danger, #b3261e);
@@ -1735,7 +1759,7 @@ textarea:focus-visible {
 }
 
 .profile-item-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -1809,12 +1833,12 @@ textarea:focus-visible {
 }
 
 .pipeline-node.workbench-stage.is-confirm {
-  border-color: rgba(228, 136, 156, 0.55);
+  border-color: color-mix(in srgb, var(--mj-brand) 45%, transparent);
 }
 
 .workbench-reason {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1882,7 +1906,7 @@ body.queue-modal-open {
 .queue-modal-progress {
   margin: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -1901,7 +1925,7 @@ body.queue-modal-open {
 .queue-delivery-meta {
   margin: 4px 0 0;
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -1914,7 +1938,7 @@ body.queue-modal-open {
   margin: 4px 0 0;
   padding-left: 18px;
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1960,7 +1984,7 @@ body.queue-modal-open {
   background: var(--bg);
   color: var(--ink);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .hr-filters {
@@ -2039,7 +2063,7 @@ body.queue-modal-open {
 
 .hr-conversation-sub {
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -2054,7 +2078,7 @@ body.queue-modal-open {
 
 .hr-conversation-time {
   color: var(--mute);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .hr-thread {
@@ -2134,7 +2158,7 @@ body.queue-modal-open {
 
 .hr-message-meta {
   margin: 0 0 3px;
-  font-size: 10.5px;
+  font-size: 12px;
   opacity: 0.75;
 }
 
@@ -2195,13 +2219,13 @@ body.queue-modal-open {
 
 .hr-draft-count {
   color: var(--mute);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .hr-empty {
   margin: 12px 0;
   color: var(--mute);
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: center;
 }
 
@@ -2253,7 +2277,7 @@ body.hr-modal-open {
 .hr-reply-who {
   margin: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .hr-reply-text {
@@ -2335,7 +2359,7 @@ body.hr-modal-open {
   border-radius: 999px;
   background: var(--pill);
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -2442,7 +2466,7 @@ body.hr-modal-open {
   border-radius: 999px;
   background: var(--pill);
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -2480,12 +2504,12 @@ body.hr-modal-open {
 
 .jobs-actions .button {
   padding: 5px 9px;
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .jobs-actions select {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .jobs-actions select {
@@ -2540,7 +2564,7 @@ body.offer-ui {
   --op-accent: #2b5d45;
   --op-accent-strong: #204836;
   --op-accent-soft: #e9f0ea;
-  --op-font-display: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+  --op-font-display: var(--ui-font);
 
   /* 覆盖既有 token，让旧组件直接跟随新语言 */
   --bg: var(--op-paper);
@@ -2569,9 +2593,9 @@ body.offer-ui {
   --focus-ring: rgba(43, 93, 69, 0.35);
   --code-bg: #edf0ec;
   --chart-grid: #dce2db;
-  --series-1: #2b5d45;
-  --series-2: #b0652f;
-  --series-3: #6b7fa8;
+  --series-1: #0D0E0C;
+  --series-2: #9BC21A;
+  --series-3: #8D8F87;
   --radius-card: 16px;
   --shadow-card: 0 1px 2px rgba(27, 34, 30, 0.05);
   --shadow-soft: none;
@@ -2606,9 +2630,9 @@ body.offer-ui {
     --focus-ring: rgba(143, 199, 169, 0.4);
     --code-bg: #202a24;
     --chart-grid: #2a342e;
-    --series-1: #8fc7a9;
-    --series-2: #d9a072;
-    --series-3: #93a8cf;
+    --series-1: #F1F2EC;
+    --series-2: #D2F53C;
+    --series-3: #6A6C64;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 }
@@ -2638,9 +2662,9 @@ body.offer-ui {
   --focus-ring: rgba(143, 199, 169, 0.4);
   --code-bg: #202a24;
   --chart-grid: #2a342e;
-  --series-1: #8fc7a9;
-  --series-2: #d9a072;
-  --series-3: #93a8cf;
+  --series-1: #F1F2EC;
+  --series-2: #D2F53C;
+  --series-3: #6A6C64;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
@@ -2675,15 +2699,14 @@ body.offer-ui .brand {
 }
 
 body.offer-ui .brand-title {
-  font-family: var(--op-font-display);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 body.offer-ui .brand-sub {
   color: var(--op-mute);
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 
@@ -2700,7 +2723,7 @@ body.offer-ui .nav-group-label {
   margin: 16px 0 6px;
   padding-left: 10px;
   color: var(--op-mute);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -2716,7 +2739,7 @@ body.offer-ui .nav-item {
   border-radius: 6px;
   background: transparent;
   color: var(--op-ink-2);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 body.offer-ui .nav-item:hover {
@@ -2733,7 +2756,7 @@ body.offer-ui .nav-item.is-active {
 
 body.offer-ui .nav-index {
   color: var(--op-mute);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2752,7 +2775,7 @@ body.offer-ui .sidebar-footer {
 
 body.offer-ui .sidebar-boundary {
   color: var(--op-mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 body.offer-ui .main-column {
@@ -2769,7 +2792,6 @@ body.offer-ui .topbar {
 
 body.offer-ui .topbar-heading h1 {
   color: var(--op-mute);
-  font-family: var(--op-font-display);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -2789,7 +2811,7 @@ body.offer-ui .status {
   border-radius: 8px;
   background: var(--op-surface);
   box-shadow: none;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 body.offer-ui .status-warn {
@@ -2822,14 +2844,13 @@ body.offer-ui .view-head {
 
 body.offer-ui .view-title,
 body.offer-ui .home-title {
-  font-family: var(--op-font-display);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 body.offer-ui .view-title {
   margin: 0;
-  font-size: clamp(26px, 2.6vw, 34px);
+  font-size: var(--fs-page);
   line-height: 1.15;
 }
 
@@ -2865,8 +2886,7 @@ body.offer-ui .panel-head {
 }
 
 body.offer-ui .panel-head h3 {
-  font-family: var(--op-font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -2904,7 +2924,7 @@ body.offer-ui .notice {
   border-left: 3px solid var(--warn);
   border-radius: 8px;
   background: var(--warn-bg);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -3040,7 +3060,7 @@ body.offer-ui .segmented {
 body.offer-ui .segmented button {
   padding: 6px 4px;
   color: var(--op-mute);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 body.offer-ui .segmented button:hover {
@@ -3087,7 +3107,7 @@ body.offer-ui .jobs-filter-bar {
 body.offer-ui .badge {
   padding: 2px 7px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
   white-space: normal;
@@ -3110,7 +3130,7 @@ body.offer-ui .data-table {
 body.offer-ui .data-table caption {
   padding: 10px 14px;
   color: var(--op-mute);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 body.offer-ui .data-table th {
@@ -3119,7 +3139,7 @@ body.offer-ui .data-table th {
   border-bottom: 1px solid var(--op-line);
   background: var(--op-surface-2);
   color: var(--op-mute);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
   text-align: left;
@@ -3193,19 +3213,19 @@ body.offer-ui .jobs-actions select {
   min-width: 0;
   max-width: none;
   padding: 4px 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   white-space: normal;
   text-align: center;
 }
 
 body.offer-ui .jobs-actions select {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 body.offer-ui .jobs-actions .terminal-note {
   color: var(--op-mute);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   text-align: center;
 }
@@ -3231,7 +3251,7 @@ body.offer-ui .jobs-platform {
   border-radius: 4px;
   background: var(--op-surface-2);
   color: var(--op-ink-2);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ---- HR 回复页 ---------------------------------------------------------- */
@@ -3302,8 +3322,7 @@ body.offer-ui .hr-thread {
 }
 
 body.offer-ui .hr-thread-head h4 {
-  font-family: var(--op-font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -3336,7 +3355,7 @@ body.offer-ui .hr-message-system {
 
 body.offer-ui .hr-message-meta {
   color: var(--op-mute);
-  font-size: 10.5px;
+  font-size: 12px;
   opacity: 1;
 }
 
@@ -3429,7 +3448,7 @@ body.offer-ui .hr-platform-errors-list {
 
 body.offer-ui .hr-platform-error {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -3449,7 +3468,7 @@ body.offer-ui .home-today {
 }
 
 body.offer-ui .home-title {
-  font-size: clamp(34px, 4.4vw, 46px);
+  font-size: var(--fs-display);
   line-height: 1.1;
 }
 
@@ -3464,8 +3483,7 @@ body.offer-ui .home-task {
 }
 
 body.offer-ui .home-task-label {
-  font-family: var(--op-font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -3546,7 +3564,7 @@ body.offer-ui details > summary {
   }
 
   body.offer-ui .brand-title {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   body.offer-ui .sidebar-block {
@@ -3863,8 +3881,7 @@ body.offer-ui {
   --op-accent-strong: #2b2b31;
   --op-accent-soft: #f4f4f5;
   --op-accent-ink: #ffffff;
-  --op-font-display: "PingFang SC", "Source Han Sans SC", "Noto Sans SC", -apple-system,
-    BlinkMacSystemFont, "Microsoft YaHei", system-ui, sans-serif;
+  --op-font-display: var(--ui-font);
 
   --bg: var(--op-paper);
   --surface: var(--op-surface);
@@ -3892,15 +3909,15 @@ body.offer-ui {
   --focus-ring: rgba(10, 10, 10, 0.28);
   --code-bg: #f4f4f5;
   --chart-grid: rgba(10, 10, 10, 0.08);
-  --offer-pink: #e4889c;
-  --series-1: #0a0a0a;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #f5d0d8;
-  --stage-1: #efb3c1;
-  --stage-2: #e4889c;
-  --stage-3: #c96b80;
-  --stage-4: #a44d62;
+  --offer-pink: #9BC21A;
+  --series-1: #0D0E0C;
+  --series-2: #9BC21A;
+  --series-3: #8D8F87;
+  --stage-0: #E6E8E0;
+  --stage-1: #C9CCBF;
+  --stage-2: #9EA293;
+  --stage-3: #6E7266;
+  --stage-4: #0D0E0C;
   --radius-card: 6px;
   --shadow-card: none;
   --shadow-soft: none;
@@ -3932,14 +3949,14 @@ body.offer-ui {
     --focus-ring: rgba(245, 245, 247, 0.4);
     --code-bg: #232327;
     --chart-grid: rgba(255, 255, 255, 0.1);
-    --series-1: #f5f5f7;
-    --series-2: #e4889c;
-    --series-3: #8aa4ff;
-    --stage-0: #5b3a44;
-    --stage-1: #7d4d5b;
-    --stage-2: #a35f71;
-    --stage-3: #c97b8d;
-    --stage-4: #e39aab;
+    --series-1: #F1F2EC;
+    --series-2: #D2F53C;
+    --series-3: #6A6C64;
+    --stage-0: #2A2C26;
+    --stage-1: #44463E;
+    --stage-2: #6B6E63;
+    --stage-3: #A3A59C;
+    --stage-4: #F1F2EC;
   }
 }
 
@@ -3968,14 +3985,14 @@ body.offer-ui {
   --focus-ring: rgba(245, 245, 247, 0.4);
   --code-bg: #232327;
   --chart-grid: rgba(255, 255, 255, 0.1);
-  --series-1: #f5f5f7;
-  --series-2: #e4889c;
-  --series-3: #8aa4ff;
-  --stage-0: #5b3a44;
-  --stage-1: #7d4d5b;
-  --stage-2: #a35f71;
-  --stage-3: #c97b8d;
-  --stage-4: #e39aab;
+  --series-1: #F1F2EC;
+  --series-2: #D2F53C;
+  --series-3: #6A6C64;
+  --stage-0: #2A2C26;
+  --stage-1: #44463E;
+  --stage-2: #6B6E63;
+  --stage-3: #A3A59C;
+  --stage-4: #F1F2EC;
 }
 
 /* ---- 外壳：紧凑栏宽与排布 ------------------------------------------------ */
@@ -3993,13 +4010,13 @@ body.offer-ui .brand {
 }
 
 body.offer-ui .brand-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 body.offer-ui .brand-sub {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -4011,7 +4028,7 @@ body.offer-ui .nav {
 body.offer-ui .nav-group-label {
   margin: 12px 0 4px;
   padding-left: 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 body.offer-ui .nav-item {
@@ -4054,19 +4071,19 @@ body.offer-ui .view-head {
 }
 
 body.offer-ui .view-title {
-  font-size: clamp(22px, 2.2vw, 28px);
+  font-size: var(--fs-page);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;
 }
 
 body.offer-ui .view-lede {
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
 body.offer-ui .home-title {
-  font-size: clamp(26px, 3.2vw, 34px);
+  font-size: var(--fs-display);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.15;
@@ -4085,7 +4102,7 @@ body.offer-ui .panel-head {
 }
 
 body.offer-ui .panel-head h3 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -4189,7 +4206,7 @@ body.offer-ui .hr-conversation {
 }
 
 body.offer-ui .hr-thread-head h4 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -4200,12 +4217,12 @@ body.offer-ui .home-task {
 }
 
 body.offer-ui .home-task-label {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 body.offer-ui .home-task-count {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 /* ---- 移动端：与桌面同一套紧凑节奏 --------------------------------------- */
@@ -4249,13 +4266,13 @@ body.offer-ui .home-task-count {
 .career-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-block: 14px; }
 .career-actions .button { min-height: 44px; }
 .career-message { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
-.career-question { font-size: 18px; line-height: 1.6; margin-block: 18px 8px; }
+.career-question { font-size: 16px; line-height: 1.6; margin-block: 18px 8px; }
 .career-task { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-block: 12px; }
 .career-task p { margin-block: 6px; overflow-wrap: anywhere; }
 .career-code { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
   border: 1px solid var(--line); background: var(--accent-soft); padding: 12px; border-radius: 8px; }
 .career-recap { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
-.career-recap h5 { font-size: 15px; margin-block: 18px 8px; }
+.career-recap h5 { font-size: 14px; margin-block: 18px 8px; }
 #career-session-meta { overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .career-panel .integration-head { display: grid; grid-template-columns: 40px minmax(0, 1fr); }
@@ -4459,7 +4476,7 @@ body.offer-ui .hr-sidebar-title {
 body.offer-ui .hr-count {
   margin: 0;
   color: var(--mute);
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4552,7 +4569,7 @@ body.offer-ui .hr-platform-row {
   border-radius: 999px;
   background: var(--wa-elevated);
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -4679,7 +4696,7 @@ body.offer-ui .hr-platform-badge {
   border-radius: 999px;
   background: transparent;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
   white-space: nowrap;
 }
@@ -4688,7 +4705,7 @@ body.offer-ui .hr-conversation-sub {
   margin-top: 1px;
   overflow: hidden;
   color: var(--mute);
-  font-size: 11.5px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4723,7 +4740,7 @@ body.offer-ui .hr-conversation-time {
   margin-left: auto;
   padding-left: 6px;
   color: var(--mute);
-  font-size: 10.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -4753,7 +4770,7 @@ body.offer-ui .hr-thread-head h4 {
   overflow: hidden;
   margin: 0;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: var(--wa-semibold, 600);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4802,7 +4819,7 @@ body.offer-ui .hr-job-card-body {
 
 body.offer-ui .hr-job-card-label {
   color: var(--mute);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: .04em;
 }
 
@@ -4818,7 +4835,7 @@ body.offer-ui .hr-job-card-title {
 
 body.offer-ui .hr-job-card-score {
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4898,12 +4915,12 @@ body.offer-ui .hr-message-system {
   color: var(--mute);
 }
 
-body.offer-ui .hr-message-system .hr-message-text { font-size: 12.5px; }
+body.offer-ui .hr-message-system .hr-message-text { font-size: 13px; }
 
 body.offer-ui .hr-message-meta {
   margin: 0 0 3px;
   color: var(--mute);
-  font-size: 10.5px;
+  font-size: 12px;
   opacity: 1;
 }
 
@@ -4911,7 +4928,7 @@ body.offer-ui .hr-message-me .hr-message-meta { text-align: right; }
 
 body.offer-ui .hr-message-text {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -4930,7 +4947,7 @@ body.offer-ui .hr-empty-block {
 body.offer-ui .hr-empty {
   margin: 0;
   color: var(--mute);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -5029,7 +5046,7 @@ body.offer-ui .hr-key-hint {
 
 body.offer-ui .hr-draft-count {
   color: var(--mute);
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -5081,7 +5098,7 @@ body.offer-ui .hr-nav-unread {
   border-radius: 999px;
   background: var(--bad);
   color: var(--surface);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 18px;
   text-align: center;
@@ -5141,7 +5158,7 @@ body.offer-ui .hr-nav-unread[hidden] { display: none; }
 
 /* 采集页：一行初筛条件、高级设置折叠 */
 .collect-criteria-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2, rgba(127, 127, 127, 0.08)); font-size: 13px; }
-.collect-criteria-line > span { flex: 1 1 240px; color: var(--muted, #667085); }
+.collect-criteria-line > span { flex: 1 1 240px; color: var(--mute, #6B6D65); }
 .collect-score-details, .collect-advanced { margin: 10px 0; }
 
 /* HR 会话：对话框观感（头像、气泡、输入区）。只追加 hr- 前缀规则。 */
@@ -5158,7 +5175,7 @@ body.offer-ui .hr-avatar {
   border-radius: 50%;
   background: var(--accent-fill);
   color: var(--accent-ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
 }
@@ -5180,7 +5197,7 @@ body.offer-ui .hr-message-me {
 body.offer-ui .hr-message-me .hr-message-meta { color: color-mix(in srgb, var(--accent-ink) 62%, transparent); }
 body.offer-ui .hr-message-system { max-width: min(92%, 520px); margin-block: 6px; padding: 5px 14px; box-shadow: none; background: color-mix(in srgb, var(--ink) 7%, transparent); }
 body.offer-ui .hr-message-text { font-size: 14px; line-height: 1.65; }
-body.offer-ui .hr-message-meta { order: 2; margin: 4px 0 0; font-size: 11px; }
+body.offer-ui .hr-message-meta { order: 2; margin: 4px 0 0; font-size: 12px; }
 body.offer-ui .hr-message:not(.hr-message-system) { display: flex; flex-direction: column; }
 body.offer-ui .hr-message-hr .hr-message-meta { text-align: left; }
 body.offer-ui .hr-message-system .hr-message-meta { display: none; }
@@ -5209,8 +5226,8 @@ body.offer-ui .hr-preview-retry { align-self: flex-start; margin-top: 6px; }
 }
 
 .home-title {
-  font-family: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
-  font-size: clamp(38px, 5vw, 54px);
+  font-family: var(--ui-font);
+  font-size: var(--fs-display);
   font-weight: 600;
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -5224,7 +5241,7 @@ body.offer-ui .hr-preview-retry { align-self: flex-start; margin-top: 6px; }
 .home-lede {
   margin-top: 10px;
   color: var(--ink-2);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -5246,13 +5263,13 @@ body.offer-ui .hr-preview-retry { align-self: flex-start; margin-top: 6px; }
 
 .home-task-label {
   color: var(--ink);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
 }
 
 .home-task-count {
   color: var(--ink);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -5315,12 +5332,12 @@ body.offer-ui .hr-preview-retry { align-self: flex-start; margin-top: 6px; }
 }
 .jobs-dossier-job {
   color: var(--ink);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 .jobs-dossier-role {
   color: var(--ink-2);
-  font-size: 15px;
+  font-size: 14px;
 }
 .jobs-dossier-section {
   margin-top: 18px;
@@ -5472,7 +5489,7 @@ body.offer-ui .hr-preview-retry { align-self: flex-start; margin-top: 6px; }
   border-left: 2px solid var(--warn);
   background: var(--warn-bg);
   color: var(--warn);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 .hr-platform-error {

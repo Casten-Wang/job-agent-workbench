@@ -113,8 +113,8 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-progress-value {
   margin: 0;
   min-width: 74px;
   color: var(--ink);
-  font-family: var(--sg-num);
-  font-size: 44px;
+  
+  font-size: 40px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
@@ -123,7 +123,7 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-progress-value {
 body.offer-ui:not(#wa-theme-off) .sg-profile-progress-value small {
   margin-left: 2px;
   color: var(--mute);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -133,7 +133,7 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-progress .profile-meter-bar {
   border: 0;
   background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
-body.offer-ui:not(#wa-theme-off) .sg-profile-progress .profile-meter-bar > span { background: #9BC21A; }
+body.offer-ui:not(#wa-theme-off) .sg-profile-progress .profile-meter-bar > span { background: var(--mj-brand); }
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sg-profile-progress .profile-meter-bar > span { background: var(--sg); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) body.offer-ui:not(#wa-theme-off) .sg-profile-progress .profile-meter-bar > span { background: var(--sg); }
@@ -196,7 +196,7 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-nav {
 body.offer-ui:not(#wa-theme-off) .sg-profile-nav-title {
   margin: 2px 10px 6px;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: .06em;
 }
 body.offer-ui:not(#wa-theme-off) .sg-profile-nav-item {
@@ -224,13 +224,13 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-nav-state {
   padding: 2px 6px;
   border-radius: 999px;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   text-align: center;
   box-shadow: inset 0 0 0 .5px var(--line);
 }
 body.offer-ui:not(#wa-theme-off) .sg-profile-nav-item.is-done .sg-profile-nav-state {
-  background: #9BC21A;
+  background: var(--mj-brand);
   color: var(--sg-ink);
   box-shadow: none;
 }
@@ -241,7 +241,7 @@ body.offer-ui:not(#wa-theme-off) .sg-profile-nav-item.is-done .sg-profile-nav-st
 body.offer-ui:not(#wa-theme-off) .sg-profile-nav-note {
   margin: 8px 10px 2px;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -249,7 +249,7 @@ body.offer-ui:not(#wa-theme-off) #view-profile .profile-section-title {
   margin: 28px 0 10px;
   scroll-margin-top: 20px;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
 }
 body.offer-ui:not(#wa-theme-off) #view-profile .profile-section-title:first-of-type { margin-top: 0; }
@@ -271,7 +271,7 @@ body.offer-ui:not(#wa-theme-off) #view-profile .form-field label {
   display: block;
   margin-bottom: 6px;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 body.offer-ui:not(#wa-theme-off) #view-profile .form-field input,
@@ -311,8 +311,8 @@ body.offer-ui:not(#wa-theme-off) #interview-hub .sg-card-count {
   gap: 6px;
 }
 body.offer-ui:not(#wa-theme-off) #interview-hub .sg-card-count strong {
-  font-family: var(--sg-num);
-  font-size: 44px;
+  
+  font-size: 40px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
@@ -344,7 +344,7 @@ body.offer-ui:not(#wa-theme-off) #interview-hub .pipeline-node:hover .sg-card-en
 
 body.offer-ui:not(#wa-theme-off) #view-interview .chat-progress {
   color: var(--ink);
-  font-family: var(--sg-num);
+  
   font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -379,7 +379,7 @@ body.offer-ui:not(#wa-theme-off) .sg-empty-next { margin: 10px 0 0; }
 body.offer-ui:not(#wa-theme-off) #view-interview .interview-module-nav { margin-bottom: 14px; }
 body.offer-ui:not(#wa-theme-off) #view-interview .form-field label {
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 body.offer-ui:not(#wa-theme-off) #view-interview .profile-required-mark,
@@ -396,13 +396,13 @@ body.offer-ui:not(#wa-theme-off) #view-resume .two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .form-grid > .full,
 body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .form-grid > .form-actions.full { grid-column: 1 / -1; }
 body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .form-field label {
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 body.offer-ui:not(#wa-theme-off) #view-resume .career-user-panel .cu-check {
@@ -419,7 +419,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .sg-required {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   box-shadow: inset 0 0 0 .5px var(--line);
   vertical-align: middle;
@@ -432,7 +432,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-project {
   gap: 2px;
   min-width: 0;
 }
-body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-sha { color: var(--mute); font-size: 11px; }
+body.offer-ui:not(#wa-theme-off) #view-resume .sg-variant-sha { color: var(--mute); font-size: 12px; }
 body.offer-ui:not(#wa-theme-off) #view-resume .table-wrap { overflow-x: auto; border-radius: 14px; }
 body.offer-ui:not(#wa-theme-off) :is(#view-resume, #view-interview) .data-table caption {
   position: absolute;
@@ -459,7 +459,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .resume-compare-cell { white-space
  * ========================================================================== */
 body.offer-ui:not(#wa-theme-off) #view-push .form-field label {
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 body.offer-ui:not(#wa-theme-off) #view-push .code-block {
@@ -487,6 +487,6 @@ body.offer-ui:not(#wa-theme-off) #view-push .sg-dry-empty { margin: 12px 0 0; co
   body.offer-ui:not(#wa-theme-off) #view-resume .two-col { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 900px) {
-  body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-title { font-size: 30px; }
-  body.offer-ui:not(#wa-theme-off) .sg-profile-progress-value { font-size: 36px; min-width: 62px; }
+  body.offer-ui:not(#wa-theme-off) :is(#view-profile, #view-resume, #view-interview, #view-push) .view-title { font-size: 28px; }
+  body.offer-ui:not(#wa-theme-off) .sg-profile-progress-value { font-size: 40px; min-width: 62px; }
 }
