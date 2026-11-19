@@ -7,6 +7,15 @@ from pathlib import Path
 from resume_layout import blocks, emphasized, inline_text, template_name
 
 
+# macOS 的 .ttc 把多个字体打包在一起，第 0 个并不一定是想要的：Songti.ttc 的 0 号是「Songti SC Black」（
+# 正文会整页变粗黑，还缺「•」字形），STHeiti 的 0 号是繁体 TC。固定选简体、常规字重的子字体。
+MAC_SUBFONT_INDEX = {'songti.ttc': 6, 'stheiti medium.ttc': 1, 'stheiti light.ttc': 1}
+
+
+def subfont_index(path):
+    return MAC_SUBFONT_INDEX.get(Path(path).name.lower(), 0)
+
+
 def cjk_font_candidates(classic):
     """(正文字体候选, 粗体候选)：Windows 优先，其次 macOS 与常见 Linux 中文字体；reportlab 只能嵌入 TrueType 轮廓。"""
     windows = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
@@ -38,7 +47,7 @@ def render_pdf(markdown, *, role='', template='professional'):
         if path is None:
             raise ValueError('直接导出 PDF 需要本机中文字体；可改用打印页保存 PDF。')
         if name not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=0))
+            pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=subfont_index(path)))
     pdfmetrics.registerFontFamily(font, normal=font, bold=bold, italic=font, boldItalic=bold)
     ink, accent, muted, rule = map(HexColor, ('#18212b', '#222222' if classic else '#234e70', '#596675', '#cbd3dc'))
     body = ParagraphStyle('body', fontName=font, fontSize=10.2, leading=16.3, textColor=ink,
