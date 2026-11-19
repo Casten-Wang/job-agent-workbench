@@ -13,6 +13,10 @@ MAX_TEXT = 60_000
 SUFFIXES = {".md", ".txt", ".docx", ".pdf"}
 
 
+class TextLayerUnusable(ValueError):
+    """PDF 没有可用文字层（乱码或纯图片）；调用方可改走图片识别。消息可直接展示。"""
+
+
 def extract_resume_text(filename: str, content: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix not in SUFFIXES:
@@ -29,9 +33,11 @@ def extract_resume_text(filename: str, content: bytes) -> str:
         text = _plain_text(content)
     text = _fold_cjk_radicals(text.replace("\x00", "")).strip()
     if not text:
-        raise ValueError("未读取到简历文字；扫描图片 PDF 请先转为可复制文字的文件")
+        if suffix == ".pdf":
+            raise TextLayerUnusable("这份 PDF 里没有可读取的文字（可能是扫描图片）。")
+        raise ValueError("未读取到简历文字；请确认文件内容不是空白")
     if looks_garbled(text):
-        raise ValueError(GARBLED_MESSAGE)
+        raise (TextLayerUnusable if suffix == ".pdf" else ValueError)(GARBLED_MESSAGE)
     if len(text) > MAX_TEXT:
         raise ValueError("简历文字过长，请精简至 60000 字符以内")
     return text

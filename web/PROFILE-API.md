@@ -103,7 +103,7 @@ POST /api/action
 {"action": "import-profile-cv", "mode": "user", "filename": "resume.pdf", "content_base64": "<文件原始字节的 Base64>"}
 ```
 
-页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后发送给已配置模型的 `profile_extract` 阶段解析，不保存原始文件。加密或扫描图片 PDF 暂不支持，请先转成可复制文字的文件。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
+页面支持点击选择或拖入 PDF、DOCX、Markdown、TXT（最大 5 MB、60000 字符，PDF 最多 30 页）。本机提取文字后发送给已配置模型的 `profile_extract` 阶段解析，不保存原始文件。加密 PDF 暂不支持。PDF 文字层不可用（字体无标准编码导致的乱码，或纯图片扫描件）时，后端用 macOS 自带 `sips` 把前 6 页渲染成图片，交给已配置的多模态模型逐字转写（`web/resume_vision.py`，不保存图片），转写文字再走同一条抽取链路，响应 `text_origin` 为 `image`；没有渲染器或模型不支持图片时，返回原先的「文字层乱码/无文字，请重新导出」提示并附上失败原因。TXT/Markdown 支持 UTF-8、带 BOM 的 UTF-16 和 GB18030。
 
 ### 3.1 长简历分段与原文核对
 
@@ -121,6 +121,7 @@ POST /api/action
 | --- | --- | --- |
 | `failure` | string \| null | 需要用户重试或手工补全的原因；`null` 表示模型完整返回 |
 | `partial` | bool | 是否有段落或条目未能解析 |
+| `text_origin` | string | `text_layer`（直接读取文字）或 `image`（文字层不可用，经图片识别得到，界面会提示重点核对）；新增键 |
 | `unmatched_sections` | list | `[{"section": "工作经历", "text": "原文段落"}]`，单段最多 6000 字、合计最多 20000 字、最多 20 项 |
 
 `failure` 取值：

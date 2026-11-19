@@ -1181,7 +1181,7 @@ def _profile_import_unmatched(value: Any) -> list[dict[str, str]]:
 
 
 def _profile_import_result(text: str, filename: str, extraction: dict[str, Any] | None,
-                           failure: str | None, warnings: list[str]) -> dict[str, Any]:
+                           failure: str | None, warnings: list[str], text_origin: str = "text_layer") -> dict[str, Any]:
     """Suggestion payload that keeps the parsed source text usable after a model failure."""
     profile = extraction.get("profile") if isinstance(extraction, dict) else None
     suggestion = normalize_profile(profile if isinstance(profile, dict) else {})
@@ -1193,9 +1193,12 @@ def _profile_import_result(text: str, filename: str, extraction: dict[str, Any] 
         message = "Agent 已解析简历的部分内容；未识别的段落保留在解析原文中，请核对后手动补全。"
     else:
         message = "Agent 已解析整份简历并填入资料及经历；请核对各项内容，确认真实性后保存。"
+    if text_origin == "image":
+        message = "这份 PDF 的文字层不可用，已改用图片识别读取文字，个别字可能有误，请重点核对。" + message
     get_store("user").log("读取简历建议资料", "本地文件；未自动保存")
     return {
         "ok": True,
+        "text_origin": text_origin,
         "profile": suggestion,
         "source": filename,
         "source_text": text,
@@ -1227,8 +1230,17 @@ def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
         content = base64.b64decode(encoded, validate=True)
     except ValueError as exc:
         raise ApiError("简历文件传输失败，请重新选择文件") from exc
+    text_origin, vision_notes = "text_layer", []
     try:
         text = profile_import.extract_resume_text(filename, content)
+    except profile_import.TextLayerUnusable as exc:
+        # 文字层乱码/纯图片：渲染页面交给已配置的多模态模型转写，再走同一条抽取链路。
+        import resume_vision
+        try:
+            text, vision_notes = resume_vision.transcribe_pdf(content)
+        except resume_vision.VisionUnavailable as vision_exc:
+            raise ApiError(f"{exc}（自动图片识别没有成功：{vision_exc}）") from exc
+        text_origin = "image"
     except ValueError as exc:
         raise ApiError(str(exc)) from exc
     from career_user_runtime import upstream
@@ -1243,13 +1255,13 @@ def _import_profile_upload(payload: dict[str, Any]) -> dict[str, Any]:
             failure = "invalid_output"
         else:
             failure = "model_unavailable"
-        return _profile_import_result(text, filename, None, failure, [])
+        return _profile_import_result(text, filename, None, failure, vision_notes, text_origin)
     if not isinstance(extraction, dict) or not isinstance(extraction.get("profile"), dict):
-        return _profile_import_result(text, filename, None, "invalid_output", [])
+        return _profile_import_result(text, filename, None, "invalid_output", vision_notes, text_origin)
     code = str(extraction.get("failure") or "")
     failure = PROFILE_IMPORT_FAILURES.get(code, "model_unavailable" if code else None)
     return _profile_import_result(text, filename, extraction, failure,
-                                  _profile_import_warnings(extraction.get("warnings")))
+                                  vision_notes + _profile_import_warnings(extraction.get("warnings")), text_origin)
 
 
 def _job_id(record: dict[str, Any], index: int) -> str:
