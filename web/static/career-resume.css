@@ -52,3 +52,82 @@
 .cu-template-choice legend { padding: 0 0 6px; }
 .cu-template-choice label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 @media (max-width: 420px) { .cu-template-choice { flex-direction: column; align-items: flex-start; } }
+
+/* 个人资料 · 简历导入：原文分段、来自简历的建议值、未能自动填入的段落 */
+.profile-import-paragraphs,
+.profile-cv-suggest-list,
+.profile-cv-unmatched {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.profile-import-paragraph,
+.profile-cv-suggest-item,
+.profile-cv-unmatched-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.profile-import-paragraph-text,
+.profile-cv-unmatched-text,
+.profile-cv-suggest-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.profile-import-paragraph .button,
+.profile-cv-unmatched-item .button,
+.profile-cv-suggest-item .button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.profile-cv-suggest-lead,
+.profile-cv-unmatched-title {
+  margin: 12px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.profile-cv-suggest-label,
+.profile-cv-unmatched-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--mute);
+  font-size: 12px;
+}
+.profile-cv-suggest-warn {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 13px;
+}
+.profile-cv-suggest-actions,
+.profile-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+@media (max-width: 640px) {
+  .profile-import-paragraph,
+  .profile-cv-suggest-item,
+  .profile-cv-unmatched-item {
+    flex-direction: column;
+  }
+  .profile-import-paragraph .button,
+  .profile-cv-unmatched-item .button,
+  .profile-cv-suggest-item .button {
+    width: 100%;
+  }
+}

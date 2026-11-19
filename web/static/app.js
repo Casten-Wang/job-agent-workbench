@@ -3480,7 +3480,6 @@ function renderProfileImportFailure(failure, message, hasSource) {
   const hint = PROFILE_CV_FAILURE_HINTS[failure] || PROFILE_CV_FALLBACK_HINT;
   const lines = [hint];
   if (message && message !== hint) lines.push(`原因：${message}`);
-  if (failure) lines.push(`错误代码：${failure}`);
   lines.push('表单里的内容没有改动：框里仍是上次保存的资料，或你刚才填写的内容。');
   if (!hasSource) lines.push('这次没能拿到简历原文；可以重新选择文件，或直接在下方手动填写。');
   renderProfileImportStatus('error', lines, { settings: failure === 'model_unconfigured' });
