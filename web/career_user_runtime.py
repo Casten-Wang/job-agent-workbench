@@ -52,6 +52,115 @@ def upstream(method, path, payload=None):
     return service_request(18748, "OFFERPILOT_CAREER_USER_TOKEN", method, path, payload)
 
 
+PROFILE_SECTIONS = ("experiences", "projects")
+
+
+def profile_selection(payload):
+    """Validate the checked profile entries sent by the resume page.
+
+    Entries are addressed by (section, index) into the stored profile, so the
+    browser never has to resend personal text and the server stays the source
+    of truth.
+    """
+    items = payload.get("items")
+    if not isinstance(items, list) or not items or len(items) > 20:
+        raise backend.ApiError("请至少勾选一段经历或项目（最多 20 段）")
+    selection, seen = [], set()
+    for item in items:
+        if not isinstance(item, dict) or set(item) - {"section", "index", "note"}:
+            raise backend.ApiError("经历选择参数无效")
+        section, index = item.get("section"), item.get("index")
+        note = item.get("note") or ""
+        if section not in PROFILE_SECTIONS or not isinstance(index, int) or isinstance(index, bool) or index < 0:
+            raise backend.ApiError("经历选择参数无效")
+        if not isinstance(note, str) or len(note) > 400:
+            raise backend.ApiError("每段经历的补充说明请控制在 400 字以内")
+        key = (section, index)
+        if key in seen:
+            continue
+        seen.add(key)
+        selection.append({"section": section, "index": index, "note": note.strip()})
+    return selection
+
+
+def profile_rows(profile, item):
+    rows = profile.get(item["section"]) or []
+    if item["index"] >= len(rows):
+        raise backend.ApiError("所选经历已不在个人资料中，请刷新页面后重试", 409)
+    row = rows[item["index"]]
+    return row if isinstance(row, dict) else {}
+
+
+def selected_profile(profile, items):
+    """Keep only the checked entries, in the order the user arranged them."""
+    order = {section: [] for section in PROFILE_SECTIONS}
+    for item in profile_selection({"items": items}):
+        order[item["section"]].append(profile_rows(profile, item))
+    data = dict(profile)
+    data.update(order)
+    return data
+
+
+def _row_heading(item, row):
+    keys = ("company", "title") if item["section"] == "experiences" else ("name", "role")
+    return " · ".join(str(row.get(key) or "").strip() for key in keys if str(row.get(key) or "").strip())
+
+
+def experience_from_profile(profile, items, role, jd):
+    """Compose one engine `experience-import` payload from checked profile rows.
+
+    The first checked entry is the one the model rewrites into resume bullets;
+    every checked entry still goes into the source text so claims stay grounded.
+    """
+    primary = items[0]
+    row = profile_rows(profile, primary)
+    summary = str(row.get("summary") or "").strip()
+    note = primary["note"]
+    if primary["section"] == "experiences":
+        title = str(row.get("title") or "").strip()
+        kind = "internship" if "实习" in title else "work"
+        name = title or str(row.get("company") or "").strip()
+        organization, position = str(row.get("company") or "").strip(), title
+    else:
+        kind = "project"
+        name = str(row.get("name") or "").strip()
+        organization, position = "", str(row.get("role") or "").strip()
+    if not name:
+        raise backend.ApiError("所选经历缺少名称，请先到个人资料补全")
+    if not (summary or note):
+        raise backend.ApiError("这段经历缺少说明，请在卡片里补充一句再生成")
+    lines = []
+    for item in items:
+        current = profile_rows(profile, item)
+        heading = _row_heading(item, current)
+        period = " - ".join(part for part in (str(current.get("start") or "").strip(), str(current.get("end") or "").strip()) if part)
+        label = "工作 / 实习经历" if item["section"] == "experiences" else "项目经历"
+        lines.append(f"{label}：{heading}" + (f"（{period}）" if period else ""))
+        body = str(current.get("summary") or "").strip()
+        if body:
+            lines.append(body)
+        if item["note"]:
+            lines.append("本人补充：" + item["note"])
+        lines.append("")
+    return {
+        "kind": kind,
+        "name": name[:120],
+        "organization": organization[:120],
+        "position": position[:120],
+        "start": str(row.get("start") or "").strip()[:40],
+        "end": str(row.get("end") or "").strip()[:40],
+        "role": role,
+        "jd": jd,
+        "context": (summary or note)[:4000],
+        "contribution": (summary or note)[:4000],
+        "outcome": "",
+        "source_text": "\n".join(lines).strip()[:20000],
+        "portfolio_url": "",
+        "confirmed": True,
+        "model_consent": True,
+    }
+
+
 def _enrich_comprehensive_start(payload):
     """在本地服务端自动汇聚画像、已选岗位快照与同目标面经/知识，避免浏览器伪造或遗漏。"""
     enriched = dict(payload)
@@ -242,6 +351,23 @@ def dispatch(method, path, query, payload=None):
         return {"ok": True, "text": text}, 200
     if method == "POST" and suffix == "/experience-import" and not query:
         return {"ok": True, **upstream("POST", "/v1/career/experience-import", payload)}, 202
+    if method == "POST" and suffix == "/profile-experience" and not query:
+        if not {"items", "role"} <= set(payload) or set(payload) - {"items", "role", "jd", "confirmed", "model_consent"}:
+            raise backend.ApiError("定制简历参数无效")
+        if payload.get("confirmed") is not True or payload.get("model_consent") is not True:
+            raise backend.ApiError("请勾选确认真实性并允许模型整理这份简历")
+        role = payload.get("role")
+        jd = payload.get("jd") or ""
+        if not isinstance(role, str) or not role.strip() or len(role) > 200:
+            raise backend.ApiError("请先选择或填写目标岗位")
+        if not isinstance(jd, str) or len(jd) > 15000:
+            raise backend.ApiError("岗位 JD 过长，请精简到 15000 字以内")
+        items = profile_selection(payload)
+        profile = backend.profile_public(backend.get_store("user").profile())
+        if not profile.get("truth_confirmed") or not profile.get("basic", {}).get("name"):
+            raise backend.ApiError("请先在个人资料填写姓名并确认资料事实，再生成简历")
+        data = experience_from_profile(profile, items, role.strip(), jd)
+        return {"ok": True, **upstream("POST", "/v1/career/experience-import", data)}, 202
     if method == "GET" and suffix == "/github/status" and not query:
         return {"ok": True, **upstream("GET", "/v1/career/github/status")}, 200
     if method == "POST" and suffix in {"/github/config", "/github/start", "/github/poll", "/github/disconnect"} and not query:
@@ -258,11 +384,15 @@ def dispatch(method, path, query, payload=None):
         if method == allowed:
             return {"ok": True, **upstream(method, "/v1/career" + suffix, payload if method == "POST" else None)}, 200
     if method == "POST" and suffix == "/resume-drafts" and not query:
-        if set(payload) not in ({"session_id"}, {"material_id"}):
+        allowed = ({"session_id"}, {"material_id"}, {"session_id", "items"}, {"material_id", "items"})
+        if set(payload) not in allowed:
             raise backend.ApiError("简历预览参数无效")
         profile = backend.profile_public(backend.get_store("user").profile())
         if not profile.get("truth_confirmed") or not profile.get("basic", {}).get("name"):
             raise backend.ApiError("请先在个人资料填写姓名并确认资料事实，再生成简历预览")
+        if "items" in payload:
+            # 定制简历页勾选的条目决定这份简历包含哪些经历；其余资料字段照常带入。
+            profile = selected_profile(profile, payload.pop("items"))
         payload["profile"] = profile
         return {"ok": True, **upstream("POST", "/v1/career/resume-drafts", payload)}, 201
     if method == "POST" and re.fullmatch(rf"/resume-drafts/{ID}/save", suffix) and not query:

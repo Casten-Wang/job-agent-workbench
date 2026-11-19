@@ -1500,89 +1500,75 @@
             <div class="view-head-row">
               <div>
                 <h2 class="view-title" id="resume-title">定制简历</h2>
-                <p class="view-lede">围绕目标岗位整理可核实的真实经历，右侧实时预览 A4 简历排版并导出 PDF。</p>
+                <p class="view-lede">资料已在「个人资料」里维护：这里只选目标岗位、勾选已有经历、补充一两句，然后预览并导出 A4 简历。</p>
               </div>
-              <nav class="ui-hub-tabs resume-mode-tabs" aria-label="定制简历视图切换">
-                <button class="ui-hub-tab is-active" type="button" data-resume-tab="craft" aria-current="page">经历整理与 A4 简历画布</button>
-                <button class="ui-hub-tab" type="button" data-resume-tab="tools">ATS 预检与经历变体库</button>
-              </nav>
             </div>
           </header>
 
-
-          <section hidden class="panel integration-panel career-panel" aria-labelledby="career-public-title">
-            <div class="integration-head">
-              <div>
-                <h3 id="career-public-title">写简历前，先核验项目</h3>
-                <p>先用公开样例体验：理解项目 → 回答源码问题 → 查看复盘与补强建议。</p>
-              </div>
-              <span class="badge badge-neutral" id="career-connection">检查连接中</span>
-            </div>
-            <dl class="integration-meta">
-              <div><dt>公开样例</dt><dd>pallets/itsdangerous (Python)</dd></div>
-              <div><dt>核验重点</dt><dd>时间戳签名、过期检查与实现边界</dd></div>
-              <div><dt>固定版本</dt><dd><code>672971d66a2e</code>（不计入个人经历）</dd></div>
-            </dl>
-            <p class="notice" id="career-resume-note" role="status" aria-live="polite">正在检查公开样例服务。</p>
-            <div class="form-actions career-actions">
-              <button class="button" type="button" id="career-start" disabled>开始项目核验</button>
-              <button class="button button-quiet" type="button" id="career-continue" hidden>继续 / 查看本轮</button>
-              <button class="button button-quiet" type="button" id="career-connect">重新检查连接</button>
-              <button class="button button-quiet" type="button" id="career-demo-mode" hidden>切到演示模式</button>
+          <section class="panel career-user-panel" id="cu-resume-panel" aria-labelledby="cu-title">
+            <div class="panel-head"><div><h3 id="cu-title">从个人资料到定制简历</h3><p class="panel-note">选目标 → 带出资料 → 生成核对 → 预览导出。资料本身在「个人资料」里维护，这里不再重复导入。</p></div><span class="badge" id="cu-connection">个人资料</span></div>
+            <div id="cu-personal" hidden>
+              <section id="cu-step-target">
+                <h4>1. 选目标岗位</h4>
+                <p class="hint">从岗位池选一个已采集的岗位会自动带上它的 JD；也可以手动填写岗位名称或粘贴 JD。这是唯一必填的一步。</p>
+                <div class="form-grid">
+                  <div class="form-field full"><label for="cu-job-select">从岗位池选择</label><select id="cu-job-select"><option value="">手动填写岗位</option></select><p class="hint" id="cu-job-empty" hidden>岗位池还是空的；可以先去「岗位池」采集，或直接手动填写岗位名称。</p></div>
+                  <div class="form-field full"><label for="cu-target-role">目标岗位<span class="sg-required">必填</span></label><input id="cu-target-role" type="text" maxlength="200" autocomplete="off" placeholder="例如：产品经理"></div>
+                  <div class="form-field full"><label for="cu-target-jd">岗位 JD（选填）</label><textarea id="cu-target-jd" rows="4" maxlength="15000" placeholder="从岗位池选择会自动带入；也可以直接粘贴 JD。"></textarea></div>
+                </div>
+              </section>
+              <section id="cu-step-material">
+                <h4>2. 带出你的资料</h4>
+                <div class="notice" id="cu-profile-gate" role="status" hidden>
+                  <p>个人资料还不完整：需要姓名，并确认信息真实性，才能生成简历。</p>
+                  <div class="form-actions"><button class="button" type="button" id="cu-goto-profile">去个人资料补全</button></div>
+                </div>
+                <p class="hint" id="cu-material-note">以下经历与项目来自个人资料。勾选要放进这份简历的条目，顺序就是简历里的顺序；排在最前的一段会由模型整理成要点，其余按资料原文排版。缺少说明的条目可以在卡片里补充一句，只用于这份简历。</p>
+                <div id="cu-entry-list"></div>
+                <p class="hint" id="cu-entry-empty" hidden>个人资料里还没有经历或项目。先到「个人资料」补一段可核实的经历，再回来生成简历。</p>
+                <details id="cu-auto-included">
+                  <summary>教育背景、技能与个人简介（随资料自动带入）</summary>
+                  <div id="cu-auto-summary"></div>
+                </details>
+              </section>
+              <p class="career-message" id="cu-message" role="status" aria-live="polite">选择目标岗位并勾选经历后，点击「生成简历草稿」。</p>
+              <section id="cu-step-generate">
+                <h4>3. 生成与核对</h4>
+                <label class="cu-check"><input type="checkbox" id="cu-generate-consent"><span><span class="sg-required">必填</span>我确认勾选的是本人真实经历（已区分个人贡献与团队成果），并允许把这些资料和目标岗位发给模型整理这份简历。</span></label>
+                <div class="form-actions"><button class="button" id="cu-generate" type="button">生成简历草稿</button></div>
+              <section id="cu-project-review" hidden><h4>确认实际属于你的经历表述</h4><p class="career-message" id="cu-project-positioning"></p><p class="career-message" id="cu-project-summary"></p><p class="hint" id="cu-coverage"></p><div id="cu-claims"></div><p class="hint">只勾选你实际负责且愿意在简历中陈述的工作。模型整理的表述仍需你核对。</p><button class="button" id="cu-start-readiness" type="button">确认所选经历，生成简历预览</button></section>
+              </section>
+              <section id="cu-resume-preview"><h4>4. 预览与导出</h4><fieldset class="cu-template-choice"><legend>选择简历模板（A4 单栏）</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级，克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文，黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据个人资料和你确认的经历生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"><p class="resume-contact">在左侧勾选经历并生成草稿，或从版本记录中选择一份已保存简历后，此处将实时渲染标准 A4 简历排版。</p></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
+              <section id="cu-saved-resume" hidden><h4>已保存的简历版本</h4><p class="hint" id="cu-version-label"></p><div class="career-actions"><button class="button button-quiet" id="cu-download" type="button">下载 Markdown</button><button class="button button-quiet" id="cu-download-pdf" type="button">下载 PDF</button><button class="button button-quiet" id="cu-print" type="button">打印 / 导出 PDF</button><button class="button button-quiet" id="cu-regenerate" type="button">用最新个人资料生成新版</button><button class="button" id="cu-start-formal" type="button" hidden>基于此版本开始正式模拟面试</button></div></section>
+              <section id="cu-history" hidden><h4>简历版本记录</h4><div id="cu-versions"></div></section>
             </div>
           </section>
-
-          <div class="two-col">
-            <section class="panel" aria-labelledby="ats-title">
-              <div class="panel-head">
-                <div>
-                  <h3 id="ats-title">ATS 简历可读性检查</h3>
-                  <p class="panel-note">在本机选择 PDF，只在本机检查，不上传到外部服务。</p>
-                </div>
+          <section class="panel" id="cu-self-check" aria-labelledby="ats-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="ats-title">导出后自检：ATS 简历可读性</h3>
+                <p class="panel-note">导出 PDF 后在本机做一次可读性检查；只在本机检查，不上传到外部服务。</p>
               </div>
-              <form class="form-grid" id="ats-form">
-                <div class="form-field full resume-dropzone" id="ats-resume-drop" role="group" aria-label="拖入 ATS 检查 PDF">
-                  <label for="ats-file">PDF 文件（最大 5 MB）<span class="sg-required">必填</span></label>
-                  <input id="ats-file" type="file" accept="application/pdf,.pdf">
-                  <p class="hint">将 PDF 拖到这里，或选择文件，再点击「检查 PDF」。</p>
-                  <p class="resume-drop-status" aria-live="polite"></p>
-                </div>
-                <div class="form-field full">
-                  <label for="ats-keywords">关键词（逗号分隔）</label>
-                  <input id="ats-keywords" type="text" placeholder="需求分析, 数据分析, Axure" autocomplete="off">
-                </div>
-                <div class="form-field full form-actions">
-                  <button class="button" type="submit" id="ats-submit">检查 PDF</button>
-                  <p class="hint">只检查文字层能不能被筛选系统读到，不渲染页面，也不识别扫描件。</p>
-                </div>
-              </form>
-              <p class="notice" id="ats-note">「需人工检查」不等于通过；提取不到文字时，请自己再核对一遍。</p>
-              <div class="action-result" id="ats-result" hidden></div>
-            </section>
-
-            <section class="panel" aria-labelledby="variant-title">
-              <div class="panel-head">
-                <div>
-                  <h3 id="variant-title">保存经历变体</h3>
-                  <p class="panel-note">只保存你手动改写的原文；不改动主简历，也不编造数字。</p>
-                </div>
+            </div>
+            <form class="form-grid" id="ats-form">
+              <div class="form-field full resume-dropzone" id="ats-resume-drop" role="group" aria-label="拖入 ATS 检查 PDF">
+                <label for="ats-file">PDF 文件（最大 5 MB）<span class="sg-required">必填</span></label>
+                <input id="ats-file" type="file" accept="application/pdf,.pdf">
+                <p class="hint">将 PDF 拖到这里，或选择文件，再点击「检查 PDF」。</p>
+                <p class="resume-drop-status" aria-live="polite"></p>
               </div>
-              <form class="form-grid" id="variant-form">
-                <div class="form-field full">
-                  <label for="variant-project">项目名<span class="sg-required">必填</span></label>
-                  <input id="variant-project" type="text" autocomplete="off" placeholder="项目或经历名称">
-                </div>
-                <div class="form-field full">
-                  <label for="variant-text">经历原文<span class="sg-required">必填</span></label>
-                  <textarea id="variant-text" rows="6" placeholder="粘贴你手动改写的经历原文。"></textarea>
-                </div>
-                <div class="form-field full form-actions">
-                  <button class="button" type="submit" id="variant-submit">保存经历变体</button>
-                </div>
-              </form>
-              <div class="action-result" id="variant-result" hidden></div>
-            </section>
-          </div>
+              <div class="form-field full">
+                <label for="ats-keywords">关键词（逗号分隔）</label>
+                <input id="ats-keywords" type="text" placeholder="需求分析, 数据分析, Axure" autocomplete="off">
+              </div>
+              <div class="form-field full form-actions">
+                <button class="button" type="submit" id="ats-submit">检查 PDF</button>
+                <p class="hint">只检查文字层能不能被筛选系统读到，不渲染页面，也不识别扫描件。</p>
+              </div>
+            </form>
+            <p class="notice" id="ats-note">「需人工检查」不等于通过；提取不到文字时，请自己再核对一遍。</p>
+            <div class="action-result" id="ats-result" hidden></div>
+          </section>
 
           <section class="panel sg-variant-saved" aria-labelledby="sg-variant-saved-title">
             <div class="panel-head">
@@ -1594,86 +1580,9 @@
             <div id="variant-list"></div>
             <div class="action-result resume-compare-result" id="resume-compare-result" aria-live="polite" hidden></div>
           </section>
-
-          <section class="panel career-user-panel" id="cu-resume-panel" aria-labelledby="cu-title">
-            <div class="panel-head"><div><h3 id="cu-title">从真实经历到定制简历</h3><p class="panel-note">先选导入方式，再整理并确认经历，然后预览，最后保存并导出。</p></div><span class="badge" id="cu-connection">经历导入</span></div>
-            <p class="notice" id="cu-mode-note">导入自己的项目、实习经历或作品集。</p>
-            <button class="button" type="button" id="cu-switch-user" hidden>继续编辑我的资料</button>
-            <div id="cu-personal" hidden>
-              <p class="hint">生成简历会使用你在个人资料中确认的信息。<button class="button button-quiet" type="button" data-view-link="profile">填写 / 更新个人资料</button></p>
-              <fieldset class="cu-source-choice"><legend>选择导入方式</legend>
-                <label><input type="radio" name="cu-source-type" value="github"><span><strong>GitHub 项目</strong><small>从仓库读取实现，整理技术项目的核心贡献。</small></span></label>
-                <label><input type="radio" name="cu-source-type" value="manual" checked><span><strong>自主导入经历 / 作品集</strong><small>适合产品、运营、设计等岗位，填写实习、工作或作品说明。</small></span></label>
-              </fieldset>
-              <p class="career-message" id="cu-message" role="status" aria-live="polite">请选择导入方式。</p>
-              <section class="notice" aria-labelledby="cu-knowledge-title">
-                <h4 id="cu-knowledge-title">项目知识库</h4>
-                <p id="cu-knowledge-status" role="status" aria-live="polite">正在检查本机项目资料…</p>
-                <a href="/api/career-user/knowledge/sources?mode=user" target="_blank" rel="noopener noreferrer">查看资料与覆盖范围</a>
-              </section>
-              <div id="cu-github-panel" hidden>
-              <details id="cu-setup">
-                <summary>首次配置 GitHub 登录应用</summary>
-                <p>创建一次自己的 OAuth App，然后填写公开的 Client ID。日后直接点击“连接 GitHub”。</p>
-                <p><a href="https://github.com/settings/applications/new" target="_blank" rel="noopener noreferrer">在 GitHub 创建 OAuth App</a></p>
-                <dl class="detail-list"><dt>Application name</dt><dd>OfferPilot Local</dd><dt>Homepage URL</dt><dd><code>http://127.0.0.1:8766</code></dd><dt>Authorization callback URL</dt><dd><code>http://127.0.0.1:8766</code></dd><dt>创建后</dt><dd>在应用设置中勾选 Enable Device Flow</dd></dl>
-                <form id="cu-config-form" class="form-grid"><div class="form-field full"><label for="cu-client-id">Client ID（公开标识，不要填写 Secret 或令牌）</label><input id="cu-client-id" type="text" maxlength="100" autocomplete="off" required></div><div class="form-actions full"><button class="button" type="submit">保存登录应用配置</button></div></form>
-                <p class="hint">OAuth 的 repo 范围由 GitHub 提供，包含仓库读写权限；OfferPilot 只使用读取接口，不提交或推送代码。组织仓库还受组织授权限制。</p>
-              </details>
-              <div class="career-actions"><button class="button" id="cu-connect" type="button">连接 GitHub</button><button class="button button-quiet" id="cu-reload" type="button">刷新连接与仓库</button><button class="button button-quiet" id="cu-disconnect" type="button" hidden>断开本机连接</button></div>
-              <div class="notice" id="cu-device" hidden><p>请在 GitHub 输入验证码：<strong id="cu-device-code"></strong></p><a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">打开 GitHub 授权页面</a><p class="hint" id="cu-device-status">等待你在 GitHub 确认，本页将自动检查状态。</p></div>
-              <details id="cu-repository-section" hidden open aria-label="GitHub 仓库列表"><summary>选择或更换 GitHub 项目</summary><p class="hint">展示账号获准访问的公开、私有和组织仓库。每页 50 个；本期每次处理一个项目，不会自动分析全部仓库。</p><div id="cu-repositories"></div><button class="button button-quiet" id="cu-more-repositories" type="button" hidden>加载更多仓库</button></details>
-              <details id="cu-browser" hidden><summary id="cu-browser-title">仓库文件</summary><div id="cu-files"></div><button class="button button-quiet" type="button" id="cu-more-files" hidden>更多文件</button><pre id="cu-file-text" class="career-code" hidden></pre></details>
-              <form id="cu-project-form" class="form-grid" hidden>
-                <div class="form-field full"><label for="cu-repository">选中的仓库</label><input id="cu-repository" type="text" readonly required></div>
-                <div class="form-field full"><label for="cu-role">目标岗位<span class="sg-required">必填</span></label><input id="cu-role" type="text" maxlength="200" required placeholder="例如：初级 Python 后端工程师"></div>
-                <div class="form-field full"><label for="cu-jd">岗位 JD（建议填写）</label><textarea id="cu-jd" rows="4" maxlength="15000"></textarea></div>
-                <div class="form-field full"><label for="cu-contribution">你实际负责的工作与协作边界<span class="sg-required">必填</span></label><textarea id="cu-contribution" rows="5" maxlength="4000" required placeholder="说明本人实现、第三方代码、团队分工和 AI 辅助；尚无证明的成果数字暂不填写。"></textarea></div>
-                <label class="full cu-check"><input type="checkbox" id="cu-contribution-confirmed" required><span><span class="sg-required">必填</span>我确认上面的职责陈述，不把仓库归属直接当成独立完成的证明。</span></label>
-                <label class="full cu-check"><input type="checkbox" id="cu-model-consent" required><span><span class="sg-required">必填</span>允许将所选源码片段、职责和 JD 发给 Step 模型，用于整理简历经历；不会发送 GitHub 令牌。</span></label>
-                <div class="form-actions full"><button class="button" id="cu-prepare" type="submit">读取项目并整理经历</button></div>
-              </form>
-              </div>
-              <section id="cu-experience-panel">
-                <h4>自主导入经历 / 作品集</h4><p class="hint">无需 GitHub。每次整理一段经历，填写你实际做过的工作；文件与链接可作为补充。</p>
-                <form id="cu-experience-form" class="form-grid">
-                  <div class="form-field"><label for="cu-exp-kind">经历类型</label><select id="cu-exp-kind"><option value="internship">实习经历</option><option value="work">工作经历</option><option value="project">项目经历</option><option value="portfolio">作品集</option></select></div>
-                  <div class="form-field"><label for="cu-exp-name">经历 / 项目名称<span class="sg-required">必填</span></label><input id="cu-exp-name" type="text" maxlength="120" required placeholder="例如：新用户引导改版"></div>
-                  <div class="form-field"><label for="cu-exp-organization">公司 / 团队（选填）</label><input id="cu-exp-organization" type="text" maxlength="120" placeholder="填写实际公司、团队或独立项目"></div>
-                  <div class="form-field"><label for="cu-exp-position">本人职位 / 项目角色（选填）</label><input id="cu-exp-position" type="text" maxlength="120" placeholder="例如：产品实习生"></div>
-                  <div class="form-field"><label for="cu-exp-start">开始时间（选填）</label><input id="cu-exp-start" type="text" maxlength="40" placeholder="例如：2026.06"></div>
-                  <div class="form-field"><label for="cu-exp-end">结束时间（选填）</label><input id="cu-exp-end" type="text" maxlength="40" placeholder="例如：2026.08 或至今"></div>
-                  <div class="form-field full"><label for="cu-exp-role">目标岗位<span class="sg-required">必填</span></label><input id="cu-exp-role" type="text" maxlength="200" required placeholder="例如：产品经理、用户运营、交互设计师"></div>
-                  <div class="form-field full"><label for="cu-exp-context">背景与要解决的问题<span class="sg-required">必填</span></label><textarea id="cu-exp-context" rows="3" maxlength="4000" required placeholder="面向哪些用户？遇到了什么问题？为什么要做这件事？"></textarea></div>
-                  <div class="form-field full"><label for="cu-exp-contribution">你具体做了什么<span class="sg-required">必填</span></label><textarea id="cu-exp-contribution" rows="5" maxlength="4000" required placeholder="例如：如何访谈用户、取舍需求、设计方案、推进评审或验证效果。说明本人工作、团队分工与辅助工具。"></textarea></div>
-                  <div class="form-field full"><label for="cu-exp-outcome">实际成果与交付（选填）</label><textarea id="cu-exp-outcome" rows="3" maxlength="4000" placeholder="写实际交付、反馈与有依据的数据；没有可靠数字可留空，不必编造增长率。"></textarea></div>
-                  <div class="form-field full"><label for="cu-exp-portfolio-url">作品集链接（选填）</label><input id="cu-exp-portfolio-url" type="url" maxlength="1000" placeholder="https://"><p class="hint">链接作为简历引用保留；请在下方补充需要整理的文字。</p></div>
-                  <details class="full"><summary>补充材料与岗位要求（选填）</summary>
-                    <div class="form-field"><label for="cu-exp-file">从文件提取文字</label><input id="cu-exp-file" type="file" accept=".pdf,.docx,.md,.txt"><button class="button button-quiet" id="cu-extract-text" type="button">提取到下方原文</button><p class="hint">支持有文字层的 PDF、DOCX、Markdown、TXT，最大 5 MB。先在本机提取并核对，确认整理时才发送给模型。</p><p id="cu-extract-status" role="status" aria-live="polite"></p></div>
-                    <div class="form-field"><label for="cu-exp-source-text">补充材料原文</label><textarea id="cu-exp-source-text" rows="6" maxlength="20000" placeholder="粘贴作品说明、需求文档、复盘或访谈摘要；也可从文件提取。请删除与本次简历无关的信息。"></textarea></div>
-                    <div class="form-field"><label for="cu-exp-jd">目标岗位 JD</label><textarea id="cu-exp-jd" rows="4" maxlength="15000"></textarea></div>
-                  </details>
-                  <label class="full cu-check"><input type="checkbox" id="cu-exp-confirmed" required><span><span class="sg-required">必填</span>我确认这些是本人真实经历，已区分个人贡献与团队成果。</span></label>
-                  <label class="full cu-check"><input type="checkbox" id="cu-exp-consent" required><span><span class="sg-required">必填</span>允许将上述经历、补充原文与岗位要求发给 Step 模型，用于整理简历。</span></label>
-                  <div class="form-actions full"><button class="button" id="cu-prepare-experience" type="submit">整理经历并核对表述</button></div>
-                </form>
-              </section>
-              <section id="cu-project-review" hidden><h4>确认实际属于你的经历表述</h4><p class="career-message" id="cu-project-positioning"></p><p class="career-message" id="cu-project-summary"></p><p class="hint" id="cu-coverage"></p><div id="cu-claims"></div><p class="hint">只勾选你实际负责且愿意在简历中陈述的工作。模型整理的表述仍需你核对。</p><button class="button" id="cu-start-readiness" type="button">确认所选经历，生成简历预览</button></section>
-              <section id="cu-resume-preview"><h4>A4 简历实时预览</h4><fieldset class="cu-template-choice"><legend>选择简历模板（A4 单栏）</legend><label><input type="radio" name="cu-template" value="professional" checked><span><strong>专业墨蓝</strong><small>清晰层级，克制点缀</small></span></label><label><input type="radio" name="cu-template" value="classic"><span><strong>经典黑白</strong><small>宋体正文，黑白打印</small></span></label></fieldset><p class="hint">模板同时用于预览、打印和 PDF 导出；切换样式保留当前正文。</p><p class="notice">请核对本人资料与经历表述。当前根据导入材料和本人确认生成简历，未进行面试或能力评估。</p><div class="cu-preview-frame"><article class="cu-document resume-sheet" id="cu-markdown" aria-label="简历正文预览" data-resume-template="professional"><p class="resume-contact">在左侧导入并确认经历，或从版本记录中选择一份已保存简历后，此处将实时渲染标准 A4 简历排版。</p></article></div><label class="cu-check"><input type="checkbox" id="cu-save-confirmed">我已核对资料与经历表述，确认保存这一版本。</label><button class="button" id="cu-save-version" type="button">确认并保存简历版本</button></section>
-              <section id="cu-saved-resume" hidden><h4>已保存的简历版本</h4><p class="hint" id="cu-version-label"></p><div class="career-actions"><button class="button button-quiet" id="cu-download" type="button">下载 Markdown</button><button class="button button-quiet" id="cu-download-pdf" type="button">下载 PDF</button><button class="button button-quiet" id="cu-print" type="button">打印 / 导出 PDF</button><button class="button button-quiet" id="cu-regenerate" type="button">用最新个人资料生成新版</button><button class="button" id="cu-start-formal" type="button" hidden>基于此版本开始正式模拟面试</button></div></section>
-              <section id="cu-history" hidden><h4>简历版本记录</h4><div id="cu-versions"></div></section>
-            </div>
-          </section>
-          <details class="sg-dev-note">
-            <summary><span id="resume-agent-title">定制简历 Agent（未接入）</span><span class="badge badge-neutral">待接入</span></summary>
-            <p>外部简历 Agent 可以按岗位生成单栏简历；现在可用的是经历变体、关键词核对和 PDF 预检。</p>
-            <dl class="integration-meta">
-              <div><dt>输入</dt><dd>岗位 id、JD 关键词、已保存经历变体</dd></div>
-              <div><dt>输出</dt><dd>单栏简历草稿与关键词核对结果</dd></div>
-              <div><dt>边界</dt><dd>只使用本地事实；不自动生成数字或经历</dd></div>
-            </dl>
-          </details>
         </section>
+
+
 
         <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
           <header class="view-head">
@@ -1849,6 +1758,94 @@
       </footer>
     </div>
   </div>
+
+      <!-- 旧版导入界面：节点保留给脚本与任务外壳的能力入口；界面由「项目源码核验」页签承接。 -->
+        <!-- 旧版「导入经历 / GitHub 项目」界面已移出定制简历页，节点保留给脚本与任务外壳的能力入口，
+             界面由「项目源码核验」（模拟面试页签）承接。 -->
+        <div id="cu-legacy-import" hidden aria-hidden="true">
+          <section class="panel integration-panel career-panel" aria-labelledby="career-public-title">
+            <div class="integration-head">
+              <div>
+                <h3 id="career-public-title">写简历前，先核验项目</h3>
+                <p>先用公开样例体验：理解项目 → 回答源码问题 → 查看复盘与补强建议。</p>
+              </div>
+              <span class="badge badge-neutral" id="career-connection">检查连接中</span>
+            </div>
+            <p class="notice" id="career-resume-note" role="status" aria-live="polite">正在检查公开样例服务。</p>
+            <div class="form-actions career-actions">
+              <button class="button" type="button" id="career-start" disabled>开始项目核验</button>
+              <button class="button button-quiet" type="button" id="career-continue" hidden>继续 / 查看本轮</button>
+              <button class="button button-quiet" type="button" id="career-connect">重新检查连接</button>
+              <button class="button button-quiet" type="button" id="career-demo-mode" hidden>切到演示模式</button>
+            </div>
+          </section>
+          <fieldset class="cu-source-choice"><legend>选择导入方式</legend>
+            <label><input type="radio" name="cu-source-type" value="github"><span><strong>GitHub 项目</strong><small>从仓库读取实现，整理技术项目的核心贡献。</small></span></label>
+            <label><input type="radio" name="cu-source-type" value="manual" checked><span><strong>自主导入经历 / 作品集</strong><small>适合产品、运营、设计等岗位，填写实习、工作或作品说明。</small></span></label>
+          </fieldset>
+          <section class="notice" aria-labelledby="cu-knowledge-title">
+            <h4 id="cu-knowledge-title">项目知识库</h4>
+            <p id="cu-knowledge-status" role="status" aria-live="polite">正在检查本机项目资料…</p>
+            <a href="/api/career-user/knowledge/sources?mode=user" target="_blank" rel="noopener noreferrer">查看资料与覆盖范围</a>
+          </section>
+          <div id="cu-github-panel" hidden>
+          <details id="cu-setup">
+            <summary>首次配置 GitHub 登录应用</summary>
+            <p>创建一次自己的 OAuth App，然后填写公开的 Client ID。日后直接点击“连接 GitHub”。</p>
+            <p><a href="https://github.com/settings/applications/new" target="_blank" rel="noopener noreferrer">在 GitHub 创建 OAuth App</a></p>
+            <dl class="detail-list"><dt>Application name</dt><dd>OfferPilot Local</dd><dt>Homepage URL</dt><dd><code>http://127.0.0.1:8766</code></dd><dt>Authorization callback URL</dt><dd><code>http://127.0.0.1:8766</code></dd><dt>创建后</dt><dd>在应用设置中勾选 Enable Device Flow</dd></dl>
+            <form id="cu-config-form" class="form-grid"><div class="form-field full"><label for="cu-client-id">Client ID（公开标识，不要填写 Secret 或令牌）</label><input id="cu-client-id" type="text" maxlength="100" autocomplete="off" required></div><div class="form-actions full"><button class="button" type="submit">保存登录应用配置</button></div></form>
+            <p class="hint">OAuth 的 repo 范围由 GitHub 提供，包含仓库读写权限；OfferPilot 只使用读取接口，不提交或推送代码。组织仓库还受组织授权限制。</p>
+          </details>
+          <div class="career-actions"><button class="button" id="cu-connect" type="button">连接 GitHub</button><button class="button button-quiet" id="cu-reload" type="button">刷新连接与仓库</button><button class="button button-quiet" id="cu-disconnect" type="button" hidden>断开本机连接</button></div>
+          <div class="notice" id="cu-device" hidden><p>请在 GitHub 输入验证码：<strong id="cu-device-code"></strong></p><a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">打开 GitHub 授权页面</a><p class="hint" id="cu-device-status">等待你在 GitHub 确认，本页将自动检查状态。</p></div>
+          <details id="cu-repository-section" hidden aria-label="GitHub 仓库列表"><summary>选择或更换 GitHub 项目</summary><p class="hint">展示账号获准访问的公开、私有和组织仓库。每页 50 个；本期每次处理一个项目，不会自动分析全部仓库。</p><div id="cu-repositories"></div><button class="button button-quiet" id="cu-more-repositories" type="button" hidden>加载更多仓库</button></details>
+          <details id="cu-browser" hidden><summary id="cu-browser-title">仓库文件</summary><div id="cu-files"></div><button class="button button-quiet" type="button" id="cu-more-files" hidden>更多文件</button><pre id="cu-file-text" class="career-code" hidden></pre></details>
+          <form id="cu-project-form" class="form-grid" hidden>
+            <div class="form-field full"><label for="cu-repository">选中的仓库</label><input id="cu-repository" type="text" readonly required></div>
+            <div class="form-field full"><label for="cu-role">目标岗位</label><input id="cu-role" type="text" maxlength="200"></div>
+            <div class="form-field full"><label for="cu-jd">岗位 JD（建议填写）</label><textarea id="cu-jd" rows="4" maxlength="15000"></textarea></div>
+            <div class="form-field full"><label for="cu-contribution">你实际负责的工作与协作边界</label><textarea id="cu-contribution" rows="5" maxlength="4000"></textarea></div>
+            <label class="full cu-check"><input type="checkbox" id="cu-contribution-confirmed"><span>我确认上面的职责陈述，不把仓库归属直接当成独立完成的证明。</span></label>
+            <label class="full cu-check"><input type="checkbox" id="cu-model-consent"><span>允许将所选源码片段、职责和 JD 发给 Step 模型，用于整理简历经历；不会发送 GitHub 令牌。</span></label>
+            <div class="form-actions full"><button class="button" id="cu-prepare" type="submit">读取项目并整理经历</button></div>
+          </form>
+          </div>
+          <section id="cu-experience-panel">
+            <h4>自主导入经历 / 作品集</h4><p class="hint">无需 GitHub。每次整理一段经历，填写你实际做过的工作；文件与链接可作为补充。</p>
+            <form id="cu-experience-form" class="form-grid">
+              <div class="form-field"><label for="cu-exp-kind">经历类型</label><select id="cu-exp-kind"><option value="internship">实习经历</option><option value="work">工作经历</option><option value="project">项目经历</option><option value="portfolio">作品集</option></select></div>
+              <div class="form-field"><label for="cu-exp-name">经历 / 项目名称</label><input id="cu-exp-name" type="text" maxlength="120"></div>
+              <div class="form-field"><label for="cu-exp-organization">公司 / 团队（选填）</label><input id="cu-exp-organization" type="text" maxlength="120"></div>
+              <div class="form-field"><label for="cu-exp-position">本人职位 / 项目角色（选填）</label><input id="cu-exp-position" type="text" maxlength="120"></div>
+              <div class="form-field"><label for="cu-exp-start">开始时间（选填）</label><input id="cu-exp-start" type="text" maxlength="40"></div>
+              <div class="form-field"><label for="cu-exp-end">结束时间（选填）</label><input id="cu-exp-end" type="text" maxlength="40"></div>
+              <div class="form-field full"><label for="cu-exp-role">目标岗位</label><input id="cu-exp-role" type="text" maxlength="200"></div>
+              <div class="form-field full"><label for="cu-exp-context">背景与要解决的问题</label><textarea id="cu-exp-context" rows="3" maxlength="4000"></textarea></div>
+              <div class="form-field full"><label for="cu-exp-contribution">你具体做了什么</label><textarea id="cu-exp-contribution" rows="5" maxlength="4000"></textarea></div>
+              <div class="form-field full"><label for="cu-exp-outcome">实际成果与交付（选填）</label><textarea id="cu-exp-outcome" rows="3" maxlength="4000"></textarea></div>
+              <div class="form-field full"><label for="cu-exp-portfolio-url">作品集链接（选填）</label><input id="cu-exp-portfolio-url" type="url" maxlength="1000"></div>
+              <details class="full"><summary>补充材料与岗位要求（选填）</summary>
+                <div class="form-field"><label for="cu-exp-file">从文件提取文字</label><input id="cu-exp-file" type="file" accept=".pdf,.docx,.md,.txt"><button class="button button-quiet" id="cu-extract-text" type="button">提取到下方原文</button><p id="cu-extract-status" role="status" aria-live="polite"></p></div>
+                <div class="form-field"><label for="cu-exp-source-text">补充材料原文</label><textarea id="cu-exp-source-text" rows="6" maxlength="20000"></textarea></div>
+                <div class="form-field"><label for="cu-exp-jd">目标岗位 JD</label><textarea id="cu-exp-jd" rows="4" maxlength="15000"></textarea></div>
+              </details>
+              <label class="full cu-check"><input type="checkbox" id="cu-exp-confirmed"><span>我确认这些是本人真实经历，已区分个人贡献与团队成果。</span></label>
+              <label class="full cu-check"><input type="checkbox" id="cu-exp-consent"><span>允许将上述经历、补充原文与岗位要求发给 Step 模型，用于整理简历。</span></label>
+              <div class="form-actions full"><button class="button" id="cu-prepare-experience" type="submit">整理经历并核对表述</button></div>
+            </form>
+          </section>
+          <section class="panel" aria-labelledby="variant-title" hidden>
+            <h3 id="variant-title">保存经历变体</h3>
+            <form class="form-grid" id="variant-form">
+              <div class="form-field full"><label for="variant-project">项目名</label><input id="variant-project" type="text" autocomplete="off"></div>
+              <div class="form-field full"><label for="variant-text">经历原文</label><textarea id="variant-text" rows="6"></textarea></div>
+              <div class="form-field full form-actions"><button class="button" type="submit" id="variant-submit">保存经历变体</button></div>
+            </form>
+            <div class="action-result" id="variant-result" hidden></div>
+          </section>
+        </div>
+
   <script src="/app.js"></script>
   <script src="/ui-signals.js"></script>
 <script src="/career-agent.js"></script>

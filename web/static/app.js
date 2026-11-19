@@ -8398,7 +8398,7 @@ function renderVariants(snapshot) {
         el('div', { className: 'resume-compare-cell' }, [compareButton])
       ];
     }),
-    emptyText: '还没有保存经历变体；保存后才能与主稿对比。',
+    emptyText: '还没有已保存的经历变体；已保存的变体会在这里与主稿逐段对比。',
     className: 'data-table-wide'
   });
 }

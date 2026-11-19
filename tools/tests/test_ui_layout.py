@@ -181,7 +181,7 @@ class ResumeCompareTests(unittest.TestCase):
         self.assertIn('id="resume-compare-result"', self.view)
         self.assertIn('aria-live="polite"', self.view)
         self.assertIn("与主稿对比", self.render)
-        self.assertIn("保存后才能与主稿对比", self.render)
+        self.assertIn("已保存的变体会在这里与主稿逐段对比", self.render)
         self.assertIn(
             "variantCompareResult: document.getElementById('resume-compare-result')",
             self.script,
