@@ -431,7 +431,7 @@ body.offer-ui:not(#wa-theme-off) .view-head .sg-help {
 
 body.offer-ui:not(#wa-theme-off) .view-head .sg-help > summary {
   font-size: var(--fs-label);
-  color: var(--mj-mute);
+  color: var(--mj-text-2);
 }
 
 /* 页签：一种样式——下划线式，轨道透明，不再「胶囊套胶囊」 */
@@ -1009,4 +1009,20 @@ body.offer-ui:not(#wa-theme-off) #ci-status-msg[data-error="true"] {
   body.offer-ui:not(#wa-theme-off) #ci-setup-form .form-field:has(#ci-prev-session) {
     grid-column: 1 / -1;
   }
+}
+
+/* ---------- 12. 对比度补充（WCAG AA 4.5:1） ----------
+   12px 辅助字与必填标记在浅底/品牌浅底上低于 4.5:1，这里统一提到次级文字色；
+   流水线步骤号原来是粉色强调，与「单一强调色」规则冲突，改为次级文字。 */
+body.offer-ui:not(#wa-theme-off) .section-label {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .sg-help > summary {
+  color: var(--mj-text-2);
+}
+
+body.offer-ui:not(#wa-theme-off) .pipeline-index {
+  color: var(--mj-text-2);
+  font-variant-numeric: tabular-nums;
 }

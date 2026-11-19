@@ -1304,7 +1304,7 @@ body.offer-ui:not(#wa-theme-off) #view-resume .sg-required {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--mj-spark);
+  color: var(--mj-bad);
   font-size: 12px;
   font-weight: 600;
   box-shadow: none;
