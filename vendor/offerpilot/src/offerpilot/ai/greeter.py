@@ -143,6 +143,7 @@ MATERIALS_PROMPT = """你是求职材料整理助手。请根据求职者档案�
 - conditions[].status 只能是 已满足、明确不满足、待确认。只有档案有明确证据才写「已满足」；没有证据写「待确认」；有明确冲突证据才写「明确不满足」。
 - 三版招呼语各不超过150字（含标点），不得包含电话、邮箱、微信、QQ、网址或其他联系方式。
 - mapping、conditions 最多12条，resume_suggestions 最多8条，unknown_fields 最多8条，confirm_items 最多10条；没有内容时输出空数组。
+- resume_suggestions.original 必须逐字复制档案中的连续片段，保留 Markdown 标记，不得改写或拼接；无法逐字引用时省略该条建议，不为凑条数编造原文。
 - 不要输出适配分、置信度、风险等级或任何总分。
 """
 
@@ -692,21 +693,36 @@ def _normalize_materials(
     *,
     resume: str,
     config: dict,
+    failure_reasons: list[str] | None = None,
 ) -> dict | None:
     """Validate the fixed materials shape. Returns ``None`` instead of a partial package."""
+    def reject(path: str, reason: str):
+        if failure_reasons is not None:
+            failure_reasons.append(f"{path}：{reason}")
+        return None
+
     mapping_rows = _nested_dicts(payload, "mapping")
     condition_rows = _nested_dicts(payload, "conditions")
     suggestion_rows = _nested_dicts(payload, "resume_suggestions")
-    if mapping_rows is None or condition_rows is None or suggestion_rows is None:
-        return None
+    for key, rows in (("mapping", mapping_rows), ("conditions", condition_rows), ("resume_suggestions", suggestion_rows)):
+        if rows is None:
+            value = payload.get(key)
+            if not isinstance(value, list):
+                return reject(key, "必须为数组")
+            if len(value) > MATERIALS_LIMITS[key]:
+                return reject(key, f"条目数不能超过 {MATERIALS_LIMITS[key]}")
+            index = next(index for index, item in enumerate(value) if not isinstance(item, dict))
+            return reject(f"{key}[{index}]", "必须为对象")
 
     mapping: list[dict[str, str]] = []
-    for item in mapping_rows:
+    for index, item in enumerate(mapping_rows):
         requirement = _short_field(item, "requirement", "requirement")
         evidence = _short_field(item, "evidence", "evidence")
         source = _short_field(item, "source", "source")
-        if not requirement or evidence is None or source is None:
-            return None
+        if not requirement:
+            return reject(f"mapping[{index}].requirement", "必须为非空字符串")
+        if evidence is None or source is None:
+            return reject(f"mapping[{index}].{'evidence' if evidence is None else 'source'}", "必须为字符串")
         mapping.append({
             "requirement": requirement,
             "evidence": evidence or MATERIALS_UNKNOWN,
@@ -714,36 +730,43 @@ def _normalize_materials(
         })
 
     conditions: list[dict[str, str]] = []
-    for item in condition_rows:
+    for index, item in enumerate(condition_rows):
         condition = _short_field(item, "condition", "condition")
         evidence = _short_field(item, "evidence", "evidence")
         status = item.get("status")
-        if not condition or evidence is None or status not in {"已满足", "明确不满足", "待确认"}:
-            return None
+        if not condition:
+            return reject(f"conditions[{index}].condition", "必须为非空字符串")
+        if evidence is None:
+            return reject(f"conditions[{index}].evidence", "必须为字符串")
+        if not isinstance(status, str) or status not in {"已满足", "明确不满足", "待确认"}:
+            return reject(f"conditions[{index}].status", "必须为已满足、明确不满足或待确认")
         # A satisfied condition needs real evidence, not an unknown placeholder.
         if status != "待确认" and evidence.strip() in {"", MATERIALS_UNKNOWN, "无"}:
-            return None
+            return reject(f"conditions[{index}].evidence", "已判断的条件必须提供证据，缺少证据时标为待确认")
         conditions.append({"condition": condition, "status": status, "evidence": evidence})
 
     unknown_fields = _nested_strings(payload, "unknown_fields", "unknown_field")
     confirm_items = _nested_strings(payload, "confirm_items", "confirm_item")
-    if unknown_fields is None or confirm_items is None:
-        return None
+    for key, rows in (("unknown_fields", unknown_fields), ("confirm_items", confirm_items)):
+        if rows is None:
+            return reject(key, f"必须为不超过 {MATERIALS_LIMITS[key]} 项的非空字符串数组")
 
     suggestions: list[dict[str, str]] = []
-    for item in suggestion_rows:
+    for index, item in enumerate(suggestion_rows):
         original = _short_field(item, "original", "original")
         suggested = _short_field(item, "suggested", "suggested")
         evidence = _short_field(item, "evidence", "evidence")
         reason = _short_field(item, "reason", "reason")
-        if not original or not suggested or evidence is None or reason is None:
-            return None
+        if not original or not suggested:
+            return reject(f"resume_suggestions[{index}].{'original' if not original else 'suggested'}", "必须为非空字符串")
+        if evidence is None or reason is None:
+            return reject(f"resume_suggestions[{index}].{'evidence' if evidence is None else 'reason'}", "必须为字符串")
         if not _facts_contain(original, resume):
-            return None  # an "original" that is not in the facts would be invented
+            return reject(f"resume_suggestions[{index}].original", "必须逐字引用简历原文的连续片段，无法引用时省略该条建议")
         if _contains_contact(suggested):
-            return None
+            return reject(f"resume_suggestions[{index}].suggested", "不得包含联系方式或网址")
         if _unsupported_number_claims(suggested, resume):
-            return None
+            return reject(f"resume_suggestions[{index}].suggested", "不得包含简历原文未支持的数字事实")
         suggestions.append({
             "original": original,
             "suggested": suggested,
@@ -753,21 +776,21 @@ def _normalize_materials(
 
     greetings_value = payload.get("greetings")
     if not isinstance(greetings_value, dict) or set(greetings_value) != set(MATERIALS_GREETING_KEYS):
-        return None
+        return reject("greetings", "必须为只含 concise、project、safe 的对象")
     greetings: dict[str, str] = {}
     for key in MATERIALS_GREETING_KEYS:
         value = greetings_value.get(key)
         if not isinstance(value, str):
-            return None
+            return reject(f"greetings.{key}", "必须为字符串")
         text = value.strip().strip('"\'“”‘’').strip()
         if not text or len(text) > MATERIALS_GREETING_MAX_CHARS:
-            return None
+            return reject(f"greetings.{key}", f"必须为 1 至 {MATERIALS_GREETING_MAX_CHARS} 字符的字符串")
         if _contains_contact(text) or _has_untrusted_greeting_url(text, resume, config):
-            return None
+            return reject(f"greetings.{key}", "不得包含联系方式或网址")
         if _violates_no_question_preference(text, config):
-            return None
+            return reject(f"greetings.{key}", "必须遵守已配置的不提问偏好")
         if _unsupported_number_claims(text, resume):
-            return None
+            return reject(f"greetings.{key}", "不得包含简历原文未支持的数字事实")
         greetings[key] = text
 
     return {
@@ -780,8 +803,10 @@ def _normalize_materials(
     }
 
 
-def _generate_materials_once(job: dict, resume_summary: str, config: dict) -> dict | None:
-    """Produce the fixed package, retrying a truncated response once."""
+def _generate_materials_once(
+    job: dict, resume_summary: str, config: dict, *, failure_reasons: list[str] | None = None,
+) -> dict | None:
+    """Validate the package with at most one repair and one truncation retry."""
     jd_summary = _truncate_prompt_text(
         clean_job_description(job.get("jd", "")), MATERIALS_TEXT_LIMITS["jd"]
     ) or "无详细描述"
@@ -801,17 +826,40 @@ def _generate_materials_once(job: dict, resume_summary: str, config: dict) -> di
             _positive_match_reason(job.get("score_reason", "")), 240
         ) or "无",
     )
-    try:
-        response = _call_claude(prompt, config, max_tokens=16384, purpose="materials")
-    except AIRequestError as exc:
-        if exc.kind != "output_truncated":
-            raise
-        _notify(config, f"{job['company']}｜{job['title']} 的定制材料被截断，保留完整资料并增大输出预算后重试一次。")
-        response = _call_claude(prompt, config, max_tokens=32768, purpose="materials")
-    payload = _parse_materials_response(response)
-    if payload is None:
+    source_prompt = prompt
+    max_tokens = 16384
+    repaired = False
+    retried_truncation = False
+    for attempt in range(3):
+        try:
+            response = _call_claude(prompt, config, max_tokens=max_tokens, purpose="materials")
+        except AIRequestError as exc:
+            if exc.kind != "output_truncated" or retried_truncation or attempt == 2:
+                raise
+            retried_truncation = True
+            max_tokens = 32768
+            _notify(config, f"{job['company']}｜{job['title']} 的定制材料被截断，保留完整资料并增大输出预算后重试一次。")
+            continue
+        reasons: list[str] = []
+        payload = _parse_materials_response(response)
+        materials = _normalize_materials(payload, resume=resume_summary, config=config, failure_reasons=reasons) if payload is not None else None
+        if payload is None:
+            reasons.append("JSON：必须返回可解析的单个 JSON 对象")
+        if materials is not None:
+            return materials
+        if not repaired and attempt < 2:
+            repaired = True
+            _notify(config, "定制材料未通过校验，将按原始资料修正一次：" + "；".join(reasons))
+            prompt = source_prompt + "\n上次结果未通过校验：" + "；".join(reasons) + (
+                "\n请重新输出上述固定 JSON 对象，不增加字段；严格遵守数组条目上限。"
+                "original 必须逐字复制简历原文的连续片段，保留其中的 Markdown 标记；不得改写或拼接原文。"
+                "无法逐字引用的建议应省略，可返回空 resume_suggestions 数组。"
+                "不得加入联系方式、网址或原文未支持的数字事实。"
+            )
+            continue
+        if failure_reasons is not None:
+            failure_reasons.extend(reasons)
         return None
-    return _normalize_materials(payload, resume=resume_summary, config=config)
 
 
 def _has_materials(job: dict) -> bool:
@@ -1014,6 +1062,7 @@ def generate_greetings(config: dict, job_ids: list[str] | None = None, db_path=N
         "skipped_existing": len(existing_jobs),
         "failed_count": 0,
         "conflict_ids": conflict_ids,
+        "failure_reasons": [],
     }
     resume_summary = _get_resume_summary(config) if ai_enabled else ""
     if ai_enabled and (jobs or existing_jobs) and not resume_summary:
@@ -1041,8 +1090,9 @@ def generate_greetings(config: dict, job_ids: list[str] | None = None, db_path=N
         # Existing text is never replaced. A job without materials still gets one
         # model call so the package exists for the already-approved greeting.
         if ai_enabled and (force_regenerate or not _has_materials(job)):
+            material_failure_reasons: list[str] = []
             try:
-                materials = _generate_materials_once(job, resume_summary, config)
+                materials = _generate_materials_once(job, resume_summary, config, failure_reasons=material_failure_reasons)
             except OperationCancelled:
                 cancelled = True
                 break
@@ -1051,7 +1101,9 @@ def generate_greetings(config: dict, job_ids: list[str] | None = None, db_path=N
                 break
             if materials is None:
                 materials_failed += 1
-                add_history(db, job["id"], "materials_failed", "定制材料解析或校验失败，未写入")
+                config["_workbench_greeting_report"]["failure_reasons"].extend(material_failure_reasons)
+                detail = "定制材料解析或校验失败，未写入" + ("：" + "；".join(material_failure_reasons) if material_failure_reasons else "")
+                add_history(db, job["id"], "materials_failed", detail)
                 _notify(
                     config,
                     f"{job['company']}｜{job['title']} 的定制材料未生成成功，已保留现有招呼语，可稍后重试。",
@@ -1202,8 +1254,9 @@ def generate_greetings(config: dict, job_ids: list[str] | None = None, db_path=N
                 # greeting untouched and writes nothing partial.
                 materials = None
                 if ai_enabled and (force_regenerate or not _has_materials(job)):
+                    material_failure_reasons = []
                     try:
-                        materials = _generate_materials_once(job, resume_summary, config)
+                        materials = _generate_materials_once(job, resume_summary, config, failure_reasons=material_failure_reasons)
                     except OperationCancelled:
                         cancelled = True
                         break
@@ -1212,7 +1265,9 @@ def generate_greetings(config: dict, job_ids: list[str] | None = None, db_path=N
                         break
                     if materials is None:
                         materials_failed += 1
-                        add_history(db, job["id"], "materials_failed", "定制材料解析或校验失败，未写入")
+                        config["_workbench_greeting_report"]["failure_reasons"].extend(material_failure_reasons)
+                        detail = "定制材料解析或校验失败，未写入" + ("：" + "；".join(material_failure_reasons) if material_failure_reasons else "")
+                        add_history(db, job["id"], "materials_failed", detail)
                         _notify(
                             config,
                             f"{job['company']}｜{job['title']} 的定制材料未生成成功，已保留原招呼语，可稍后重试。",

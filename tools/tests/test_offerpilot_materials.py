@@ -82,6 +82,56 @@ def _materials_call(payload: dict | None = None):
 
 
 class PromptPrincipleTests(unittest.TestCase):
+    def test_broken_json_is_repaired_once_without_echoing_raw_output(self):
+        reasons = []
+        with patch.object(greeter, "_call_claude", side_effect=["private malformed response", json.dumps(VALID_PAYLOAD)]) as call:
+            result = greeter._generate_materials_once(
+                {"title": "测试岗位", "company": "测试公司"}, RESUME, CONFIG, failure_reasons=reasons,
+            )
+        self.assertIsNotNone(result)
+        self.assertEqual(call.call_count, 2)
+        self.assertIn(RESUME, call.call_args.args[0])
+        self.assertIn("JSON", call.call_args.args[0])
+        self.assertNotIn("private malformed response", call.call_args.args[0])
+        self.assertEqual(reasons, [])
+
+    def test_source_quote_is_repaired_or_rejected_by_the_same_checks(self):
+        invalid = json.loads(json.dumps(VALID_PAYLOAD))
+        invalid["resume_suggestions"][0]["original"] = "private fabricated original"
+        for final in (VALID_PAYLOAD, invalid):
+            with self.subTest(repaired=final is VALID_PAYLOAD):
+                reasons = []
+                with patch.object(greeter, "_call_claude", side_effect=[json.dumps(invalid), json.dumps(final)]) as call:
+                    result = greeter._generate_materials_once(
+                        {"title": "测试岗位", "company": "测试公司"}, RESUME, CONFIG, failure_reasons=reasons,
+                    )
+                self.assertEqual(result is not None, final is VALID_PAYLOAD)
+                self.assertEqual(call.call_count, 2)
+                self.assertIn("resume_suggestions[0].original", call.call_args.args[0])
+                self.assertNotIn("private fabricated original", call.call_args.args[0])
+                if final is not VALID_PAYLOAD:
+                    self.assertIn("resume_suggestions[0].original", reasons[0])
+                    self.assertNotIn("private fabricated original", reasons[0])
+                else:
+                    self.assertEqual(reasons, [])
+
+    def test_repair_and_truncation_share_a_three_call_budget(self):
+        truncation = greeter.AIRequestError("output_truncated", "fixture truncation")
+        cases = (
+            ([truncation, "bad JSON", json.dumps(VALID_PAYLOAD)], True),
+            (["bad JSON", truncation, "still bad JSON"], False),
+        )
+        for responses, succeeds in cases:
+            with self.subTest(succeeds=succeeds):
+                with patch.object(greeter, "_call_claude", side_effect=responses) as call:
+                    result = greeter._generate_materials_once(
+                        {"title": "测试岗位", "company": "测试公司"}, RESUME, CONFIG,
+                    )
+                self.assertEqual(result is not None, succeeds)
+                self.assertEqual(call.call_count, 3)
+                for request in call.call_args_list:
+                    self.assertIn(RESUME, request.args[0])
+
     def test_truncated_materials_retry_once_without_dropping_source(self):
         error = greeter.AIRequestError("output_truncated", "fixture truncation")
         with patch.object(greeter, "_call_claude", side_effect=[error, json.dumps(VALID_PAYLOAD)]) as call:
@@ -209,6 +259,30 @@ class MaterialsShapeTests(unittest.TestCase):
         with patch.object(greeter, "_call_claude", return_value="这不是 JSON"):
             self.assertIsNone(greeter._generate_materials_once(self.job, RESUME, CONFIG))
 
+    def test_validation_diagnostics_name_fields_without_the_rejected_values(self):
+        cases = (
+            ("conditions", "status", "private invalid status", "conditions[0].status"),
+            ("resume_suggestions", "original", "private fabricated original", "resume_suggestions[0].original"),
+            ("resume_suggestions", "suggested", "提高了83%", "resume_suggestions[0].suggested"),
+        )
+        for section, key, value, expected_path in cases:
+            with self.subTest(path=expected_path):
+                payload = json.loads(json.dumps(VALID_PAYLOAD))
+                payload[section][0][key] = value
+                reasons = []
+                self.assertIsNone(greeter._normalize_materials(payload, resume=RESUME, config=CONFIG, failure_reasons=reasons))
+                self.assertIn(expected_path, reasons[0])
+                self.assertNotIn(value, reasons[0])
+
+    def test_array_limits_are_not_relaxed_during_repair(self):
+        payload = json.loads(json.dumps(VALID_PAYLOAD))
+        payload["mapping"] = payload["mapping"] * (greeter.MATERIALS_LIMITS["mapping"] + 1)
+        reasons = []
+        with _materials_call(payload) as call:
+            self.assertIsNone(greeter._generate_materials_once(self.job, RESUME, CONFIG, failure_reasons=reasons))
+        self.assertEqual(call.call_count, 2)
+        self.assertIn("mapping", reasons[0])
+
 
 class UnknownHandlingTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -303,6 +377,33 @@ class PersistenceTests(unittest.TestCase):
         row = self._read(job_id)
         self.assertFalse(str(row["greeting"] or "").strip())
         self.assertIsNone(row["materials"])
+
+    def test_final_validation_reason_reaches_report_and_history_without_raw_response(self):
+        job_id = "demo-private-fail"
+        self._insert(job_id, "")
+        private_response = "private malformed model response"
+        with patch.object(greeter, "_generate_with_token_retry", return_value="您好，我想了解岗位。"), \
+                patch.object(greeter, "_call_claude", return_value=private_response):
+            self.assertEqual(greeter.generate_greetings(self.config, [job_id], db_path=self.db_path), 0)
+        report = self.config["_workbench_greeting_report"]
+        self.assertEqual(report["failed_count"], 1)
+        self.assertIn("JSON", report["failure_reasons"][0])
+        history = self.db.execute("SELECT detail FROM history WHERE job_id = ? AND action = 'materials_failed'", (job_id,)).fetchone()
+        self.assertIn("JSON", history[0])
+        self.assertNotIn(private_response, history[0])
+        self.assertNotIn(private_response, json.dumps(report))
+        self.assertFalse(str(self._read(job_id)["greeting"] or "").strip())
+
+    def test_repaired_materials_are_not_counted_as_failed(self):
+        job_id = "demo-repaired"
+        self._insert(job_id, "原有草稿：您好。")
+        with patch.object(greeter, "_call_claude", side_effect=["bad JSON", json.dumps(VALID_PAYLOAD)]):
+            self.assertEqual(greeter.generate_greetings(self.config, [job_id], db_path=self.db_path), 0)
+        report = self.config["_workbench_greeting_report"]
+        self.assertEqual(report["failed_count"], 0)
+        self.assertEqual(report["materials_generated"], 1)
+        self.assertEqual(report["failure_reasons"], [])
+        self.assertEqual(json.loads(self._read(job_id)["materials"]), VALID_PAYLOAD)
 
     def test_safe_version_becomes_the_default_and_other_versions_are_kept(self) -> None:
         job_id = "demo-ok-2"

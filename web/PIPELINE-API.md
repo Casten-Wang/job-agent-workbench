@@ -131,6 +131,7 @@ GET /api/pipeline?mode=user
 - `queue[].plan`：`{today: bool, rank: int | null, reason: string}`，来自 `tools/quota_planner.py`。只对 `approved` 且尚未发送的行计算。
 - `queue[].fit_confidence`：`number | null`，判断置信度（0–1），与 `jobs[].match.fit_confidence` 同一口径，来自 `tools/job_match.py`；队列行找不到对应岗位时为 `null`。队列旧字段 `high_confidence` 只是阈值标记，不参与入队、确认或投递判定，界面不再用它显示「置信」。
 - `materials`：岗位定制材料包，来自内嵌运行时已生成的文本，只读返回，不写入 `jobs.json` 或 `approval-queue.json`。`jobs[]` 每条、队列行 `queue[].greeting` 每条与 `get_greetings` 返回值都带该键，没有生成过时为 `null`。形状固定为 `{mapping: [{requirement, evidence, source}], conditions: [{condition, status, evidence}], unknown_fields: [string], resume_suggestions: [{original, suggested, evidence, reason}], greetings: {concise, project, safe}, confirm_items: [string]}`；`status` 只取 `已满足` / `明确不满足` / `待确认`，档案没有的信息写 `未知`，不会标成已满足。`greetings.safe` 同时是该岗位 `greeting` 的默认草稿，`concise` / `project` 对应复核时可选的另外两版，仍走既有的 `greeting_selection`。适配分、判断置信度与风险不在材料包里重算，直接看 `jobs[].match`。生成或校验失败时该岗位保留原 `greeting`，材料包保持 `null`。
+- 材料 JSON 或字段校验失败时，按原有事实与格式规则最多纠正一次；不放宽原文引用、数字依据或联系方式校验。诊断只记录字段路径和固定原因，不记录被拒绝的模型原文。招呼语任务的 `metrics.greet_materials_failed` 表示材料失败数；零产出且存在生成失败时，任务为 `failed` 并在 `error` 中说明原因；部分生成或保留成功时保留已有内容，并在 `stop_reason` 中说明未完成的部分。
 - `pipeline.delivery.quota`：`{daily, remaining, planned_today}`。`daily` 为默认每日额度（30），仅用于排序提示；实际上限由内嵌发送器强制。
 
 `POST /api/action` 的 `enqueue` 响应新增以下只增字段：

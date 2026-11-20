@@ -1053,6 +1053,7 @@ def _execute_greet(task: WorkbenchTask, config: dict) -> None:
 		"greet_generated": int(generated_count),
 		"greet_preserved": preserved_count,
 		"greet_failed": failed_count,
+		"greet_materials_failed": int(report.get("materials_failed", 0) or 0),
 		"greet_conflicts": len(conflict_ids),
 		"greet_paused": 1 if pause_reason else 0,
 	}
@@ -1082,6 +1083,17 @@ def _execute_greet(task: WorkbenchTask, config: dict) -> None:
 			# 零产出：服务级故障不得伪装成"任务完成"。
 			_log(task, f"AI 服务异常，任务提前结束：{pause_reason}")
 			raise RuntimeError(f"招呼语生成已安全暂停：{pause_reason}")
+	if failed_count and not pause_reason and not task.stop_requested.is_set():
+		failure_reasons = [str(reason) for reason in report.get("failure_reasons", []) if reason][:3]
+		message = f"{failed_count} 个岗位的招呼语或定制材料生成失败（生成或校验未通过）"
+		if failure_reasons:
+			message += "：" + "；".join(failure_reasons)
+		if generated_count or preserved_count:
+			task.stop_reason = f"{message}；已生成或保留的内容已保存，可重试失败岗位。"
+			_log(task, task.stop_reason)
+		else:
+			_log(task, message)
+			raise RuntimeError(message)
 
 
 task_runner._executors.update({
