@@ -154,7 +154,7 @@ class OfferPilotAdapterTests(unittest.TestCase):
             ),
         )
 
-    def test_hard_rules_reject_excluded_term_and_city_without_monthly_floor(self):
+    def test_hard_rules_reject_excluded_term_city_and_configured_low_salary(self):
         payload = [
             {
                 "company": "虚构外包服务公司",
@@ -164,17 +164,19 @@ class OfferPilotAdapterTests(unittest.TestCase):
                 "jd": "测试数据",
             }
         ]
-        record = adapter.convert_payload(payload)["jobs"][0]
-        self.assertEqual(record["hard_filter"]["status"], "reject")
-        reasons = record["hard_filter"]["reasons"]
-        self.assertTrue(any("excluded-term" in reason for reason in reasons))
-        self.assertIn("city-not-allowed", reasons)
-        self.assertNotIn("salary-below-min", reasons)
-        self.assertEqual(
-            record["hard_filter"]["engine"],
-            "task03-filters" if (PROJECT_ROOT / "tools" / "filters.py").is_file() else "adapter-minimal-fallback",
-        )
-        self.assertEqual(record["analytics"]["Rejection_Reason"], reasons)
+        config = json.loads((PROJECT_ROOT / "tools" / "config.json").read_text(encoding="utf-8"))
+        for floor in (15000, 0):
+            with self.subTest(monthly_floor=floor):
+                config["salary"]["min_threshold"] = floor
+                with mock.patch.object(Path, "read_text", return_value=json.dumps(config)):
+                    record = adapter.convert_payload(payload)["jobs"][0]
+                self.assertEqual(record["hard_filter"]["status"], "reject")
+                reasons = record["hard_filter"]["reasons"]
+                self.assertTrue(any("excluded-term" in reason for reason in reasons))
+                self.assertIn("city-not-allowed", reasons)
+                self.assertEqual("salary-below-min" in reasons, floor == 15000)
+                self.assertEqual(record["hard_filter"]["engine"], "task03-filters")
+                self.assertEqual(record["analytics"]["Rejection_Reason"], reasons)
 
     def test_filters_module_missing_fallback_uses_minimal_rules(self):
         payload = [{"company": "虚构甲公司", "title": "产品经理", "city": "上海", "salary": "20k-30k"}]

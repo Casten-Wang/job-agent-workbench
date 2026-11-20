@@ -131,7 +131,7 @@ class ConfigAndFingerprintTests(unittest.TestCase):
             CONFIG["title_keywords"],
             ["AI产品经理", "商业分析师", "跨境电商", "产品经理", "数据分析"],
         )
-        self.assertEqual(CONFIG["salary"]["min_threshold"], 0)
+        self.assertEqual(CONFIG["salary"]["min_threshold"], 15000)
         self.assertEqual(CONFIG["score"]["high_threshold"], 4.5)
         self.assertEqual(CONFIG["score"]["approval_min"], 4.0)
         self.assertEqual(CONFIG["score"]["approval_max"], 4.4)
