@@ -1043,6 +1043,10 @@ body[data-wb-capability="variants"] #cu-resume-panel {
   margin-left: auto;
 }
 
+.wb-assistant .wa-context {
+  display: none;
+}
+
 .wb-assistant #wa-form {
   flex: none;
   padding: 10px 12px;
@@ -1137,25 +1141,6 @@ body[data-wb-capability="variants"] #cu-resume-panel {
 }
 
 @media(max-width: 960px) {
-  .wb-layout {
-    display: flex;
-    flex-direction: column;
-  }
-  .wb-main {
-    flex: 1;
-    padding: 16px 18px;
-  }
-  .wb-assistant {
-    display: none;
-    flex: 1;
-    border-left: 0;
-  }
-  .wb-show-assistant .wb-main {
-    display: none;
-  }
-  .wb-show-assistant .wb-assistant {
-    display: flex;
-  }
   .wb-toolbar {
     padding: 8px 16px;
     gap: 8px;
@@ -1558,15 +1543,15 @@ body.wb-task-shell .wb-shell {
   flex: 0 0 auto;
 }
 
-/* 对话栏位于工作区左侧（概念稿：对话 330px + 工作区） */
+/* 任务界面优先显示可操作工作区，对话助手固定在右侧。 */
 .wb-layout {
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: minmax(360px, 1.05fr) minmax(380px, .95fr);
 }
 
 .wb-layout > .wb-assistant {
-  order: -1;
-  border-left: 0;
-  border-right: 0.5px solid var(--line);
+  order: 1;
+  border-left: 0.5px solid var(--line);
+  border-right: 0;
 }
 
 /* W01 开始任务 */
@@ -2410,4 +2395,65 @@ body.offer-ui:not(#wa-theme-off) .wb-shell .wb-segment-tab[aria-selected="true"]
 :root[data-theme="dark"] body.offer-ui:not(#wa-theme-off) .sidebar .nav-item.is-active .nav-index {
   color: var(--mj-brand-ink);
   opacity: .72;
+}
+
+@media (max-width: 960px) {
+  .wb-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, .92fr) minmax(360px, 1.08fr);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .wb-layout > .wb-main {
+    order: 0;
+    min-height: 0;
+    overflow-y: auto;
+    flex: none;
+  }
+  .wb-layout > .wb-assistant {
+    display: none;
+    order: 1;
+    min-height: 0;
+    overflow: hidden;
+    border-left: 0.5px solid var(--line);
+    border-right: 0;
+    border-top: 0;
+    padding: 12px;
+  }
+  .wb-assistant .wa-conversation { gap: 6px; }
+  .wb-assistant .wa-conversation > .wa-section-head { display: none; }
+  .wb-assistant .wa-thread { min-height: 64px; }
+  .wb-show-assistant .wb-layout > .wb-assistant {
+    display: flex;
+  }
+  .wb-show-assistant .wb-layout > .wb-main {
+    display: block;
+  }
+  .wb-assistant > .wb-heading {
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 700px) {
+  .wb-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(160px, .42fr) minmax(360px, .58fr);
+    overflow-y: auto;
+  }
+  .wb-layout > .wb-main {
+    min-height: 0;
+    padding: 14px;
+  }
+  .wb-layout > .wb-assistant {
+    border-left: 0;
+    border-right: 0;
+    border-top: 0.5px solid var(--line);
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .wb-layout > .wb-main { min-height: 0; }
+  .wb-layout > .wb-assistant { min-height: 0; }
 }

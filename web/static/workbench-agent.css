@@ -356,6 +356,13 @@ body.wb-enabled #view-workbench {
 .wa-prompts button.is-primary,.wa-guide-btn.is-primary { border-color:var(--wa-brand)!important; color:var(--wa-brand); font-weight:var(--wa-semibold,600); }
 .wa-guidance,.wa-gui-sync { flex:none; padding:10px 12px; border:.5px solid var(--line); border-radius:8px; background:var(--wa-elevated,var(--surface)); font-size:12px; line-height:1.5; }
 .wa-guidance-head,.wa-gui-sync-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; color:var(--mute); }
+.wa-guidance.is-error { border-color:color-mix(in srgb,#df7b8d 52%,var(--line)); background:color-mix(in srgb,#df7b8d 8%,var(--wa-elevated,var(--surface))); }
+.wa-guidance.is-error .wa-guidance-head { color:var(--ink); }
+.wa-guidance-note,.wa-guidance-detail { margin:0 0 8px; }
+.wa-guidance-note { color:var(--ink-2); }
+.wa-guidance-detail { padding-left:9px; border-left:2px solid #df7b8d; color:var(--ink); }
+.wa-guidance.is-error .wa-guidance-actions { display:grid; grid-template-columns:minmax(0,1fr); }
+.wa-guidance.is-error .wa-guidance-actions .wa-guide-btn { width:100%; text-align:center; }
 .wa-gui-sync { border-color:color-mix(in srgb,var(--wa-brand) 45%,var(--line)); background:var(--accent-soft); }
 .wa-gui-sync-head strong { color:var(--ink); font-weight:var(--wa-medium,500); }
 .wa-guidance-actions { display:flex; flex-wrap:wrap; gap:6px; }

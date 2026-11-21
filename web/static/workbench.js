@@ -226,7 +226,11 @@
   }
 
   function navigate(name,options={}) {
-    if(name==='agent'){setAssistantOpen(true,true);document.getElementById('wa-input').focus();return;}
+    if(name==='agent'){
+      const snap=openContext();
+      if(current==='start'&&(snap?.job_id||snap?.material_id||snap?.artifacts?.length))navigate(snapStep());
+      setAssistantOpen(true,true);if(!window.OfferPilotAgent?.hasSemanticFailure())document.getElementById('wa-input').focus();return;
+    }
     if(name==='workbench'||name==='home')name='start';
     if(name==='overview-home')name='home';
     if(name==='collect'&&!options.legacy){options={...options,jobsTab:'collect'};name='jobs';}
@@ -320,6 +324,10 @@
     if(kind)draftTab=kind;
     renderDraft();
   }
+  function showSources() {
+    if(current!=='application')navigate('application');
+    draftTab='sources';renderDraft();
+  }
 
   // ---- W06 HR 消息与日程（就地）----
   function hrStage(){
@@ -364,9 +372,12 @@
   }
   function renderDraft(){
     const {snap,resume,greeting}=draftArtifacts(),panel=$('draft');
-    const has=Boolean(resume||greeting);panel.hidden=!has;
-    $('application-lede').textContent=has?'草稿已生成。选中一段文字可以针对它提修改；修改由助手完成并保留事实来源。':'选择目标岗位和已确认经历，助手会准备简历与招呼语草稿。';
-    $('prepare').textContent=has?'重新生成草稿':'准备简历与招呼语';
+    const has=Boolean(resume||greeting),checkFailed=window.OfferPilotAgent?.hasSemanticFailure?.();panel.hidden=!has;
+    $('application-lede').textContent=checkFailed
+      ?`本次生成未通过事实核验；${has?'原有草稿已保留':'目前没有可复核的新草稿'}。请先按任务对话中的反馈修正并重新核验。`
+      :has?'草稿已生成。选中一段文字可以针对它提修改；修改由助手完成并保留事实来源。':'选择目标岗位和已确认经历，助手会准备简历与招呼语草稿。';
+    $('prepare').textContent=checkFailed?'等待事实核验通过':has?'重新生成草稿':'准备简历与招呼语';
+    $('prepare').disabled=Boolean(checkFailed);
     if(!has)return;
     if(draftTab==='resume'&&!resume)draftTab='greeting';
     if(draftTab==='greeting'&&!greeting)draftTab='resume';
@@ -395,9 +406,11 @@
     const saved=(snap.saved_versions || []).length;
     $('draft-state').textContent=art?`${draftTab==='resume'?'简历':'招呼语'}修订 ${art.revision}${saved?` / 已保存 ${saved} 个正式版本`:''}`:'';
     $('draft-save').hidden=draftTab!=='resume'||!resume;
+    $('draft-save').disabled=Boolean(checkFailed);
     const job=jobById(snap.job_id);
-    $('draft-review').disabled=!greeting;
-    $('draft-summary').textContent=greeting?(job?.offerpilot_id?'核对后同步为发送文案，再进入复核。':'这个岗位没有关联平台记录，复核时可复制文案人工申请。'):'生成招呼语后可以进入复核申请。';
+    $('draft-review').disabled=!greeting||Boolean(checkFailed);
+    $('draft-review').textContent=checkFailed?'等待事实核验通过':'核对完成，去复核申请 →';
+    $('draft-summary').textContent=checkFailed?'最近一次生成未通过事实核验，请先在任务对话中修正，再继续保存或复核。':greeting?(job?.offerpilot_id?'核对后同步为发送文案，再进入复核。':'这个岗位没有关联平台记录，复核时可复制文案人工申请。'):'生成招呼语后可以进入复核申请。';
     $('draft-revise').hidden=true;
   }
   function selectedDraftText(){
@@ -516,7 +529,9 @@
   function jobById(id){return id?jobsList().find(j=>String(j.id)===String(id)):null;}
   function renderTaskChrome() {
     const step=STEP_FOR[current], snap=openContext();
-    $('taskbar').hidden=!step;
+    const showContext=Boolean(step || current==='start'&&(snap?.job_id||snap?.material_id||snap?.artifacts?.length));
+    $('taskbar').hidden=!showContext;
+    $('stepper').hidden=!step;
     $('shell').dataset.wbStep=step || '';
     if(step){
       const hr=step==='hr', steps=hr?HR_STEPS:STEPS, entry=hr?HR_ENTRY:STEP_ENTRY;
@@ -528,17 +543,22 @@
         if(state==='current')b.setAttribute('aria-current','step');
         b.addEventListener('click',()=>guard(()=>openCapability(entry[key])));li.append(b);return li;
       }));
-      const job=jobById(snap?.job_id || selectedJobId);
-      $('strip-job').textContent=job?`${job.title} / ${job.company}`:'未选择';
-      const conv=hr?state.hrThread?.conversation:null;
-      if(hr)$('strip-job').textContent=conv?[conv.title,conv.company].filter(Boolean).join(' / ') || '当前会话':'未选择会话';
+    }
+    if(showContext){
+      const jobId=snap?.job_id || selectedJobId;
+      const job=jobById(jobId) || snap?.recommendations?.find(item=>String(item.job_id)===String(jobId))?.job;
+      $('strip-job').textContent=job?[job.title,job.company].filter(Boolean).join(' / '):jobId?'已选择岗位':'未选择';
+      const conv=step==='hr'?state.hrThread?.conversation:null;
+      if(step==='hr')$('strip-job').textContent=conv?[conv.title,conv.company].filter(Boolean).join(' / ') || '当前会话':'未选择会话';
       const version=(overview?.versions || []).find(v=>v.resume_version_id===snap?.resume_version_id);
-      $('strip-version').textContent=version?`${version.job_snapshot?.role || '简历'} ${version.created_at?.slice(5,10) || ''}`.trim():`${overview?.versions?.length || 0} 个版本可选`;
-      const material=(overview?.materials || []).find(m=>m.material_id===snap?.material_id);
-      $('strip-material').textContent=material?(material.name || '已确认经历'):`${overview?.materials?.length || 0} 段已确认`;
+      const resumeDraft=(snap?.artifacts || []).some(a=>a.kind==='resume');
+      $('strip-version').textContent=version?`${version.job_snapshot?.role || '简历'} ${version.created_at?.slice(5,10) || ''}`.trim():resumeDraft?'简历草稿已生成':snap?.resume_version_id?'已选择简历版本':`${overview?.versions?.length || 0} 个版本可选`;
+      const material=(overview?.materials || []).find(m=>m.material_id===snap?.material_id)
+        || snap?.materials?.find(m=>m.material_id===snap?.material_id);
+      $('strip-material').textContent=material?(material.name || '已确认经历'):snap?.material_id?'已选择经历':`${overview?.materials?.length || 0} 段已确认`;
     }
     const taskState=snap?.status&&snap.status!=='idle'?statuses[snap.status] || '':'';
-    $('task-state').textContent=taskState;$('task-state').hidden=!taskState||!step;
+    $('task-state').textContent=taskState;$('task-state').hidden=!taskState||!showContext;
     renderTaskNav();
   }
   function renderTaskNav() {
@@ -839,7 +859,7 @@
   $('assistant-toggle').prepend(icon('chat'));
   // 原侧栏在任务外壳中隐藏；外观切换搬进「设置」，保留原按钮与事件。
   {const theme=document.querySelector('.sidebar .sidebar-block');if(theme){const section=node('section');section.append(node('h3','外观'),theme);$('settings').append(section);}}
-  window.OfferPilotWorkbench={enabled:true,navigate,open:openCapability,showArtifact,refresh,confirmed,reviewGreeting,onMutation,
+  window.OfferPilotWorkbench={enabled:true,navigate,open:openCapability,showArtifact,showSources,refresh,confirmed,reviewGreeting,onMutation,
     projectInterview:()=>{document.body.dataset.wbInterview='project';$('context').hidden=true;$('breadcrumb').textContent='项目与版本面试';setInterviewMode('project');},
     careerNotice:text=>{if(['resume','github','experience_details','interview'].includes(current))notice(text);},
     deliveryPreview:ids=>request('delivery-preview',{ids}),
@@ -878,17 +898,19 @@
   $('assistant-toggle').addEventListener('click',()=>{
     const isMobile=window.matchMedia('(max-width: 960px)').matches;
     if(isMobile){
-      const show=$('shell').classList.toggle('wb-show-assistant');
+      const show=!$('shell').classList.contains('wb-show-assistant');
+      if(show&&current==='start'&&(openContext()?.job_id||openContext()?.material_id||openContext()?.artifacts?.length))navigate(snapStep());
+      $('shell').classList.toggle('wb-show-assistant',show);
       $('assistant-toggle').setAttribute('aria-expanded',String(show));
       setToggleLabel(show);
-      if(show)document.getElementById('wa-input').focus();
+      if(show&&!window.OfferPilotAgent?.hasSemanticFailure())document.getElementById('wa-input').focus();
     }else{
       const nextOpen=$('shell').classList.contains('wb-assistant-collapsed');
+      if(nextOpen&&current==='start'&&(openContext()?.job_id||openContext()?.material_id||openContext()?.artifacts?.length))navigate(snapStep());
       setAssistantOpen(nextOpen,false);
-      if(nextOpen)document.getElementById('wa-input').focus();
+      if(nextOpen&&!window.OfferPilotAgent?.hasSemanticFailure())document.getElementById('wa-input').focus();
     }
   });
-  $('show-main').addEventListener('click',()=>{setAssistantOpen(false,false);$('main').focus();});
   document.querySelectorAll('[data-iv-tab]').forEach(btn=>btn.addEventListener('click',()=>{
     const tab=btn.dataset.ivTab || 'ci';
     setInterviewMode(tab,tab==='tools'?null:null);
@@ -928,7 +950,7 @@
     saveDrafts();
   });
   window.addEventListener('offerpilot:agent',event=>{
-    const {snapshot,animate}=event.detail;renderContext(snapshot);renderTaskChrome();
+    const {snapshot,animate}=event.detail;renderContext(snapshot);renderTaskChrome();if(current==='application')renderDraft();
     const item=snapshot.business_results?.at(-1);
     if(item&&item.id!==lastBusiness){lastBusiness=item.id;if(animate){renderBusiness(item);loadState();}}
     if(animate)(snapshot.ui_actions || []).forEach(ui=>guard(()=>handleUI(ui)));

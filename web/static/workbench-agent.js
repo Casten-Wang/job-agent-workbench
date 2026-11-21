@@ -112,15 +112,39 @@
       if(window.OfferPilotWorkbench?.enabled){await window.OfferPilotWorkbench.open(item.capability,item);return;}
       showView(item.capability);
     }
+    if(item.kind==='sources'){
+      if(window.OfferPilotWorkbench?.enabled){window.OfferPilotWorkbench.showSources();return;}
+      showResults();$('sources').scrollIntoView({block:'nearest'});return;
+    }
   }
   function guideButton(item) {
     const b=button(item.label,()=>executeGuidance(item));
     b.className=`button button-quiet button-small wa-guide-btn${item.primary?' is-primary':''}`;
     return b;
   }
+  function semanticFailureMessage() {
+    const last=[...(current?.messages || [])].reverse().find(message=>message.role==='assistant');
+    const text=String(friendlyText(last?.text) || '');
+    return /草稿的语义核对未通过|语义核对未通过/.test(text)?text:'';
+  }
   function renderGuidance() {
-    const box=$('guidance'), items=(current?.messages?.length&&!active())?(current?.guidance || []):[];
-    box.replaceChildren();box.hidden=!items.length;
+    const box=$('guidance'),failure=current?.messages?.length&&!active()?semanticFailureMessage():'';
+    box.replaceChildren();box.classList.toggle('is-error',Boolean(failure));
+    if(failure){
+      box.hidden=false;box.setAttribute('role','alert');
+      const head=node('div',undefined,'wa-guidance-head');head.append(node('strong','生成被事实校验拦下'));
+      const detail=failure.match(/原草稿保留[：:]\s*([\s\S]+)/)?.[1]?.trim() || '有表述无法由已确认经历直接支持。';
+      const target=/招呼语/.test(detail)?'招呼语':'未通过核验的草稿';
+      const prompt=`请只修改${target}中这次校验指出的问题：${detail}。只使用当前岗位和已确认经历能够直接支持的事实，删除或改写无依据的项目、场景或职责描述；修改后重新运行语义核对。原草稿保持不变，不要保存或同步。`;
+      const actions=node('div',undefined,'wa-guidance-actions');
+      actions.append(guideButton({label:'按已确认事实重写并复核',kind:'prompt',text:prompt,primary:true}));
+      actions.append(guideButton({label:'查看原草稿与事实依据',kind:'sources'}));
+      box.append(head,node('p','原草稿已保留；本次没有生成新版本，也没有保存或同步。','wa-guidance-note'),node('p',`校验指出：${detail}`,'wa-guidance-detail'),actions);
+      return;
+    }
+    box.removeAttribute('role');
+    const items=(current?.messages?.length&&!active())?(current?.guidance || []):[];
+    box.hidden=!items.length;
     if(!items.length)return;
     const head=node('div',undefined,'wa-guidance-head');
     head.append(node('span','接下来可以这样做'));
@@ -326,6 +350,7 @@
     current=value;storage.set(key('conversation'),value.id);sessions=sessions.filter(s=>s.id!==value.id);sessions.unshift(value);
     if(grew){selectedArtifact=value.artifacts.at(-2)?.id;$('artifact').value='';if(animate||!window.OfferPilotWorkbench?.enabled)showResults();}
     if(materialReady||legacyReady){selectedArtifact='material';$('artifact').value='';if(animate||!window.OfferPilotWorkbench?.enabled)showResults();}
+    if(animate&&!['queued','running','committing','stopping'].includes(value.status))$('process').open=false;
     if(value.material_run?.status==='failed'&&value.material_run?.run_id===value.run_id)$('process').open=true;
     render(animate);schedule();
     window.dispatchEvent(new CustomEvent('offerpilot:agent',{detail:{snapshot:value,animate}}));
@@ -479,6 +504,7 @@
   window.OfferPilotAgent={
     snapshot:()=>current,
     sessions:()=>sessions.slice(),
+    hasSemanticFailure:()=>Boolean(semanticFailureMessage()),
     contextReady:()=>contextChanges,
     setToolLabels:values=>{Object.assign(toolLabels,values);eventsSnapshot='';renderEvents();},
     setOverview:value=>{workspaceOverview=value;if(!current?.messages?.length)renderMessages(false);},
